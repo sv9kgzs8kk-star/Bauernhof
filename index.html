@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="stylesheet" href="gemeinsam/basis.css">
+<title>Unser Bauernhof</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- HUD Hof -->
+<div id="hubhud" class="hud hidden">
+  <div class="row" style="gap:6px">
+    <div class="pill" id="starpill" data-say="star" style="pointer-events:auto">⭐ <span id="starcount">0</span></div>
+    <div class="pill" id="woolpill" data-say="wool" style="pointer-events:auto">🧶 <span id="woolcount">0</span></div>
+  </div>
+  <div class="vbtns">
+    <button class="vbtn" id="vb-person" aria-label="Bauer"><canvas width="34" height="34"></canvas></button>
+    <button class="vbtn" id="vb-tractor" aria-label="Traktor"><canvas width="34" height="34"></canvas></button>
+    <button class="vbtn" id="vb-combine" aria-label="Mähdrescher"><canvas width="34" height="34"></canvas></button>
+  </div>
+</div>
+
+<!-- Sprechblase des Besuchers -->
+<div id="npcbubble" class="bubble hidden" data-say="wool">
+  <div class="big-emo">🧶 <span id="npcn">1</span></div>
+  <div class="word">WOLLE</div>
+</div>
+
+<!-- HUD Feld-Spiele -->
+<div id="mhud" class="hud hidden">
+  <div class="pill" id="mpill"><span id="micon">🌾</span><div class="bar"><div class="fill" id="mfill"></div></div></div>
+  <div class="pill">🏁 <span id="mlvl">1</span></div>
+  <div class="pill" id="mcount"><span>🚚</span><span id="mloads">0/3</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause">⏸</button>
+</div>
+
+<!-- App-Start -->
+<div id="appstart" class="overlay">
+  <canvas class="preview" id="tractorpreview" width="34" height="34"></canvas>
+  <button class="big" id="appplay" aria-label="Start">
+    <svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg>
+  </button>
+  <button class="mute" aria-label="Ton">🔊</button>
+</div>
+
+<!-- Weide: Schafe kaufen und hüten -->
+<div id="weide" class="overlay hidden">
+  <div class="row">
+    <div class="pill gain" id="wsheeppill" data-say="sheep">🐑 <span id="wsheep">0</span></div>
+    <div class="pill gain" id="wstarpill" data-say="star">⭐ <span id="wstars">0</span></div>
+  </div>
+  <div class="row">
+    <button class="card" id="buysheep" data-say="sheep"><div class="emo">🐑</div><div class="word">SCHAF</div><div class="price">⭐ 6</div></button>
+    <button class="big" id="wplay" aria-label="Schafe hüten">
+      <svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg>
+    </button>
+  </div>
+  <button class="home" id="wclose" aria-label="Zum Hof">🏠</button>
+</div>
+
+<!-- Feld-Schild: größeres Feld kaufen -->
+<div id="feldshop" class="overlay hidden">
+  <div class="pill gain" id="fstarpill" data-say="star">⭐ <span id="fstars">0</span></div>
+  <div class="row">
+    <div class="card" data-say="field" style="cursor:default"><canvas id="fnow" width="48" height="48"></canvas><div class="word">FELD</div><div class="price">🏁 <span id="fnowlvl">1</span></div></div>
+    <div style="font-size:56px;color:#fff;font-weight:900">➜</div>
+    <button class="card" id="buyfield" data-say="field"><canvas id="fnext" width="48" height="48"></canvas><div class="word">FELD</div><div class="price">⭐ <span id="fprice">15</span></div></button>
+  </div>
+  <button class="home" id="fclose" aria-label="Zum Hof">🏠</button>
+</div>
+
+<!-- Saatgut wählen -->
+<div id="seedpick" class="overlay hidden">
+  <div class="row">
+    <button class="card seedcard" data-crop="wheat" data-say="wheat"><div class="emo">🌾</div><div class="word">WEIZEN</div></button>
+    <button class="card seedcard" data-crop="corn" data-say="corn"><div class="emo">🌽</div><div class="word">MAIS</div></button>
+    <button class="card seedcard" data-crop="raps" data-say="raps"><div class="emo">🌼</div><div class="word">RAPS</div></button>
+  </div>
+  <button class="home" data-home aria-label="Zum Hof">🏠</button>
+</div>
+
+<!-- Pause -->
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zum Hof">🏠</button>
+    <button class="big" id="gresume" aria-label="Weiter">
+      <svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- Geschafft -->
+<div id="gwin" class="overlay hidden">
+  <div class="stars">⭐⭐⭐</div>
+  <div class="row">
+    <div class="pill gain">+<span id="wingain">3</span> ⭐</div>
+    <div class="pill gain" data-say="star" style="cursor:pointer">⭐ <span id="winstars">3</span></div>
+  </div>
+  <div class="pill gain hidden" id="wincrop" style="cursor:pointer"><span id="wincropemo">🌾</span> <span class="word" id="wincropword">WEIZEN</span></div>
+  <button class="home" data-home aria-label="Zum Hof">🏠</button>
+</div>
+
+<script src="gemeinsam/sterne.js"></script>
+<script src="gemeinsam/basis.js"></script>
+<script>
+/* =====================================================================
+   HOF + FELD-SPIELE (Ernten, Grubbern, Säen)
+   Minispiele mit eigener Mechanik liegen in spiele/<name>/index.html
+   ===================================================================== */
+const save = Hof.save, persist = Hof.persist;
+const GROW_MS = 15000;                       // so lange wächst die Saat auf dem Hof
+const SHEEP_PRICE = 6, MAX_SHEEP = 6;        // Schafe kosten Sterne, Herde max. 6
+const FIELD_PRICE = [0, 0, 15, 30, 50, 80];  // Preis für Feld-Stufe 2…5
+const WOOL_STARS = 2;                        // Sterne pro abgelieferter Wolle
+const HINT_AFTER = 12;                       // Sekunden ohne Eingabe, bis ein Hinweis erscheint
+let hubReturn = null;
+let backFromPage = location.hash === '#schafe';   // zurück aus einem Minispiel auf eigener Seite
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => { initAudio(); go(Hub); }));
+
+/* ---------- Fahrzeuge & Figuren ---------- */
+const COMBINE = rotateSprite(sprite(26, R => {
+  R('#7a5a12',19,2,5,22); R('#f2c230',20,2,4,22);
+  for (let y=3;y<24;y+=3) R('#b58a10',21,y,3,1);
+  R('#666',24,3,1,20); R('#2d7a36',16,9,4,8);
+  R('#1f5f2a',3,6,14,14); R('#3fa34d',4,7,12,12); R('#62c96f',4,7,12,1);
+  R('#2d7a36',4,9,6,8); R('#e2b23c',5,10,4,6); R('#f6d264',5,10,4,2);
+  R('#1f5f2a',11,8,5,10); R('#9fe3ff',12,9,3,8); R('#e6f8ff',12,9,1,8);
+  R('#222',11,3,6,3); R('#222',11,20,6,3); R('#222',3,5,4,2); R('#222',3,19,4,2);
+  R('#bdbdbd',4,4,8,2); R('#888',4,5,8,1); R('#333',7,7,1,1);
+}));
+const TRACTOR = rotateSprite(sprite(22, R => paintTractor(R, 0, 0)));
+const TRACTOR_GRUB = rotateSprite(sprite(26, R => {             // mit Grubber
+  R('#555',4,1,2,24); for (let y=2;y<25;y+=3) { R('#333',1,y,3,1); R('#888',0,y,1,1); }
+  R('#555',6,12,3,2);
+  paintTractor(R, 6, 2);
+}));
+const TRACTOR_SEED = rotateSprite(sprite(26, R => {             // mit Sämaschine
+  R('#555',0,1,2,24); for (let y=2;y<25;y+=3) R('#333',0,y,1,1);
+  R('#163d7a',2,3,5,20); R('#2a6fdb',3,4,3,18); R('#7cb0ff',3,4,3,2);
+  R('#555',7,12,2,2);
+  paintTractor(R, 6, 2);
+}));
+// Bauer von oben (mit Strohhut), schaut nach rechts
+const PERSON = rotateSprite(sprite(20, R => {
+  R('#f1c27d',9,0,4,3); R('#f1c27d',9,17,4,3);                 // Hände
+  R('#8e2a20',3,2,11,16); R('#c0392b',4,3,9,14); R('#2a5db0',5,5,8,10); R('#3f7be0',6,6,6,8);   // Hemd + Latzhose
+  R('#7a5a22',5,4,12,12); R('#e8c25a',6,5,10,10); R('#f6dc8a',7,6,4,3); R('#b8932f',6,10,10,1);  // Strohhut
+  R('#e8c25a',16,7,3,6); R('#b8932f',18,7,1,6);                  // Hutkrempe vorne
+}));
+// Bauer von vorne (für den Knopf)
+const FARMER_FRONT = { pal: { y:'#e8c25a', d:'#b8932f', s:'#f1c27d', k:'#222', r:'#c0392b', b:'#2a5db0', o:'#5a3b1c' },
+  px: ['...yyyy...','..yyyyyy..','yyddddddyy','..ssssss..','..skssks..','..ssssss..','.rrbbbbrr.','srbbbbbbrs','s.bbbbbb.s','..bbbbbb..','..bb..bb..','.oo....oo.'] };
+// Besucherin (holt Wolle ab)
+const VISITOR = { pal: { g:'#2e8b57', h:'#7a4a22', s:'#f1c27d', k:'#222', p:'#8e44ad', n:'#2c3e50', o:'#5a3b1c' },
+  px: ['..gggg..','.gggggg.','.hsssshh','.hskskh.','..ssss..','.pppppp.','spppppps','s.pppp.s','..pppp..','..n..n..','.oo..oo.'] };
+$('tractorpreview').getContext('2d').drawImage(TRACTOR.frames[28], 0, 0);
+$('vb-tractor').querySelector('canvas').getContext('2d').drawImage(TRACTOR.frames[0], 0, 0);
+$('vb-combine').querySelector('canvas').getContext('2d').drawImage(COMBINE.frames[0], 0, 0);
+(() => { const g = $('vb-person').querySelector('canvas').getContext('2d');
+  FARMER_FRONT.px.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') { g.fillStyle = FARMER_FRONT.pal[ch]; g.fillRect(7 + i*2, 5 + j*2, 2, 2); } })); })();
+
+function drawFieldPreview(cv, level) {
+  const g = cv.getContext('2d'), n = level + 1, s = 44 / n;
+  g.fillStyle = '#5cae4a'; g.fillRect(0, 0, 48, 48);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    g.fillStyle = '#c9952a'; g.fillRect(2 + i*s, 2 + j*s, s - 1, s - 1);
+    g.fillStyle = '#f6d264'; g.fillRect(2 + i*s, 2 + j*s, s - 1, Math.max(1, s/4));
+  }
+}
+const shakeEl = el => { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); };
+
+/* =====================================================================
+   SZENE: BAUERNHOF
+   ===================================================================== */
+// T Baum, h Haus, b Scheune, s Silo, = Weg, w Feld, p Schafstall, o Teich,
+// g Weidetor (→ Schafe), S Feld-Schild (→ größeres Feld kaufen)
+const HUB_MAP = [
+  'TT.TTT.T',
+  'Thh.bbs.',
+  'Shh.bbs.',
+  '========',
+  'ww=..ppp',
+  'ww=..ppp',
+  'Tg=.ooTT',
+];
+const Hub = (() => {
+  let type, ox, oy, flock = [], penRect, fieldRect, gateRect, signRect, entering = false, started = false, uiOpen = false;
+  let active = 'person', posKey = '', fieldVar = [], idleT = 0;
+  const ENT = {
+    person:  { spr: PERSON,  m: null, speed: 2.8 },
+    tractor: { spr: TRACTOR, m: null, speed: 2.4, pitch: 58 },
+    combine: { spr: COMBINE, m: null, speed: 2.0, pitch: 44 },
+  };
+  const npc = { phase: 'away', t: rnd(20, 45), x: 0, y: 0, n: 1, path: [], r: 0, c: 0, asked: false, flip: false };
+  const cellType = (r, c) => (r < 0 || c < 0 || r >= gr || c >= gc) ? 'X' : type[r][c];
+  const visible = name => name !== 'person' || active === 'person';
+  function need() {
+    const s = save.field.stage;
+    return s === 'ripe' ? 'combine' : (s === 'stub' || s === 'tilled') ? 'tractor' : null;
+  }
+  function occupied(self, r, c) {
+    // Zu Fuß kann man an geparkten Fahrzeugen vorbeigehen (sonst sperren sie Wege ab)
+    if (self !== 'person') for (const [name, e] of Object.entries(ENT)) if (name !== self && visible(name) && e.m.r === r && e.m.c === c) return true;
+    return npc.phase === 'wait' && npc.r === r && npc.c === c;
+  }
+  const passableFor = name => (r, c) => {
+    if (occupied(name, r, c)) return false;
+    const t = cellType(r, c);
+    if (name === 'person') return ['.', '=', 'f', 'g', 'S'].includes(t);   // zu Fuß: nicht aufs Feld
+    if (t === 'w') return need() === name;                                  // Fahrzeug: nur wenn es dran ist
+    return ['.', '=', 'f'].includes(t);
+  };
+
+  function build() {
+    layout(true);
+    ox = Math.floor((gc - 8) / 2); oy = Math.floor((gr - 7) / 2);
+    const rr = seeded(1234 + gc*97 + gr), pickR = a => a[(rr()*a.length)|0];
+    type = [];
+    for (let r = 0; r < gr; r++) { type.push([]); for (let c = 0; c < gc; c++) {
+      const mr = r - oy, mc = c - ox;
+      type[r].push((mr >= 0 && mr < 7 && mc >= 0 && mc < 8) ? HUB_MAP[mr][mc] : (rr() < .15 ? 'T' : (rr() < .2 ? 'f' : '.')));
+    }}
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const t = type[r][c], set = t === '=' ? tiles.path : tiles.grass;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++)
+        bctx.drawImage(t === 'f' && i === j && rr() < .7 ? pickR(flowerTiles) : pickR(set), c*G+i*T, r*G+j*T);
+      if (t === 'T') drawObstacle(bctx, 't', c*G, r*G);
+    }
+    fieldVar = []; for (let i = 0; i < 16; i++) fieldVar.push((rr()*6)|0);
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    const hx = (ox+1)*G, hy = (oy+1)*G;            // Wohnhaus
+    B('rgba(0,0,0,.25)',hx+4,hy+8,44,40);
+    B('#e9dcc0',hx+3,hy+24,42,22); B('#cdbf9f',hx+3,hy+44,42,2);
+    B('#8e1f1f',hx+1,hy+3,46,23); B('#c0392b',hx+2,hy+4,44,20);
+    for (let i=0;i<5;i++) B('#a93226',hx+2,hy+7+i*4,44,1);
+    B('#7a1a12',hx+2,hy+3,44,1); B('#555',hx+34,hy+1,5,6);
+    B('#7a4a22',hx+20,hy+32,8,14); B('#ffcc00',hx+26,hy+39,1,1);
+    for (const wx of [7,31]) { B('#5a3b1c',hx+wx,hy+29,10,9); B('#9fe3ff',hx+wx+1,hy+30,8,7); B('#5a3b1c',hx+wx+4,hy+30,1,7); B('#5a3b1c',hx+wx+1,hy+33,8,1); }
+    B('#ff6b8a',hx+8,hy+38,2,1); B('#ffd23f',hx+12,hy+38,2,1); B('#ff6b8a',hx+33,hy+38,2,1);
+    const bx = (ox+4)*G, by = (oy+1)*G;            // Scheune
+    B('rgba(0,0,0,.25)',bx+4,by+8,44,40);
+    B('#4a4a4a',bx+1,by+2,46,18); B('#6b6b6b',bx+2,by+3,44,15); B('#7f7f7f',bx+2,by+3,44,2);
+    B('#8e1f1f',bx+2,by+18,44,28); B('#b83227',bx+3,by+19,42,26);
+    B('#f2f2f2',bx+14,by+24,20,22); B('#b83227',bx+16,by+26,16,20);
+    for (let i=0;i<16;i++){ B('#f2f2f2',bx+16+i,by+26+(i*1.25|0),2,2); B('#f2f2f2',bx+30-i,by+26+(i*1.25|0),2,2); }
+    B('#f2f2f2',bx+21,by+20,6,3);
+    const sx = (ox+6)*G, sy = (oy+1)*G;            // Silo
+    B('rgba(0,0,0,.25)',sx+6,sy+8,18,40);
+    B('#8a9aa6',sx+3,sy+8,18,38); B('#b8c6d0',sx+5,sy+8,6,38); B('#6f7d88',sx+17,sy+8,4,38);
+    for (let i=0;i<5;i++) B('#6f7d88',sx+3,sy+14+i*7,18,1);
+    B('#6f7d88',sx+5,sy+2,14,7); B('#9aa8b2',sx+7,sy+1,10,4); B('#c8d4dc',sx+8,sy+2,3,2);
+    const px0 = (ox+5)*G, py0 = (oy+4)*G;          // Schafstall (Gehege mit Stroh)
+    penRect = { x: px0+6, y: py0+8, w: 3*G-14, h: 2*G-16 };
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 6; i++) bctx.drawImage(pickR(tiles.straw), px0 + i*T, py0 + j*T);
+    B('#7a1a12',px0+2*G+4,py0+2,G-6,10); B('#b83227',px0+2*G+5,py0+3,G-8,8);   // kleines Stalldach
+    const F = '#7a4a22', F2 = '#a0673a';
+    B(F2,px0+1,py0+2,3*G-2,2); B(F2,px0+1,py0+2*G-5,3*G-2,2);
+    B(F2,px0+1,py0+2,2,2*G-5); B(F2,px0+3*G-3,py0+2,2,2*G-5);
+    for (let i=0;i<=6;i++){ B(F,px0+1+i*((3*G-4)/6|0),py0+1,3,4); B(F,px0+1+i*((3*G-4)/6|0),py0+2*G-6,3,4); }
+    for (let j=0;j<=3;j++){ B(F,px0,py0+1+j*((2*G-6)/3|0),4,3); B(F,px0+3*G-4,py0+1+j*((2*G-6)/3|0),4,3); }
+    const ppx = (ox+4)*G, ppy = (oy+6)*G;          // Teich
+    B('#2f6fa8',ppx+2,ppy+2,2*G-4,G-4); B('#3b82c4',ppx+3,ppy+3,2*G-6,G-6);
+    B('#7cc0f0',ppx+8,ppy+8,6,1); B('#7cc0f0',ppx+26,ppy+14,7,1); B('#7cc0f0',ppx+17,ppy+17,3,1);
+    B('#2e8b3a',ppx+38,ppy+5,5,4); B('#3fa34d',ppx+39,ppy+6,3,2);
+    const gx = (ox+1)*G, gy = (oy+6)*G;            // Weidetor
+    gateRect = { x: gx, y: gy };
+    B('#6fbf4f',gx+1,gy+1,G-2,G-2);
+    B('#7a4a22',gx+1,gy+3,3,19); B('#7a4a22',gx+G-4,gy+3,3,19);
+    B('#d9c08a',gx+4,gy+8,G-8,2); B('#d9c08a',gx+4,gy+15,G-8,2);
+    for (let i=0;i<G-8;i+=4) B('#b89a5c',gx+4+i,gy+8,1,9);
+    const fx = ox*G, fy = (oy+2)*G;                // Feld-Schild
+    signRect = { x: fx, y: fy };
+    B('#5a3b1c',fx+11,fy+12,3,11); B('#5a3b1c',fx+3,fy+3,19,11); B('#a0673a',fx+4,fy+4,17,9);
+    for (let i = 0; i < 3; i++) { B('#c9952a',fx+6+i*5,fy+6,4,5); B('#f6d264',fx+6+i*5,fy+6,4,1); }
+    fieldRect = { x: ox*G, y: (oy+4)*G, w: 2*G, h: 2*G };
+    buildFlock();
+  }
+  function buildFlock() {
+    const p = penRect; flock = [];
+    for (let i = 0; i < Math.min(save.sheep, MAX_SHEEP); i++)
+      flock.push({ x: rnd(p.x, p.x+p.w-16), y: rnd(p.y, p.y+p.h-12), tx: 0, ty: 0, wait: rnd(0,2), flip: Math.random() < .5 });
+  }
+  function freeNear(r, c) {                     // freies Nachbarfeld zum Aussteigen
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]]) {
+      const nr = r + dy, nc = c + dx;
+      if (passableFor('person')(nr, nc)) return [nr, nc];
+    }
+    return [r, c];
+  }
+  function placeAll(returning, from) {
+    const key = gc + 'x' + gr;
+    if (key !== posKey || !ENT.tractor.m) {
+      ENT.person.m  = newMover(oy+3, ox+4, Math.PI/2);
+      ENT.tractor.m = newMover(oy+3, ox+2, Math.PI/2);
+      ENT.combine.m = newMover(oy+3, ox+6, Math.PI);
+      posKey = key; active = 'person';
+    }
+    if (from === 'schafe') {
+      Object.assign(ENT.person.m, { r: oy+6, c: ox+2, a: -Math.PI/2 }); active = 'person';
+    } else if (returning && ENT[returning]) {
+      const m = ENT[returning].m, oname = returning === 'tractor' ? 'combine' : 'tractor', o = ENT[oname].m;
+      Object.assign(m, { r: oy+3, c: ox+1, a: -Math.PI/2 });
+      if (o.r === m.r && o.c === m.c) Object.assign(o, oname === 'tractor' ? { r: oy+3, c: ox+2 } : { r: oy+3, c: ox+6 });
+      active = returning;
+    }
+    for (const e of Object.values(ENT)) e.m.moving = false;
+  }
+  function setActive(name) {
+    if (uiOpen || entering || ENT[active].m.moving || name === active) return;
+    idleT = 0;
+    if (name === 'person') {                    // aussteigen
+      const v = ENT[active].m; active = 'person';
+      const [r, c] = freeNear(v.r, v.c);
+      Object.assign(ENT.person.m, { r, c, a: v.a, moving: false });
+    } else active = name;                       // einsteigen (direkt hineinspringen)
+    sfx.click(); refreshVBtns();
+  }
+  function refreshVBtns() { ['person','tractor','combine'].forEach(n => $('vb-' + n).classList.toggle('act', active === n)); }
+  ['person','tractor','combine'].forEach(n => $('vb-' + n).addEventListener('click', () => setActive(n)));
+
+  function hudCounts() { $('starcount').textContent = save.stars; $('woolcount').textContent = save.wool; }
+
+  /* --- Weide: Schafe kaufen, dann hüten --- */
+  function openWeide() { uiOpen = true; clearHeld(); hide('ctrl'); refreshWeide(); show('weide'); sayWord('sheep'); }
+  function refreshWeide() {
+    $('wsheep').textContent = save.sheep; $('wstars').textContent = save.stars;
+    const full = save.sheep >= MAX_SHEEP;
+    $('buysheep').classList.toggle('off', full || save.stars < SHEEP_PRICE);
+    $('buysheep').classList.toggle('max', full);
+    $('wplay').classList.toggle('off', save.sheep === 0);
+  }
+  $('buysheep').addEventListener('click', () => {
+    initAudio();
+    if (save.sheep < MAX_SHEEP && Hof.spend(SHEEP_PRICE)) {
+      save.sheep++; persist(); sfx.unlock(); bump($('wsheeppill')); bump($('wstarpill'));
+    } else { sfx.bonk(); shakeEl($('buysheep')); if (save.stars < SHEEP_PRICE) shakeEl($('wstarpill')); }
+    refreshWeide(); buildFlock(); hudCounts();
+  });
+  $('wplay').addEventListener('click', () => {
+    initAudio();
+    if (save.sheep === 0) { sfx.bonk(); shakeEl($('buysheep')); return; }
+    sfx.enter(); setTimeout(() => { location.href = 'spiele/schafe/index.html'; }, 200);
+  });
+  $('wclose').addEventListener('click', () => { uiOpen = false; hide('weide'); show('ctrl'); idleT = 0; });
+
+  /* --- Feld-Schild: größeres Feld kaufen --- */
+  function openFeld() { uiOpen = true; clearHeld(); hide('ctrl'); refreshFeld(); show('feldshop'); sayWord('field'); }
+  function refreshFeld() {
+    $('fstars').textContent = save.stars; $('fnowlvl').textContent = save.level;
+    drawFieldPreview($('fnow'), save.level);
+    const max = save.level >= 5, price = FIELD_PRICE[save.level + 1] || 0;
+    drawFieldPreview($('fnext'), Math.min(5, save.level + 1));
+    $('fprice').textContent = price;
+    $('buyfield').classList.toggle('max', max);
+    $('buyfield').classList.toggle('off', max || save.stars < price);
+  }
+  $('buyfield').addEventListener('click', () => {
+    initAudio();
+    const price = FIELD_PRICE[save.level + 1];
+    if (save.level < 5 && Hof.spend(price)) {
+      save.level++; save.field.layout = null; persist();     // neues, größeres Feld ab dem nächsten Einsatz
+      sfx.unlock(); bump($('fstarpill'));
+    } else { sfx.bonk(); shakeEl($('buyfield')); if (save.level < 5) shakeEl($('fstarpill')); }
+    refreshFeld(); hudCounts();
+  });
+  $('fclose').addEventListener('click', () => { uiOpen = false; hide('feldshop'); show('ctrl'); idleT = 0; });
+
+  function enter() {
+    Hof.load();
+    build();
+    let from = null;
+    if (backFromPage) { backFromPage = false; from = 'schafe'; started = true; }
+    placeAll(hubReturn, from); hubReturn = null;
+    entering = false; uiOpen = false; idleT = 0; refreshVBtns(); hudCounts();
+    if (npc.phase !== 'away') { npc.phase = 'away'; npc.t = rnd(8, 20); }
+    if (!started) { show('appstart'); hide('ctrl'); hide('hubhud'); }
+    else { hide('appstart'); show('ctrl'); show('hubhud'); }
+  }
+  $('appplay').addEventListener('click', () => {
+    initAudio(); started = true; hide('appstart'); show('ctrl'); show('hubhud'); showPadHint();
+  });
+
+  /* --- Besucherin, die Wolle abholt --- */
+  function npcCellFree(r, c) { return ['.', '='].includes(cellType(r, c)) && !occupied(null, r, c); }
+  function startVisit() {
+    const spots = [[oy+2, ox+3], [oy+4, ox+3], [oy+4, ox+4], [oy+5, ox+3]];
+    const spot = spots.find(([r, c]) => npcCellFree(r, c));
+    if (!spot) { npc.t = 5; return; }
+    npc.r = spot[0]; npc.c = spot[1];
+    npc.n = 1 + ((Math.random() * Math.min(3, Math.max(1, save.sheep))) | 0);
+    npc.x = -10; npc.y = cellY(oy+3);
+    npc.path = [[cellX(ox+3), cellY(oy+3)], [cellX(npc.c), cellY(npc.r)]];
+    npc.phase = 'walkin'; npc.asked = false;
+  }
+  function walkNpc(dt) {
+    const [tx, ty] = npc.path[0], dx = tx - npc.x, dy = ty - npc.y, d = Math.hypot(dx, dy), v = 34*dt;
+    if (Math.abs(dx) > 0.5) npc.flip = dx < 0;
+    if (d <= v) { npc.x = tx; npc.y = ty; npc.path.shift(); return npc.path.length === 0; }
+    npc.x += dx/d*v; npc.y += dy/d*v; return false;
+  }
+  function updateNpc(dt) {
+    if (npc.phase === 'away') {
+      if (save.sheep > 0 || save.wool > 0) npc.t -= dt;
+      if (npc.t <= 0) startVisit();
+    } else if (npc.phase === 'walkin') {
+      if (walkNpc(dt)) { npc.phase = 'wait'; say(npc.n + ' ' + WORDS.wool[1]); }
+    } else if (npc.phase === 'wait') {
+      const p = ENT.person.m;
+      const adj = active === 'person' && !p.moving && Math.abs(p.r - npc.r) + Math.abs(p.c - npc.c) === 1;
+      if (adj && !npc.asked) {
+        npc.asked = true;
+        if (save.wool >= npc.n) {
+          Hof.addWool(-npc.n); Hof.addStars(npc.n * WOOL_STARS); hudCounts();
+          sfx.load(); sfx.unlock(); say(WORDS.thanks[1]); bump($('starpill')); bump($('woolpill'));
+          for (let i = 0; i < 40; i++) spawn(npc.x, npc.y - 14, rnd(-40,40), rnd(-50,0), rnd(.6,1.2), pick(['#ffd23f','#fff','#ff8ad8']), 60);
+          npc.phase = 'leave'; npc.path = [[cellX(ox+3), cellY(oy+3)], [-14, cellY(oy+3)]];
+        } else { sfx.bonk(); shakeEl($('npcbubble')); shakeEl($('woolpill')); say(npc.n + ' ' + WORDS.wool[1]); }
+      }
+      if (!adj) npc.asked = false;
+    } else if (npc.phase === 'leave') {
+      if (walkNpc(dt)) { npc.phase = 'away'; npc.t = rnd(60, 150); }
+    }
+  }
+
+  function growth() { return save.field.stage === 'sown' ? clamp((Date.now() - save.field.sownAt) / GROW_MS, 0, 1) : 0; }
+  let lastNeedCls = '';
+  function update(dt) {
+    if (!started) { setEngine(false, false); return; }
+    if (save.field.stage === 'sown') {
+      if (growth() >= 1) {
+        save.field.stage = 'ripe'; persist(); sfx.unlock(); sayWord(save.field.crop);
+        for (let i=0;i<50;i++) spawn(fieldRect.x+rnd(0,fieldRect.w), fieldRect.y+rnd(0,fieldRect.h), rnd(-20,20), rnd(-40,-10), rnd(.6,1.2), pick(['#ffd23f','#fff','#9be05a']), 30);
+      } else if (Math.random() < 0.08) {
+        spawn(fieldRect.x+rnd(0,fieldRect.w), fieldRect.y+rnd(0,fieldRect.h), 0, -8, .8, pick(['#ffffff','#9be05a']));
+      }
+    }
+    updateNpc(dt);
+    const e = ENT[active];
+    idleT = (held || uiOpen) ? 0 : idleT + dt;
+    if (!entering && !uiOpen) moverUpdate(e.m, dt, {
+      passable: passableFor(active), speed: e.speed,
+      onArrive: m => {
+        const t = cellType(m.r, m.c);
+        if (active === 'person') {
+          if (t === 'g') { sfx.enter(); try { sessionStorage.setItem('bauernhof.fahrzeug', 'person'); } catch (er) {} openWeide(); }
+          if (t === 'S') { sfx.enter(); openFeld(); }
+          return;
+        }
+        if (t !== 'w') return;
+        entering = true; sfx.enter();
+        const st = save.field.stage, mode = st === 'ripe' ? 'harvest' : st === 'stub' ? 'cultivate' : 'sow';
+        setTimeout(() => go(FieldGame, mode), 350);
+        return 'stop';
+      }
+    });
+    if (active === 'person') setEngine(false, false); else setEngine(true, e.m.moving, e.pitch);
+    // Hinweis erst nach längerem Nichtstun: das benötigte Fahrzeug blinkt
+    const n = need(), cls = (idleT > HINT_AFTER && n && n !== active) ? n : '';
+    if (cls !== lastNeedCls) {
+      $('vb-tractor').classList.toggle('need', cls === 'tractor');
+      $('vb-combine').classList.toggle('need', cls === 'combine');
+      lastNeedCls = cls;
+    }
+    for (const an of flock) {
+      if (an.wait > 0) { an.wait -= dt; if (an.wait <= 0) { an.tx = rnd(penRect.x, penRect.x+penRect.w-16); an.ty = rnd(penRect.y, penRect.y+penRect.h-12); } continue; }
+      const dx = an.tx - an.x, dy = an.ty - an.y, d = Math.hypot(dx, dy);
+      if (d < 1) { an.wait = rnd(1, 3.5); continue; }
+      an.x += dx/d*8*dt; an.y += dy/d*8*dt; an.flip = dx < 0;
+    }
+  }
+  function drawField() {
+    const st = save.field.stage, crop = CROPS[save.field.crop] || CROPS.wheat, g = growth();
+    let set;
+    if (st === 'ripe') set = crop.ripe;
+    else if (st === 'stub') set = tiles.stubble;
+    else if (st === 'tilled') set = tiles.tilled;
+    else set = g < 0.25 ? tiles.sown : g < 0.55 ? tiles.sprout : crop.green;
+    let k = 0;
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) ctx.drawImage(set[fieldVar[k++]], fieldRect.x + i*T, fieldRect.y + j*T);
+    const line = st === 'ripe' ? '#9a6c15' : st === 'stub' ? '#a98745' : '#4f3520';
+    R(line, fieldRect.x, fieldRect.y + G - 1, fieldRect.w, 1); R(line, fieldRect.x + G - 1, fieldRect.y, 1, fieldRect.h);
+    R(line, fieldRect.x, fieldRect.y + 2*G - 1, fieldRect.w, 1); R(line, fieldRect.x + 2*G - 1, fieldRect.y, 1, fieldRect.h);
+  }
+  function hintBubble(x, y, spr) {               // Sprechblase mit dem Fahrzeug, das jetzt dran ist
+    x = Math.round(x); y = Math.round(y);
+    R('rgba(0,0,0,.25)', x-9, y-17, 20, 16); R('#fff', x-10, y-18, 20, 16); R('#fff', x-2, y-2, 4, 3); R('#fff', x-1, y+1, 2, 1);
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(spr.frames[0], x-9, y-18, 18, 18);
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    drawField();
+    drawAnimalPix(ANIMALS[1], gateRect.x + 5, gateRect.y + 3 - (Math.sin(time/300) > 0.7 ? 1 : 0), false, 0, 1.75);
+    // Wolle im Stall
+    for (let i = 0; i < Math.min(save.wool, 9); i++) {
+      const wx = penRect.x + 2 + (i % 5) * 11, wy = penRect.y + penRect.h + (i < 5 ? -2 : -9);
+      R('#e8e8e8', wx, wy, 7, 6); R('#ffffff', wx+1, wy, 4, 2); R('#c8c8c8', wx+2, wy+3, 4, 1);
+    }
+    flock.slice().sort((a, b) => a.y - b.y).forEach(an =>
+      drawAnimalPix(ANIMALS[1], an.x, an.y, an.flip, (an.wait <= 0 && Math.sin(time/90) > 0) ? 1 : 0));
+    // Fahrzeuge und Bauer
+    ['tractor','combine'].filter(n => n !== active).forEach(n => drawMover(ENT[n].m, ENT[n].spr, time));
+    if (npc.phase !== 'away') {
+      const bob = npc.phase !== 'wait' && Math.sin(time/90) > 0 ? 1 : 0;
+      R('rgba(0,0,0,.2)', npc.x - 7, npc.y + 4, 14, 3);
+      drawAnimalPix(VISITOR, npc.x - 8, npc.y - 17 - bob, npc.flip, 0);
+    }
+    drawMover(ENT[active].m, ENT[active].spr, time);
+    // Sprechblase der Besucherin (als HTML, damit das Wort scharf ist)
+    const nb = $('npcbubble');
+    if (started && npc.phase === 'wait' && !uiOpen) {
+      const r = cvs.getBoundingClientRect();
+      nb.style.left = (r.left + npc.x / W * r.width) + 'px'; nb.style.top = (r.top + (npc.y - 20) / H * r.height) + 'px';
+      $('npcn').textContent = npc.n; nb.classList.remove('hidden');
+    } else nb.classList.add('hidden');
+    // Hinweis nach längerem Nichtstun
+    const n = need();
+    if (started && !entering && !uiOpen && n && idleT > HINT_AFTER) {
+      if (n === active) hintBubble(fieldRect.x + fieldRect.w/2, fieldRect.y - 4, ENT[n].spr);
+      else { const p = moverPos(ENT[active].m); hintBubble(p.x, p.y - 14, ENT[n].spr); }
+    }
+  }
+  function resize() { build(); placeAll(null); }
+  function exit() { setEngine(false, false); hide('hubhud'); $('npcbubble').classList.add('hidden'); }
+  return { enter, update, draw, exit, resize };
+})();
+
+/* =====================================================================
+   SZENE: FELD-SPIELE (Ernten, Grubbern, Säen)
+   ===================================================================== */
+const FieldGame = (() => {
+  const MAXLVL = 5;
+  const LV = [null,
+    { f: .55, ob: 0, loads: 3, pond: false, shapes: ['rect'] },
+    { f: .65, ob: 1, loads: 3, pond: false, shapes: ['rect','round','L'] },
+    { f: .75, ob: 2, loads: 4, pond: false, shapes: ['round','L','notch','two'] },
+    { f: .9,  ob: 3, loads: 4, pond: true,  shapes: ['L','notch','two','cross','round'] },
+    { f: 1,   ob: 4, loads: 5, pond: true,  shapes: ['L','notch','two','cross','round'] },
+  ];
+  const MODES = {
+    harvest:   { veh: COMBINE,      from: 'crop',   to: 'stub',   speed: 1.8, at: 0.2, fillCls: '',     vehName: 'combine' },
+    cultivate: { veh: TRACTOR_GRUB, from: 'stub',   to: 'tilled', speed: 2.1, at: 0.5, fillCls: 'soil', vehName: 'tractor' },
+    sow:       { veh: TRACTOR_SEED, from: 'tilled', to: 'sown',   speed: 2.1, at: 0.5, fillCls: 'seed', vehName: 'tractor' },
+  };
+  const TRUCKS = [['#e03b3b','#8e1f1f'],['#2a6fdb','#173f80'],['#f08c00','#9a5a00'],['#8e44ad','#5a2a6e'],['#16a085','#0b5e4e']];
+  let mode, M, ground, obst, total, left, cap, fill, loads, totalLoads, state, veh, truck, trailer, honked, truckColor = 0, winTimer = null, refilling = false;
+  const crop = () => CROPS[save.field.crop] || CROPS.wheat;
+
+  function makeLayout(level) {
+    const P = LV[level];
+    const c0 = 1, c1 = gc-2, r0 = 1, r1 = gr-3, regW = c1-c0+1, regH = r1-r0+1;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const mask = [], ob = [];
+      for (let r = 0; r < gr; r++) { mask.push(Array(gc).fill(false)); ob.push(Array(gc).fill('.')); }
+      const fw = clamp(Math.round(regW*P.f), 3, regW), fh = clamp(Math.round(regH*P.f), 3, regH);
+      const fx = c0 + ((Math.random()*(regW-fw+1))|0), fy = r0 + ((Math.random()*(regH-fh+1))|0);
+      let shape = pick(P.shapes);
+      if ((shape === 'two' && fw < 5) || ((shape === 'cross' || shape === 'round') && (fw < 4 || fh < 4))) shape = 'L';
+      const mx = Math.random() < .5, my = Math.random() < .5;
+      const inF = (i, j) => {
+        const ii = mx ? fw-1-i : i, jj = my ? fh-1-j : j;
+        switch (shape) {
+          case 'round': return !((i===0||i===fw-1) && (j===0||j===fh-1));
+          case 'L':     return !(ii >= fw - Math.floor(fw/2) && jj < Math.floor(fh/2));
+          case 'notch': { const w = Math.max(1, Math.floor(fw/3)), s = Math.floor((fw-w)/2); return !(i >= s && i < s+w && jj < Math.floor(fh/2)); }
+          case 'two':   return i !== Math.floor(fw/2);
+          case 'cross': { const bw = Math.floor(fw/3), bh = Math.floor(fh/3); return !((i < bw || i >= fw-bw) && (j < bh || j >= fh-bh)); }
+          default: return true;
+        }
+      };
+      for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) if (inF(i, j)) mask[fy+j][fx+i] = true;
+      const start = { r: gr-2, c: 1 };
+      const free = (r, c) => r >= r0 && r <= r1 && c >= 0 && c < gc && ob[r][c] === '.' && !(Math.abs(r-start.r) <= 1 && Math.abs(c-start.c) <= 1);
+      let n = P.ob;
+      if (P.pond && Math.random() < .7 && n > 0) for (let t = 0; t < 30; t++) {
+        const r = r0 + ((Math.random()*regH)|0), c = (Math.random()*(gc-1))|0;
+        if (free(r,c) && free(r,c+1)) { ob[r][c] = 'p'; ob[r][c+1] = 'p'; n--; break; }
+      }
+      for (let k = 0; k < n; k++) for (let t = 0; t < 30; t++) {
+        const inField = Math.random() < .7, r = r0 + ((Math.random()*regH)|0), c = (Math.random()*gc)|0;
+        if (!free(r,c) || inField !== mask[r][c]) continue;
+        ob[r][c] = Math.random() < .5 ? 't' : 'r'; break;
+      }
+      const seen = new Set([start.r*100+start.c]), q = [start];
+      while (q.length) {
+        const { r, c } = q.shift();
+        for (const [dx, dy] of Object.values(DIRS)) {
+          const nr = r+dy, nc = c+dx;
+          if (nr<0||nc<0||nr>=gr||nc>=gc||ob[nr][nc] !== '.'||seen.has(nr*100+nc)) continue;
+          seen.add(nr*100+nc); q.push({ r: nr, c: nc });
+        }
+      }
+      let count = 0, ok = true;
+      for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) if (mask[r][c] && ob[r][c] === '.') { count++; if (!seen.has(r*100+c)) ok = false; }
+      if (ok && count >= P.loads * 2)
+        return { gc, gr, level, start, mask: mask.map(row => row.map(b => b ? '1' : '0').join('')), obst: ob.map(row => row.join('')) };
+    }
+    return null;
+  }
+  function getLayout(fresh) {
+    let L = save.field.layout;
+    if (fresh || !L || L.gc !== gc || L.gr !== gr || L.level !== save.level) {
+      L = null; while (!L) L = makeLayout(save.level);
+      save.field.layout = L; persist();
+    }
+    return L;
+  }
+
+  function drawCell(r, c) {
+    const x = c*G, y = r*G, g = ground[r][c];
+    const set = g === 'crop' ? crop().ripe : g === 'stub' ? tiles.stubble : g === 'tilled' ? tiles.tilled
+              : g === 'sown' ? tiles.sown : g === 'road' ? tiles.road : tiles.grass;
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), x+i*T, y+j*T);
+    const B = (col,x2,y2,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x+x2,y+y2,w,h);};
+    if (g === 'crop') { B('rgba(0,0,0,.25)',0,G-1,G,1); B('rgba(0,0,0,.15)',G-1,0,1,G); }
+    if (g === 'stub') { B('#a98745',0,G-1,G,1); B('#b8964f',G-1,0,1,G); }
+    if (g === 'tilled' || g === 'sown') { B('#3e2a18',0,G-1,G,1); B('#4f3520',G-1,0,1,G); }
+    const o = obst[r][c];
+    if (o !== '.') drawObstacle(bctx, o, x, y, c > 0 && obst[r][c-1] === 'p', c < gc-1 && obst[r][c+1] === 'p');
+  }
+
+  const isWork = (r, c) => ground[r][c] === M.from && obst[r][c] === '.';
+  const partner = () => mode === 'harvest' ? truck : mode === 'sow' ? trailer : null;
+  const partnerCell = (r, c) => { const p = partner(); return p && r === gr-1 && ['arrive','park','pause'].includes(p.state) && (c === p.tx || c === p.tx+1); };
+  const passable = (r, c) => r >= 0 && c >= 0 && r < gr && c < gc && obst[r][c] === '.' && !partnerCell(r, c);
+  const nearPartner = () => { const p = partner(); return p && !veh.moving && veh.r >= gr-2 && veh.c >= p.tx-1 && veh.c <= p.tx+2; };
+  const canUnload = () => mode === 'harvest' && (fill >= cap || (left === 0 && fill > 0));
+  const needRefill = () => mode === 'sow' && fill <= 0 && left > 0;
+
+  function enter(m) {
+    mode = m; M = MODES[m];
+    layout(true);
+    const L = getLayout(mode === 'cultivate');   // neue Saison = neue Feldform
+    ground = []; obst = L.obst.map(row => row.split(''));
+    for (let r = 0; r < gr; r++) { ground.push([]); for (let c = 0; c < gc; c++)
+      // Hindernisse stehen auf Wiese, nicht im Getreide
+      ground[r].push(r === gr-1 ? 'road' : (L.mask[r][c] === '1' && obst[r][c] === '.' ? M.from : 'grass')); }
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) drawCell(r, c);
+    total = 0; for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) if (isWork(r, c)) total++;
+    left = total; honked = false; loads = 0; refilling = false;
+    veh = newMover(L.start.r, L.start.c, -Math.PI/2); veh.unloading = false;
+    truck = null; trailer = null;
+    if (mode === 'harvest') { cap = Math.ceil(total / LV[save.level].loads); totalLoads = Math.ceil(total / cap); fill = 0; newTruck(); }
+    if (mode === 'sow') { cap = Math.ceil(total / 3); fill = cap; const tx = Math.max(2, gc - 4); trailer = { tx, x: tx*G + 9, y: (gr-1)*G + 4, state: 'park' }; }
+    $('micon').textContent = mode === 'cultivate' ? '🚜' : crop().emoji;
+    $('mfill').className = 'fill ' + M.fillCls;
+    $('mcount').classList.toggle('hidden', mode !== 'harvest');
+    $('mlvl').textContent = save.level;
+    hud();
+    if (mode === 'sow') { state = 'pick'; hide('ctrl'); hide('mhud'); show('seedpick'); }
+    else play();
+  }
+  document.querySelectorAll('.seedcard').forEach(b => b.addEventListener('click', () => {
+    initAudio(); sfx.click(); save.field.crop = b.dataset.crop; persist();
+    $('micon').textContent = crop().emoji; hide('seedpick'); play();
+  }));
+  function play() { state = 'play'; clearHeld(); show('mhud'); show('ctrl'); }
+  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; clearHeld(); show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
+
+  function newTruck() {
+    truckColor = (truckColor + 1) % TRUCKS.length;
+    let tx;
+    for (let t = 0; t < 30; t++) { tx = 1 + ((Math.random()*(gc-3))|0); if (!(veh.r === gr-1 && (veh.c === tx || veh.c === tx+1))) break; }
+    truck = { tx, x: W + 10, y: (gr-1)*G + 4, park: tx*G + 7, fill: 0, state: 'arrive', timer: 0, col: TRUCKS[truckColor] };
+  }
+  function hud() {
+    const pct = mode === 'cultivate' ? (total - left) / total : fill / cap;
+    $('mfill').style.width = (100*pct) + '%';
+    $('mpill').classList.toggle('alert', canUnload() || needRefill());
+    $('mloads').textContent = loads + '/' + totalLoads;
+  }
+  function finish() {
+    if (state === 'won') return;
+    state = 'won'; clearHeld();
+    const gain = save.level + 2;                 // größeres Feld = mehr Sterne pro Schritt
+    Hof.addStars(gain);                          // liest frisch, zählt, speichert
+    if (mode === 'harvest') save.field.stage = 'stub';
+    if (mode === 'cultivate') save.field.stage = 'tilled';
+    if (mode === 'sow') { save.field.stage = 'sown'; save.field.sownAt = Date.now(); }
+    persist();
+    setTimeout(() => {
+      hide('mhud'); hide('ctrl'); $('winstars').textContent = save.stars; $('wingain').textContent = gain;
+      const showCrop = mode !== 'cultivate', key = save.field.crop;
+      $('wincrop').classList.toggle('hidden', !showCrop);
+      $('wincrop').dataset.say = key; $('wincropemo').textContent = crop().emoji; $('wincropword').textContent = WORDS[key][0];
+      show('gwin'); sfx.win(); confetti();
+      if (showCrop) setTimeout(() => sayWord(key), 1600);
+      winTimer = setTimeout(() => { hubReturn = M.vehName; go(Hub); }, 4000);
+    }, mode === 'harvest' ? 0 : 500);
+  }
+
+  function work(m) {
+    if (m.done || m.prog < M.at) return;
+    m.done = true;
+    const r = m.tr, c = m.tc;
+    if (!isWork(r, c)) return;
+    if (mode === 'harvest' && fill >= cap) { if (!honked) { sfx.honk(); honked = true; } return; }
+    if (mode === 'sow' && fill <= 0) { if (!honked) { sfx.honk(); honked = true; } return; }
+    ground[r][c] = M.to; drawCell(r, c); left--; honked = false;
+    const px = cellX(c), py = cellY(r);
+    if (mode === 'harvest') {
+      fill++; sfx.crunch();
+      for (let i = 0; i < 14; i++) spawn(px+rnd(-10,10), py+rnd(-10,10), rnd(-25,25), rnd(-25,25), rnd(.3,.8), pick(crop().grain.concat(['#c9952a'])));
+    } else if (mode === 'cultivate') {
+      sfx.clod();
+      for (let i = 0; i < 12; i++) spawn(px+rnd(-10,10), py+rnd(-10,10), rnd(-15,15), rnd(-15,15), rnd(.3,.7), pick(['#4f3520','#8a6440','#6b4a2b']));
+    } else {
+      fill--; sfx.plink();
+      for (let i = 0; i < 8; i++) spawn(px+rnd(-10,10), py+rnd(-10,10), 0, 0, rnd(.3,.6), pick(['#d9c27a','#fff3a8']));
+    }
+    hud();
+    if (left === 0 && mode !== 'harvest') finish();
+  }
+
+  function update(dt) {
+    if (state === 'play' && !veh.unloading && !refilling) {
+      moverUpdate(veh, dt, { passable, speed: M.speed, onProg: m => {
+        work(m);
+        const p = moverPos(m);
+        if (Math.random() < .25) spawn(p.x - Math.cos(m.a)*12, p.y - Math.sin(m.a)*12, rnd(-6,6), rnd(-6,6), .5, 'rgba(120,90,50,.6)');
+      }});
+      if (mode === 'harvest' && truck.state === 'park' && canUnload() && nearPartner()) { veh.unloading = true; sfx.pour(); }
+      if (mode === 'sow' && fill < cap && left > 0 && nearPartner()) { refilling = true; sfx.pour(); }
+    }
+    if (state === 'play' && veh.unloading) {
+      const amt = Math.min(fill, cap*dt/1.4); fill -= amt; truck.fill += amt/cap;
+      const p = moverPos(veh), tx = truck.x + 17, ty = truck.y + 8;
+      for (let i = 0; i < 3; i++) { const sx = p.x+rnd(-2,2), sy = p.y+rnd(-2,2), ex = tx+rnd(-6,6), ey = ty+rnd(-4,4); spawn(sx, sy, (ex-sx)/.35, (ey-sy)/.35, .35, pick(crop().grain)); }
+      if (fill <= 0.001) { fill = 0; veh.unloading = false; loads++; sfx.load(); bump($('mcount')); truck.state = 'pause'; truck.timer = 0.6; }
+      hud();
+    }
+    if (state === 'play' && refilling) {
+      fill = Math.min(cap, fill + cap*dt/1.2);
+      const p = moverPos(veh), sx0 = trailer.x + 13, sy0 = trailer.y + 8;
+      for (let i = 0; i < 3; i++) { const sx = sx0+rnd(-6,6), sy = sy0+rnd(-3,3), ex = p.x+rnd(-2,2), ey = p.y+rnd(-2,2); spawn(sx, sy, (ex-sx)/.35, (ey-sy)/.35, .35, pick(['#d9c27a','#fff3a8'])); }
+      if (fill >= cap) { refilling = false; sfx.load(); }
+      hud();
+    }
+    setEngine(state === 'play', veh.moving, mode === 'harvest' ? 46 : 58);
+    if (state === 'pause' || !truck) return;
+    const t = truck;
+    if (t.state === 'arrive') { t.x = approach(t.x, t.park, 80*dt); if (t.x === t.park) t.state = 'park'; }
+    else if (t.state === 'pause') { t.timer -= dt; if (t.timer <= 0) { t.state = 'leave'; t.v = 10; } }
+    else if (t.state === 'leave') { t.v += 90*dt; t.x -= t.v*dt; if (t.x < -45) { if (left === 0 && fill === 0) { t.state = 'gone'; finish(); } else newTruck(); } }
+  }
+  function drawTruck(t) {
+    const x = Math.round(t.x), y = Math.round(t.y);
+    R('rgba(0,0,0,.25)', x+2, y+2, 34, 16);
+    for (const wx of [3,16,27]) { R('#1a1a1a', x+wx, y-1, 5, 2); R('#1a1a1a', x+wx, y+15, 5, 2); }
+    R(t.col[1], x, y+1, 10, 14); R(t.col[0], x+1, y+2, 8, 12);
+    R('#9fe3ff', x+1, y+3, 2, 10); R('rgba(255,255,255,.5)', x+5, y+3, 3, 1);
+    R('#333', x+11, y, 23, 16); R('#6b5236', x+12, y+1, 21, 14);
+    if (t.fill > 0) {
+      const f = Math.min(1, t.fill), w = Math.max(2, Math.round(21*f)), h = Math.max(2, Math.round(14*Math.sqrt(f)));
+      const gx = x+12+Math.round((21-w)/2), gy = y+1+Math.round((14-h)/2), [c1, c2] = crop().grain;
+      R(c2, gx, gy, w, h); R(c1, gx+1, gy+1, Math.max(1,w-3), Math.max(1,h-3));
+    }
+  }
+  function drawTrailer(t) {
+    const x = Math.round(t.x), y = Math.round(t.y);
+    R('rgba(0,0,0,.25)', x+2, y+2, 28, 16);
+    R('#1a1a1a', x+10, y-1, 6, 2); R('#1a1a1a', x+10, y+15, 6, 2);
+    R('#555', x+26, y+7, 4, 2);
+    R('#333', x, y, 26, 16); R('#7a5a3a', x+1, y+1, 24, 14);
+    for (const bx of [2, 14]) { R('#cfcfcf', x+bx, y+2, 10, 12); R('#f4f4f4', x+bx+1, y+3, 8, 10); R('#2a6fdb', x+bx+1, y+7, 8, 2); }
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    if (truck && truck.state !== 'gone') drawTruck(truck);
+    if (trailer) drawTrailer(trailer);
+    drawMover(veh, M.veh, time);
+    const bounce = Math.abs(Math.sin(time/180))*4;
+    if (state === 'play' && truck && canUnload() && truck.state === 'park' && !veh.unloading) drawArrow(Math.round(truck.x + 14), Math.round(truck.y - 12 - bounce));
+    if (state === 'play' && trailer && needRefill() && !refilling) drawArrow(Math.round(trailer.x + 10), Math.round(trailer.y - 12 - bounce));
+  }
+  function resize() { if (state === 'play' || state === 'pause' || state === 'won') layout(false); else enter(mode); }
+  function exit() { setEngine(false, false); clearTimeout(winTimer); ['seedpick','gwin','gpause','mhud'].forEach(hide); }
+  return { enter, exit, update, draw, resize };
+})();
+
+/* ---------- Start ---------- */
+// Kommt die Seite aus dem Zwischenspeicher zurück (Safari „Zurück“), Spielstand neu lesen
+addEventListener('pageshow', e => { if (e.persisted && scene === Hub) Hub.enter(); });
+startLoop(Hub);
+</script>
+</body>
+</html>

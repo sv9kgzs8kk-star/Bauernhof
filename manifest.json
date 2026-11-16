@@ -1,0 +1,9 @@
+{
+  "name": "Unser Bauernhof",
+  "short_name": "Bauernhof",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#7ec850",
+  "icons": [{ "src": "icon.png", "sizes": "180x180", "type": "image/png" }]
+}

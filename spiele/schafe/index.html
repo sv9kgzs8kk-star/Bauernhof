@@ -21,7 +21,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../manifest.json">
 <link rel="apple-touch-icon" href="../../icon.png">
-<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261116g">
+<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261116i">
 <title>Schafe hüten</title>
 </head>
 <body>
@@ -49,8 +49,8 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../../gemeinsam/sterne.js?v=20261116g"></script>
-<script src="../../gemeinsam/basis.js?v=20261116g"></script>
+<script src="../../gemeinsam/sterne.js?v=20261116i"></script>
+<script src="../../gemeinsam/basis.js?v=20261116i"></script>
 <script>
 /* =====================================================================
    MINISPIEL: SCHAFE HÜTEN
@@ -174,7 +174,10 @@ const Schafe = (() => {
     const gain = Math.min(sheep.length, save.hay);    // jedes Schaf gibt 1 Wolle – und frisst dafür 1 Heuballen
     Hof.addHay(-gain); Hof.addWool(gain);
     setTimeout(() => {
-      hide('shud'); hide('ctrl'); $('wingain').textContent = gain; show('gwin'); sfx.win(); confetti();
+      hide('shud'); hide('ctrl'); $('wingain').textContent = gain;
+      const row = $('gwin').querySelector('.stars');               // Belohnung ist Wolle, keine Sterne
+      row.innerHTML = gain ? '<i class="ico" data-ico="wool"></i>'.repeat(gain) : '<i class="ico" data-ico="hay"></i>';
+      applyIcons(row); show('gwin'); sfx.win(); confetti();
       setTimeout(() => sayWord('wool'), 1600);
       winTimer = setTimeout(goHome, 4000);
     }, 600);

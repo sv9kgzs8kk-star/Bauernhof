@@ -39,7 +39,8 @@ document.body.insertAdjacentHTML('beforeend', `
   </div>
 </div>`);
 // Alle Anzeigen und Knöpfe (.hud) kommen in den Bereich neben bzw. unter dem Spielfeld
-document.querySelectorAll('.hud').forEach(h => $('info').appendChild(h));
+// (Anzeigen der Spiele – .gamehud – bleiben oben mittig über dem Spielfeld)
+document.querySelectorAll('.hud:not(.gamehud)').forEach(h => $('info').appendChild(h));
 
 /* ---------- Pixel-Symbole statt Emojis ---------- */
 // Jedes Symbol: kleine Pixelkarte + Farben; der dunkle Rand wird automatisch ergänzt.
@@ -71,6 +72,12 @@ const ICONS = {
     '...k......','..kk...k..','kkkk.k..k.','kkkk..k.k.','kkkk..k.k.','kkkk.k..k.','..kk...k..','...k......'], outline: false },
   mute:  { pal: { k:'#3a2a10', r:'#e03b3b' }, px: [
     '...k......','..kk......','kkkk.r..r.','kkkk..rr..','kkkk..rr..','kkkk.r..r.','..kk......','...k......'], outline: false },
+  milk:  { pal: { w:'#ffffff', s:'#c8d4dc', b:'#2a6fdb', g:'#9aa8b2' }, px: [
+    '..gggg..','..gwwg..','.gwwwwg.','gwwwwwwg','gwbbbbwg','gwbwwbwg','gwbbbbwg','gwwwwwsg','gwwwwwsg','.gggggg.'] },
+  cow:   { pal: { w:'#ffffff', k:'#222', n:'#f7a8b8', h:'#c9b28a' }, px: [
+    'h........h','hkwwwwwwkh','.kwwkkwwk.','.wwwkkwww.','.wkwwwwkw.','.wwwwwwww.','..nnnnnn..','..nknnkn..','...nnnn...'] },
+  check: { pal: { g:'#3fa34d' }, px: [
+    '........gg','.......ggg','......ggg.','g....ggg..','gg..ggg...','ggggggg...','.ggggg....','..ggg.....'] },
   gear:  { pal: { g:'#9aa8b2', d:'#6f7d88', l:'#c8d4dc' }, px: [
     '...gg.gg...','..gggggggg.','.gglggggdg.','..ggg.ggd..','gggg...gddg','gggg...gddg','..ggg.ggd..','.gggggggdg.','..gggggggg.','...gg.gg...'] },
   trash: { pal: { g:'#c0392b', d:'#8e1f1f', l:'#e86a5a' }, px: [
@@ -148,6 +155,9 @@ const sfx = {
   unlock() { [392,523,659,784,1047].forEach((f,i)=>tone(f, .18, 'triangle', .14, i*.09)); },
   enter()  { tone(330, .15, 'square', .08, 0, 660); },
   click()  { tone(660, .07, 'square', .07); },
+  moo()    { tone(150, .5, 'sawtooth', .08, 0, 110); tone(120, .6, 'sawtooth', .06, .35, 95); },
+  squirt() { noise(2500, 4000, .06, 1); },
+  munch()  { noise(400, 900, .08, 2); },
   baa()    { const f = rnd(300, 380); tone(f, .12, 'sawtooth', .05, 0, f*.9); tone(f*.95, .3, 'sawtooth', .05, .1, f*.8); },
   bark()   { tone(520, .07, 'square', .09, 0, 320); tone(560, .07, 'square', .09, .12, 330); }
 };
@@ -285,13 +295,21 @@ function sprite(S, paint) {
   const b = document.createElement('canvas'); b.width = b.height = S;
   const g = b.getContext('2d'); paint((col,x,y,w,h)=>{g.fillStyle=col;g.fillRect(x,y,w,h);}); return b;
 }
-function paintTractor(R, ox, oy) {
+// Fahrzeugfarben (im Scheunen-Shop kostenlos wählbar): d dunkel, m mittel, l hell
+const VCOL = {
+  red:    { d:'#8e1f1f', m:'#d83a3a', l:'#ef6a6a' },
+  green:  { d:'#1f5f2a', m:'#3fa34d', l:'#62c96f' },
+  blue:   { d:'#173f80', m:'#2a6fdb', l:'#6aa0f0' },
+  yellow: { d:'#a87a00', m:'#f2c230', l:'#ffe066' },
+  orange: { d:'#9a4a00', m:'#f08c00', l:'#ffb24d' },
+};
+function paintTractor(R, ox, oy, pal = VCOL.red) {
   const P = (col,x,y,w,h) => R(col, x+ox, y+oy, w, h);
   P('#1a1a1a',2,1,7,4); P('#1a1a1a',2,17,7,4); P('#444',3,2,5,1); P('#444',3,18,5,1);
   P('#1a1a1a',14,3,4,3); P('#1a1a1a',14,16,4,3);
-  P('#8e1f1f',6,6,14,10); P('#d83a3a',7,7,12,8); P('#ef6a6a',12,7,7,1);
+  P(pal.d,6,6,14,10); P(pal.m,7,7,12,8); P(pal.l,12,7,7,1);
   P('#333',13,8,1,1); P('#333',15,8,1,1);
-  P('#8e1f1f',5,5,7,12); P('#f2f2f2',6,6,5,10); P('#cfcfcf',6,14,5,2);
+  P(pal.d,5,5,7,12); P('#f2f2f2',6,6,5,10); P('#cfcfcf',6,14,5,2);
   P('#ffcc00',19,9,1,4);
 }
 const frameIdx = a => ((Math.round(a/(2*Math.PI)*32) % 32) + 32) % 32;
@@ -356,8 +374,9 @@ function drawObstacle(g, o, x, y, pondL, pondR) {
 function layout(recompute = true) {
   const iw = innerWidth, ih = innerHeight, land = iw > ih;
   // Bedienbereich: mit Steuerkreuz breiter; beim Antippen nur für die Anzeigen (mehr Platz fürs Spielfeld)
-  const tap = typeof ctlMode !== 'undefined' && ctlMode === 'tippen';
-  const cs = tap ? (land ? clamp(Math.min(iw, ih) * 0.3, 170, 260) : clamp(ih * 0.14, 100, 150))
+  const tap = window.NO_PAD || (typeof ctlMode !== 'undefined' && ctlMode === 'tippen');   // NO_PAD: Spiele nur zum Antippen
+  const empty = $('info').children.length === 0;     // Spiele beim Antippen: kein Bedienbereich nötig
+  const cs = tap ? (empty ? 0 : land ? clamp(Math.min(iw, ih) * 0.3, 170, 260) : clamp(ih * 0.14, 100, 150))
                  : clamp(Math.min(iw, ih) * 0.42, 190, 300);
   const aw = land ? iw - cs : iw, ah = land ? ih : ih - cs;
   if (recompute) {
@@ -368,6 +387,7 @@ function layout(recompute = true) {
   }
   const s = Math.min(aw / W, ah / H), cw = W*s, ch = H*s, cl = (aw - cw)/2, ct = (ah - ch)/2;
   Object.assign(cvs.style, { width: cw+'px', height: ch+'px', left: cl+'px', top: ct+'px' });
+  document.querySelectorAll('.gamehud').forEach(h => Object.assign(h.style, { left: (cl + cw/2)+'px', top: (ct + 8)+'px', maxWidth: (cw - 16)+'px' }));
   // Bedienbereich: Anzeigen oben bzw. links, Steuerkreuz unten bzw. rechts
   const c = $('ctrl');
   c.classList.toggle('land', land);
@@ -478,7 +498,7 @@ try { ctlMode = localStorage.getItem('bauernhof.steuerung') || 'tippen'; } catch
 function setCtlMode(m) {
   ctlMode = m; clearTapGoal(); clearHeld();
   try { localStorage.setItem('bauernhof.steuerung', m); } catch (e) {}
-  $('pad').style.display = m === 'kreuz' ? '' : 'none';
+  $('pad').style.display = m === 'kreuz' && !window.NO_PAD ? '' : 'none';
   document.body.classList.toggle('tapmode', m === 'tippen');
   if (W) layout(false);
 }
@@ -537,7 +557,8 @@ const WORDS = {
   wheat: ['WEIZEN', 'Weizen'], corn: ['MAIS', 'Mais'], raps: ['RAPS', 'Raps'],
   sheep: ['SCHAF', 'Schaf'], wool: ['WOLLE', 'Wolle'], field: ['FELD', 'Feld'],
   star: ['STERNE', 'Sterne'], thanks: ['DANKE', 'Danke!'],
-  hay: ['HEU', 'Heu'], meadow: ['WIESE', 'Wiese'], bale: ['BALLEN', 'Ballen']
+  hay: ['HEU', 'Heu'], meadow: ['WIESE', 'Wiese'], bale: ['BALLEN', 'Ballen'],
+  milk: ['MILCH', 'Milch'], cow: ['KUH', 'Kuh'], shop: ['LADEN', 'Laden']
 };
 let deVoice = null;
 function pickVoice() {
@@ -614,39 +635,66 @@ $('shopplay').addEventListener('click', () => {
 $('shophome').addEventListener('click', () => { initAudio(); shopCfg.onHome(); });
 
 /* ---------- Fahrzeuge (für Hof und Feld-/Wiesen-Spiele) ---------- */
-const COMBINE = rotateSprite(sprite(26, R => {
+// Werden mit den gewählten Farben gebaut; nach einer Farbänderung buildVehicles() erneut aufrufen.
+let COMBINE, TRACTOR, TRACTOR_GRUB, TRACTOR_SEED, TRACTOR_MOW, TRACTOR_BALER, TRACTOR_LOADER;
+function vehicleColors() {
+  const c = (window.Hof && Hof.save.colors) || {};
+  return { t: VCOL[c.tractor] || VCOL.red, k: VCOL[c.combine] || VCOL.green };
+}
+function paintCombine(R, k = VCOL.green) {
   R('#7a5a12',19,2,5,22); R('#f2c230',20,2,4,22);
   for (let y=3;y<24;y+=3) R('#b58a10',21,y,3,1);
-  R('#666',24,3,1,20); R('#2d7a36',16,9,4,8);
-  R('#1f5f2a',3,6,14,14); R('#3fa34d',4,7,12,12); R('#62c96f',4,7,12,1);
-  R('#2d7a36',4,9,6,8); R('#e2b23c',5,10,4,6); R('#f6d264',5,10,4,2);
-  R('#1f5f2a',11,8,5,10); R('#9fe3ff',12,9,3,8); R('#e6f8ff',12,9,1,8);
+  R('#666',24,3,1,20); R(k.d,16,9,4,8);
+  R(k.d,3,6,14,14); R(k.m,4,7,12,12); R(k.l,4,7,12,1);
+  R(k.d,4,9,6,8); R('#e2b23c',5,10,4,6); R('#f6d264',5,10,4,2);
+  R(k.d,11,8,5,10); R('#9fe3ff',12,9,3,8); R('#e6f8ff',12,9,1,8);
   R('#222',11,3,6,3); R('#222',11,20,6,3); R('#222',3,5,4,2); R('#222',3,19,4,2);
   R('#bdbdbd',4,4,8,2); R('#888',4,5,8,1); R('#333',7,7,1,1);
-}));
-const TRACTOR = rotateSprite(sprite(22, R => paintTractor(R, 0, 0)));
-const TRACTOR_GRUB = rotateSprite(sprite(26, R => {             // mit Grubber
-  R('#555',4,1,2,24); for (let y=2;y<25;y+=3) { R('#333',1,y,3,1); R('#888',0,y,1,1); }
-  R('#555',6,12,3,2);
-  paintTractor(R, 6, 2);
-}));
-const TRACTOR_SEED = rotateSprite(sprite(26, R => {             // mit Sämaschine
-  R('#555',0,1,2,24); for (let y=2;y<25;y+=3) R('#333',0,y,1,1);
-  R('#163d7a',2,3,5,20); R('#2a6fdb',3,4,3,18); R('#7cb0ff',3,4,3,2);
-  R('#555',7,12,2,2);
-  paintTractor(R, 6, 2);
-}));
-const TRACTOR_MOW = rotateSprite(sprite(26, R => {             // mit Mähwerk vorne
-  paintTractor(R, 0, 2);
-  R('#555',20,0,2,26); R('#c0392b',21,1,4,24); R('#e86a5a',22,1,1,24); for (let y=2;y<25;y+=3) R('#eee',24,y,2,1);
-}));
-const TRACTOR_BALER = rotateSprite(sprite(26, R => {           // mit Ballenpresse hinten
-  R('#555',7,12,2,2);
-  R('#1f5f2a',0,5,8,16); R('#3fa34d',1,6,6,14); R('#62c96f',1,6,6,2); R('#e0c060',2,10,4,6);
-  R('#333',0,3,2,20);
-  paintTractor(R, 6, 2);
-}));
-const TRACTOR_LOADER = rotateSprite(sprite(26, R => {          // mit Frontlader
-  paintTractor(R, 0, 2);
-  R('#ffcc00',17,4,4,2); R('#ffcc00',17,20,4,2); R('#555',21,3,2,20); R('#777',23,3,2,2); R('#777',23,21,2,2);
-}));
+}
+function buildVehicles() {
+  const { t, k } = vehicleColors();
+  COMBINE = rotateSprite(sprite(26, R => paintCombine(R, k)));
+  TRACTOR = rotateSprite(sprite(22, R => paintTractor(R, 0, 0, t)));
+  TRACTOR_GRUB = rotateSprite(sprite(26, R => {             // mit Grubber
+    R('#555',4,1,2,24); for (let y=2;y<25;y+=3) { R('#333',1,y,3,1); R('#888',0,y,1,1); }
+    R('#555',6,12,3,2); paintTractor(R, 6, 2, t);
+  }));
+  TRACTOR_SEED = rotateSprite(sprite(26, R => {             // mit Sämaschine
+    R('#555',0,1,2,24); for (let y=2;y<25;y+=3) R('#333',0,y,1,1);
+    R('#163d7a',2,3,5,20); R('#2a6fdb',3,4,3,18); R('#7cb0ff',3,4,3,2);
+    R('#555',7,12,2,2); paintTractor(R, 6, 2, t);
+  }));
+  TRACTOR_MOW = rotateSprite(sprite(26, R => {              // mit Mähwerk vorne
+    paintTractor(R, 0, 2, t);
+    R('#555',20,0,2,26); R('#c0392b',21,1,4,24); R('#e86a5a',22,1,1,24); for (let y=2;y<25;y+=3) R('#eee',24,y,2,1);
+  }));
+  TRACTOR_BALER = rotateSprite(sprite(26, R => {            // mit Ballenpresse hinten
+    R('#555',7,12,2,2);
+    R('#1f5f2a',0,5,8,16); R('#3fa34d',1,6,6,14); R('#62c96f',1,6,6,2); R('#e0c060',2,10,4,6);
+    R('#333',0,3,2,20); paintTractor(R, 6, 2, t);
+  }));
+  TRACTOR_LOADER = rotateSprite(sprite(26, R => {           // mit Frontlader
+    paintTractor(R, 0, 2, t);
+    R('#ffcc00',17,4,4,2); R('#ffcc00',17,20,4,2); R('#555',21,3,2,20); R('#777',23,3,2,2); R('#777',23,21,2,2);
+  }));
+}
+buildVehicles();
+
+// Breites Gerät: zusätzlicher Balken zur rechten Seite (bearbeitet die Nachbarspur mit)
+// kind: 'front' (Schneidwerk, Mähwerk) oder 'back' (Grubber, Sämaschine)
+function drawWideBar(m, kind, col, col2) {
+  if (m.dir == null && !DIRS_BY_ANGLE(m.a)) return;
+  const d = DIRS_BY_ANGLE(m.a); if (!d) return;            // nur zeichnen, wenn gerade ausgerichtet
+  const [dx, dy] = DIRS[d], sx = -dy, sy = dx, p = moverPos(m);
+  const off = kind === 'front' ? 11 : -12;
+  const cx = p.x + dx*off, cy = p.y + dy*off;
+  // Balken von -10 bis +G+10 quer zur Fahrtrichtung
+  const x1 = cx + sx*-10, y1 = cy + sy*-10, x2 = cx + sx*(G+10), y2 = cy + sy*(G+10);
+  const x = Math.min(x1, x2), y = Math.min(y1, y2), w = Math.abs(x2 - x1) || 3, h = Math.abs(y2 - y1) || 3;
+  R('rgba(0,0,0,.25)', x+1, y+2, w, h); R(col, x, y, w, h);
+  if (col2) R(col2, x + (w > h ? 0 : 1), y + (w > h ? 1 : 0), w > h ? w : 1, w > h ? 1 : h);
+}
+function DIRS_BY_ANGLE(a) {
+  for (const [k, v] of Object.entries(DIRS)) if (Math.abs(angDiff(v[2], a)) < 0.05) return k;
+  return null;
+}

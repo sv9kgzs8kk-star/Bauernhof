@@ -13,6 +13,11 @@
       sheep: 0,                 // gekaufte Schafe (= Herde beim Schafe hüten)
       wool: 0,                  // Wolle im Lager
       hay: 0,                   // Heuballen in der Scheune (jede Wolle kostet 1 Ballen)
+      visitor: null,            // wartende Besucherin { n: Anzahl, item: 'wool' | 'milk' }
+      cows: 0,                  // gekaufte Kühe
+      milk: 0,                  // Milch im Lager
+      wide: {},                 // gekaufte breite Geräte: { harvest, cultivate, sow, mow: true }
+      colors: { tractor: 'red', combine: 'green' },   // Fahrzeugfarben (kostenlos)
       field: { stage: 'ripe', crop: 'wheat', sownAt: 0, layout: null },
       meadow: { stage: 'tall', at: 0, layout: null, bales: null }   // Wiese: tall → mown → baled → regrow → tall
     };
@@ -29,6 +34,8 @@
       Object.assign(d, s);
       d.field = Object.assign(standard().field, s.field || {});
       d.meadow = Object.assign(standard().meadow, s.meadow || {});
+      d.colors = Object.assign(standard().colors, s.colors || {});
+      d.wide = Object.assign({}, s.wide || {});
     }
     Object.keys(Hof.save).forEach(k => delete Hof.save[k]);
     Object.assign(Hof.save, d);
@@ -56,6 +63,11 @@
   Hof.addWool = function (n) {
     Hof.load(); Hof.save.wool = Math.max(0, Hof.save.wool + n); Hof.persist();
     return Hof.save.wool;
+  };
+
+  Hof.addMilk = function (n) {
+    Hof.load(); Hof.save.milk = Math.max(0, Hof.save.milk + n); Hof.persist();
+    return Hof.save.milk;
   };
 
   Hof.addHay = function (n) {

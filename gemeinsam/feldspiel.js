@@ -237,17 +237,26 @@ const FieldGame = (() => {
       $('wincrop').classList.toggle('hidden', !showCrop);
       $('wincrop').dataset.say = key; setIco($('wincropemo'), key);
       $('wincropword').textContent = (mode === 'collect' ? '+' + loaded + ' ' : '') + WORDS[key][0];
+      const row = $('gwin').querySelector('.stars');               // so viele Sterne, wie es wirklich gibt
+      row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(gain); applyIcons(row);
       show('gwin'); sfx.win(); confetti();
       if (showCrop) setTimeout(() => sayWord(key), 1600);
       winTimer = setTimeout(() => goHof(M.meadow ? 'wiese' : 'feld'), 4000);
     }, (mode === 'harvest' || mode === 'collect') ? 0 : 500);
   }
 
+  // Breite Geräte (im Scheunen-Shop gekauft) bearbeiten zusätzlich die Spur rechts daneben
+  const WIDE_LOOK = { harvest: ['front', '#f2c230', '#b58a10'], mow: ['front', '#c0392b', '#e86a5a'],
+                      cultivate: ['back', '#555', '#888'], sow: ['back', '#2a6fdb', '#7cb0ff'] };
+  const isWide = () => !!(save.wide && save.wide[mode] && WIDE_LOOK[mode]);
   function work(m) {
     if (m.done || m.prog < M.at) return;
     m.done = true;
-    const r = m.tr, c = m.tc;
-    if (!isWork(r, c)) return;
+    cellWork(m.tr, m.tc, m);
+    if (isWide() && m.dir) { const [dx, dy] = DIRS[m.dir]; cellWork(m.tr + dx, m.tc - dy, m); }
+  }
+  function cellWork(r, c, m) {
+    if (r < 0 || c < 0 || r >= gr || c >= gc || !isWork(r, c)) return;
     const px0 = cellX(c), py0 = cellY(r);
     if (mode === 'collect') {                       // Ballen aufnehmen (max. 2)
       if (carry >= CARRY) { if (!honked) { sfx.honk(); honked = true; } return; }
@@ -352,7 +361,9 @@ const FieldGame = (() => {
     if (truck && truck.state !== 'gone') drawTruck(truck);
     if (trailer) drawTrailer(trailer);
     for (const [r, c] of bales) drawBale(c*G + 5, r*G + 7);
+    if (isWide() && WIDE_LOOK[mode][0] === 'back') drawWideBar(veh, ...WIDE_LOOK[mode]);
     drawMover(veh, M.veh, time);
+    if (isWide() && WIDE_LOOK[mode][0] === 'front') drawWideBar(veh, ...WIDE_LOOK[mode]);
     if (mode === 'collect' && carry > 0) {           // Ballen auf dem Frontlader
       const p = moverPos(veh), fx = p.x + Math.cos(veh.a)*14, fy = p.y + Math.sin(veh.a)*14;
       for (let i = 0; i < carry; i++) drawBale(fx - 7, fy - 5 - i*6);

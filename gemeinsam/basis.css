@@ -92,7 +92,16 @@ html,body{margin:0;height:100%;background:#2f6e29;overflow:hidden;touch-action:n
 /* Größere Anzeigen in den Spielen, mittig im Bedienbereich */
 #ctrl.land #info{justify-content:center}
 body.tapmode #ctrl #info{justify-content:center}
-.gamehud .pill{font-size:clamp(26px,5.5vmin,50px);padding:8px 18px}
-.gamehud .bar{width:clamp(90px,18vmin,190px);height:clamp(18px,4vmin,34px)}
-.gamehud{gap:14px!important}
+.hud.gamehud{position:absolute;transform:translateX(-50%);width:auto;flex-wrap:wrap;justify-content:center;gap:10px;z-index:5}
+.gamehud .pill{font-size:clamp(17px,4.6vmin,42px);padding:5px 14px;box-shadow:0 3px 0 rgba(0,0,0,.25)}
+.gamehud .bar{width:clamp(60px,16vmin,170px);height:clamp(16px,3.4vmin,30px)}
 .home.sel{box-shadow:0 0 0 6px #ffcc00,0 8px 0 #bbb}
+
+/* Scheunen-Shop */
+.card.small{width:min(21vw,128px);padding:8px 6px}
+.card.small canvas{width:min(16vw,96px);height:min(11vw,68px)}
+.card .check{width:1.6em;height:1.6em}
+.swatch{width:min(14vw,72px);height:min(14vw,72px);border-radius:16px;border:4px solid transparent;background:#fff;padding:0;cursor:pointer}
+.swatch canvas{width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
+.swatch.sel{border-color:#ffcc00;box-shadow:0 0 0 3px rgba(0,0,0,.3)}
+#barnshop{gap:14px;overflow:auto}

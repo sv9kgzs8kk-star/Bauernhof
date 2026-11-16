@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../manifest.json">
+<link rel="apple-touch-icon" href="../../icon.png">
+<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261116g">
+<title>Feld</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- Anzeigen (kommen automatisch in den Bedienbereich) -->
+<div id="mhud" class="hud gamehud hidden">
+  <div class="pill" id="mpill"><i class="ico" id="micon" data-ico="wheat"></i><div class="bar"><div class="fill" id="mfill"></div></div></div>
+  <div class="pill"><i class="ico" data-ico="flag"></i> <span id="mlvl">1</span></div>
+  <div class="pill" id="mcount"><i class="ico" id="mcounticon" data-ico="truck"></i><span id="mloads">0/3</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+
+<!-- Saatgut wählen -->
+<div id="seedpick" class="overlay hidden">
+  <div class="row">
+    <button class="card seedcard" data-crop="wheat" data-say="wheat"><div class="emo"><i class="ico" data-ico="wheat"></i></div><div class="word">WEIZEN</div></button>
+    <button class="card seedcard" data-crop="corn" data-say="corn"><div class="emo"><i class="ico" data-ico="corn"></i></div><div class="word">MAIS</div></button>
+    <button class="card seedcard" data-crop="raps" data-say="raps"><div class="emo"><i class="ico" data-ico="raps"></i></div><div class="word">RAPS</div></button>
+  </div>
+  <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
+</div>
+
+<!-- Pause -->
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+
+<!-- Geschafft -->
+<div id="gwin" class="overlay hidden">
+  <div class="stars"><i class="ico" data-ico="star"></i><i class="ico" data-ico="star"></i><i class="ico" data-ico="star"></i></div>
+  <div class="row">
+    <div class="pill gain">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" data-say="star" style="cursor:pointer"><i class="ico" data-ico="star"></i> <span id="winstars">3</span></div>
+  </div>
+  <div class="pill gain hidden" id="wincrop" style="cursor:pointer"><i class="ico" id="wincropemo" data-ico="wheat"></i> <span class="word" id="wincropword">WEIZEN</span></div>
+  <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
+</div>
+
+<script src="../../gemeinsam/sterne.js?v=20261116g"></script>
+<script src="../../gemeinsam/basis.js?v=20261116g"></script>
+<script src="../../gemeinsam/feldspiel.js?v=20261116g"></script>
+<script>
+window.HOF_URL = '../../index.html';
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('feld')));
+// Welcher Schritt ist dran? Das ergibt sich aus dem Zustand des Feldes.
+if (save.field.stage === 'sown' && Date.now() - save.field.sownAt >= GROW_MS) { save.field.stage = 'ripe'; persist(); }
+const mode = { ripe: 'harvest', stub: 'cultivate', tilled: 'sow' }[save.field.stage];
+if (!mode) goHof('feld');                      // wächst noch: nichts zu tun
+else startLoop(FieldGame, mode);
+</script>
+</body>
+</html>

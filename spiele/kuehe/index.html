@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../manifest.json">
 <link rel="apple-touch-icon" href="../../icon.png">
-<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261117c">
+<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261117d">
 <title>Kühe melken</title>
 </head>
 <body>
@@ -49,8 +49,8 @@ window.addEventListener('error', function (e) {
 </div>
 
 <script>window.NO_PAD = true;   // hier wird nur getippt</script>
-<script src="../../gemeinsam/sterne.js?v=20261117c"></script>
-<script src="../../gemeinsam/basis.js?v=20261117c"></script>
+<script src="../../gemeinsam/sterne.js?v=20261117d"></script>
+<script src="../../gemeinsam/basis.js?v=20261117d"></script>
 <script>
 /* =====================================================================
    MINISPIEL: KÜHE MELKEN
@@ -66,22 +66,48 @@ const cowPrice = () => save.cows >= MAX_COWS ? null : 10 + 5 * save.cows;   // 1
 
 const Kuehe = (() => {
   let state = 'start', cows = 0, idx = 0, milked = 0, cow = null, cans = [], flying = [], winTimer = null, saidMilk = false;
-  // Positionen (werden in build() an die Bildschirmgröße angepasst)
-  let CX, CY, STACK, MANGER;
+  // Die Szene wird in einem festen Bühnenraster (DW×DH) gezeichnet und auf den Bildschirm vergrößert,
+  // damit Kuh, Raufe und Eimer groß sind und kein leerer Raum bleibt.
+  const DW = 200, DH = 140, FLOOR = 62;
+  let S = 1, OX = 0, OY = 0;
+  const CX = 100, CY = 92;
+  const MANGER = { x: 133, y: 78, w: 22, h: 14 }, STACK = { x: 164, y: 96, w: 34, h: 36 };
+  const cat = { x: 44, y: 108, hop: 0 };
+  const sp = (x, y, vx, vy, life, col, grav = 0) => spawn(OX + x*S, OY + y*S, vx*S, vy*S, life, col, grav*S);
 
   function build() {
     layout(true);
-    // Stall: Bretterwand oben, Stroh unten
+    const m = Math.min(W / DW, H / DH);
+    S = m >= 2 ? Math.floor(m) : m;                 // ganze Vergrößerung = scharfe Pixel (iPad quer)
+    OX = Math.round((W - DW*S) / 2); OY = Math.round((H - DH*S) * 0.8);   // hochkant: mehr Wand oben, weniger leerer Boden
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
-    const wallH = Math.round(H * 0.45);
-    B('#8a5a2b', 0, 0, W, wallH);
-    for (let y = 0; y < wallH; y += 8) { B('#6b4423', 0, y, W, 1); B('#a0673a', 0, y+1, W, 1); }
-    for (let x = 0; x < W; x += 40) B('#5a3b1c', x, 0, 3, wallH);
-    for (let y = wallH; y < H; y += T) for (let x = 0; x < W; x += T) bctx.drawImage(pick(tiles.straw), x, y);
-    B('#5a3b1c', 0, wallH, W, 2);
-    CX = Math.round(W * 0.40); CY = Math.round(wallH + (H - wallH) * 0.35);
-    MANGER = { x: CX + 40, y: CY - 22, w: 22, h: 16 };
-    STACK = { x: W - 44, y: H - 40, w: 40, h: 36 };
+    bctx.imageSmoothingEnabled = false;
+    bctx.setTransform(S, 0, 0, S, OX, OY);
+    const x0 = Math.floor(-OX/S) - 1, x1 = Math.ceil((W-OX)/S) + 1, y0 = Math.floor(-OY/S) - 1, y1 = Math.ceil((H-OY)/S) + 1;
+    // Bretterwand
+    B('#8a5a2b', x0, y0, x1-x0, FLOOR-y0);
+    for (let y = FLOOR - 8; y > y0; y -= 8) { B('#6b4423', x0, y, x1-x0, 1); B('#a0673a', x0, y+1, x1-x0, 1); }
+    for (let x = 0; x > x0; x -= 40) B('#5a3b1c', x, y0, 3, FLOOR-y0);
+    for (let x = 40; x < x1; x += 40) B('#5a3b1c', x, y0, 3, FLOOR-y0);
+    // Fenster mit Himmel und Wolke
+    B('#5a3b1c', 50, 10, 36, 28); B('#9fe3ff', 53, 13, 30, 22); B('#c8f0ff', 53, 13, 30, 6);
+    B('#ffffff', 58, 20, 10, 3); B('#ffffff', 60, 18, 6, 2); B('#7ec850', 53, 31, 30, 4);
+    B('#5a3b1c', 67, 13, 2, 22); B('#5a3b1c', 53, 23, 30, 2); B('#a0673a', 49, 37, 38, 3);
+    // Stalltür links (dahinter warten die nächsten Kühe)
+    B('#5a3b1c', 2, 16, 36, FLOOR-16); B('#2a1a0c', 5, 19, 30, FLOOR-19);
+    B('#a0673a', -6, 18, 8, FLOOR-18); for (let y = 20; y < FLOOR; y += 6) B('#6b4423', -6, y, 8, 1);   // offener Torflügel
+    B('#9a9a9a', 16, 9, 8, 2); B('#9a9a9a', 16, 9, 2, 6); B('#9a9a9a', 22, 9, 2, 6);                 // Hufeisen
+    // Mistgabel an der Wand
+    B('#7a4a22', 186, 14, 2, 48); B('#9a9a9a', 182, 12, 10, 2); for (const tx of [182, 186, 190]) B('#9a9a9a', tx, 6, 2, 7);
+    // Leiste unten an der Wand
+    B('#5a3b1c', x0, FLOOR - 6, x1-x0, 2); B('#5a3b1c', x0, FLOOR, x1-x0, 2);
+    // Stroh-Boden
+    for (let y = FLOOR + 2; y < y1; y += T) for (let x = x0 - (x0 % T) - T; x < x1; x += T) bctx.drawImage(pick(tiles.straw), x, y);
+    // Pfosten der Melkbox
+    B('#5a3b1c', 62, FLOOR - 14, 4, 46); B('#7a4a22', 63, FLOOR - 14, 2, 46);
+    B('#5a3b1c', 160, FLOOR - 14, 4, 30); B('#7a4a22', 161, FLOOR - 14, 2, 30);
+    B('rgba(0,0,0,.15)', 62, FLOOR + 32, 4, 2);
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
   }
   function hud() {
     $('milkcount').textContent = milked + '/' + cows; $('haycount').textContent = save.hay;
@@ -90,7 +116,7 @@ const Kuehe = (() => {
   /* --- Ablauf --- */
   function nextCow() {
     if (idx >= cows) return finish();
-    cow = { x: -70, phase: 'in', fill: 0, teat: 0, eat: 0, hay: 0, walk: 0, tapCd: 0, shake: 0 };
+    cow = { x: -40, phase: 'in', fill: 0, teat: 0, eat: 0, hay: 0, walk: 0, tapCd: 0, shake: 0 };
   }
   function finish() {
     if (state === 'won') return;
@@ -134,6 +160,11 @@ const Kuehe = (() => {
   function udderRect() { return { x: cow.x + 8, y: CY + 4, w: 28, h: 22 }; }
   function onPointer(type, x, y) {
     if (type !== 'down' || state !== 'play' || !cow) return true;
+    x = (x - OX) / S; y = (y - OY) / S;
+    if (inRect(x, y, { x: cat.x - 2, y: cat.y - 8, w: 18, h: 18 }, 4) && cat.hop <= 0) {   // Katze springt
+      cat.hop = 0.5; for (let i = 0; i < 8; i++) sp(cat.x + 7, cat.y - 4, rnd(-20, 20), rnd(-40, -20), .7, pick(['#ff6b8a', '#ff9ab0']));
+      return true;
+    }
     if (cow.phase === 'hungry' && (inRect(x, y, STACK, 12) || inRect(x, y, MANGER, 12) || inRect(x, y, { x: cow.x + 40, y: CY - 30, w: 30, h: 30 }))) {
       if (save.hay <= 0) { sfx.bonk(); shakeEl($('haypill')); sayWord('hay'); cow.phase = 'out'; cow.sad = true; return true; }
       Hof.addHay(-1); hud(); sfx.load();
@@ -143,11 +174,11 @@ const Kuehe = (() => {
       if (cow.tapCd > 0) return true;
       cow.tapCd = 0.12; cow.fill = Math.min(TAPS, cow.fill + 1); cow.teat = (cow.teat + 1) % 4; sfx.squirt();
       const tx = cow.x + 15 + cow.teat * 4, ty = CY + 26;
-      for (let i = 0; i < 6; i++) spawn(tx + rnd(-1, 1), ty, rnd(-4, 4), rnd(40, 70), .25, pick(['#ffffff', '#e8f4ff']));
+      for (let i = 0; i < 6; i++) sp(tx + rnd(-1, 1), ty, rnd(-4, 4), rnd(40, 70), .25, pick(['#ffffff', '#e8f4ff']));
       if (cow.fill >= TAPS) {
         milked++; hud(); bump($('milkpill')); sfx.load(); sfx.moo();
         cans.push({ x: cow.x + 20, y: CY + 34 });
-        for (let i = 0; i < 30; i++) spawn(cow.x + 22, CY + 30, rnd(-30, 30), rnd(-50, -10), rnd(.5, 1), pick(['#ffd23f', '#fff', '#7cc0f0']), 60);
+        for (let i = 0; i < 30; i++) sp(cow.x + 22, CY + 30, rnd(-30, 30), rnd(-50, -10), rnd(.5, 1), pick(['#ffd23f', '#fff', '#7cc0f0']), 60);
         cow.phase = 'out';
       }
     }
@@ -157,7 +188,7 @@ const Kuehe = (() => {
   /* --- Ablauf pro Bild --- */
   function update(dt) {
     if (state !== 'play' || !cow) return;
-    cow.tapCd -= dt; cow.shake = Math.max(0, cow.shake - dt);
+    cow.tapCd -= dt; cow.shake = Math.max(0, cow.shake - dt); cat.hop = Math.max(0, cat.hop - dt);
     const target = CX - 26;
     if (cow.phase === 'in') {
       cow.walk += dt; cow.x = Math.min(target, cow.x + 40*dt);
@@ -167,7 +198,7 @@ const Kuehe = (() => {
       if (cow.eat > 2.2) { cow.phase = 'milk'; if (!saidMilk) { sayWord('milk'); saidMilk = true; } }
     } else if (cow.phase === 'out') {
       cow.walk += dt; cow.x += 45*dt;
-      if (cow.x > W + 20) { idx++; if (cow.sad) return finish(); nextCow(); }
+      if (cow.x > DW + 20) { idx++; if (cow.sad) return finish(); nextCow(); }
     }
     for (const f of flying) f.t += dt * 2.5;
     flying = flying.filter(f => f.t < 1);
@@ -201,8 +232,33 @@ const Kuehe = (() => {
     x = Math.round(x); y = Math.round(y);
     R('#6f7d88', x, y, 10, 12); R('#c8d4dc', x + 1, y + 1, 8, 10); R('#ffffff', x + 2, y + 2, 6, 3); R('#6f7d88', x + 2, y - 2, 6, 2);
   }
+  function drawCat(time) {
+    const x = cat.x, y = cat.y - Math.round(Math.sin(Math.min(1, cat.hop / 0.5) * Math.PI) * 10), tail = Math.sin(time / 300) > 0 ? 0 : 2;
+    R('rgba(0,0,0,.2)', x, cat.y + 8, 14, 2);
+    R('#e08a2c', x + 12 + tail, y - 4, 2, 9); R('#e08a2c', x + 13 + tail, y - 6, 2, 3);           // Schwanz
+    R('#e08a2c', x + 2, y, 11, 8); R('#c06a1c', x + 4, y + 2, 2, 5); R('#c06a1c', x + 8, y + 2, 2, 5);
+    R('#e08a2c', x, y - 7, 8, 7); R('#e08a2c', x, y - 9, 2, 2); R('#e08a2c', x + 6, y - 9, 2, 2);  // Kopf + Ohren
+    const blink = Math.sin(time / 900) > 0.95;
+    R('#222', x + 2, y - 5, 1, blink ? 1 : 2); R('#222', x + 5, y - 5, 1, blink ? 1 : 2); R('#ff9ab0', x + 3, y - 3, 2, 1);
+  }
+  function drawWaiting() {                         // wartende Kühe schauen aus der Tür
+    const n = Math.max(0, Math.min(3, cows - idx - (cow ? 1 : 0)));
+    for (let k = 0; k < n; k++) {
+      const hx = 8 + k * 9, hy = 34 + (k % 2) * 6;
+      R('#222', hx - 1, hy - 1, 12, 12); R('#fff', hx, hy, 10, 10); R('#222', hx + 1, hy + 1, 4, 3);
+      R('#f7a8b8', hx + 2, hy + 6, 7, 4); R('#222', hx + 6, hy + 3, 1, 2); R('#e8d8b0', hx + 1, hy - 3, 2, 3); R('#e8d8b0', hx + 7, hy - 3, 2, 3);
+    }
+  }
+  function drawLamp(time) {
+    R('#3a2410', 149, 0, 1, 14); R('#3a2410', 145, 14, 9, 2);
+    const flick = Math.sin(time / 170) > 0.3 ? .22 : .16;
+    ctx.fillStyle = `rgba(255,210,63,${flick})`; ctx.beginPath(); ctx.arc(149.5, 21, 16, 0, Math.PI * 2); ctx.fill();
+    R('#3a2410', 145, 16, 9, 11); R('#ffd23f', 146, 17, 7, 8); R('#fff3a8', 148, 18, 3, 4);
+  }
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
+    ctx.setTransform(S, 0, 0, S, OX, OY);
+    drawLamp(time); drawWaiting(); drawCat(time);
     // Raufe mit Heu
     R('#5a3b1c', MANGER.x, MANGER.y, MANGER.w, MANGER.h); R('#7a4a22', MANGER.x + 1, MANGER.y + 1, MANGER.w - 2, MANGER.h - 2);
     const hayLeft = cow && cow.phase === 'feed' ? 1 - Math.min(1, cow.eat / 2.2) : 0;
@@ -211,7 +267,7 @@ const Kuehe = (() => {
     // Heuballen-Stapel
     for (let i = 0; i < Math.min(save.hay, 6); i++) drawBale(STACK.x + (i % 2) * 15, STACK.y + 22 - ((i / 2) | 0) * 9);
     // volle Milchkannen
-    cans.forEach((c, i) => drawCan(6 + i * 13, CY - 30));
+    cans.forEach((c, i) => drawCan(6 + i * 13, 118));
     if (cow) {
       drawCow(cow.x, CY - 14, time);
       // Eimer unter dem Euter
@@ -228,10 +284,11 @@ const Kuehe = (() => {
       if (cow.phase === 'milk') drawArrow(cow.x + 19, CY - 2 - bounce);
     }
     for (const f of flying) drawBale(f.x + (f.tx - f.x) * f.t, f.y + (f.ty - f.y) * f.t - Math.sin(f.t * Math.PI) * 20);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
-  function resize() { layout(false); }
+  function resize() { build(); }
   function exit() { clearTimeout(winTimer); }
-  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, idx, cows, milked, phase: cow && cow.phase, CX, CY, STACK, MANGER, cowx: cow && cow.x }) };
+  return { enter, update, draw, resize, exit, onPointer, _s: () => ({ S, OX, OY }), _dbg: () => ({ state, idx, cows, milked, phase: cow && cow.phase, CX, CY, STACK, MANGER, cowx: cow && cow.x }) };
 })();
 
 startLoop(Kuehe);

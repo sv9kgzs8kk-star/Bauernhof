@@ -27,7 +27,7 @@ spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
 5. Wörter in GROSSBUCHSTABEN anzeigen und normal vorlesen (`WORDS`, `say()`/`sayWord()`).
 6. Pixel-Symbole statt Emojis (`<i class="ico" data-ico="…">`, `setIco()`).
 7. Anzeigen und Knöpfe bekommen die Klasse `.hud`, in Spielen zusätzlich `gamehud`. Ausnahme Hof: `#hubhud` liegt über dem Spielfeld (oben die Zähler neben dem Startseiten-Knopf, links darunter Fahrzeuge und Zahnrad). Beim Antippen gibt es dort keinen Bedienbereich, nur beim Steuerkreuz.
-   Hof-Karte (`HUB_MAP`): `g` ist das Tor zur Schafweide (→ Schafe hüten), `q` die Kuhweide unter dem Kuhstall, das Schild mit dem Stern über der Scheune zeigt den Laden.
+   Hof-Karte (`HUB_MAP`): `g` ist das Tor zur Schafweide (→ Schafe hüten), `q` die Kuhweide unter dem Kuhstall, das Schild mit dem Stern über der Scheune zeigt den Laden. Tor, Melkstand und Scheune lösen erst aus, wenn der Bauer 0,8 s darauf stehen bleibt (`DOOR_WAIT`). Darüberlaufen löst nichts aus.
 8. `openShop()` nur zeigen, wenn man etwas kaufen kann oder etwas fehlt. Ausnahme: Feld und Wiese zeigen zu Beginn jedes Durchgangs (Ernten bzw. Mähen) immer das nächstgrößere Feld, auch wenn es noch zu teuer ist.
 13. Feld- und Wiesenform bleiben einen ganzen Durchgang gleich (`newCycle` in `feldspiel.js`), je Bildschirmausrichtung gemerkt.
 9. Fahrspiele beherrschen Steuerkreuz **und** Antippen (`moverUpdate()`).
@@ -53,7 +53,7 @@ spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
 - Zweignamen ohne Schrägstrich: `feature-<nummer>-<kurzname>`.
 - Die PR-Beschreibung ist auf Deutsch, für Nicht-Programmierer geschrieben und hat drei Teile:
   - **Was ist neu**
-  - **Testversion**: Link `https://raw.githack.com/sv9kgzs8kk-star/Bauernhof/<zweig>/<seite>`, direkt auf die geänderte Seite (z. B. `stadt/index.html`)
+  - **Testversion**: Link `https://raw.githack.com/sv9kgzs8kk-star/Bauernhof/<commit-sha>/<seite>` mit der **vollständigen Commit-SHA** des letzten Commits, nicht dem Zweignamen. Zweig-Links zwischenspeichert der Dienst und zeigt dann alte Stände. Nach jeder Nachbesserung den Link in der PR-Beschreibung aktualisieren und im Kommentar den neuen Link nennen.
   - **Bitte auf dem iPad testen** (nummerierte Schritte)
 
   Dazu `Closes #<issue>`. Michael öffnet die Testversion in Safari, nicht in der Home-Bildschirm-App. Die Testversion hat einen eigenen Spielstand, dafür startet man dort mit 0 Sternen. Testschritte, die Sterne brauchen, müssen das berücksichtigen.

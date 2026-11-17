@@ -21,7 +21,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="gemeinsam/basis.css?v=20261117c">
+<link rel="stylesheet" href="gemeinsam/basis.css?v=20261117d">
 <title>Unser Bauernhof</title>
 </head>
 <body>
@@ -90,8 +90,8 @@ window.addEventListener('error', function (e) {
   </div>
 </div>
 
-<script src="gemeinsam/sterne.js?v=20261117c"></script>
-<script src="gemeinsam/basis.js?v=20261117c"></script>
+<script src="gemeinsam/sterne.js?v=20261117d"></script>
+<script src="gemeinsam/basis.js?v=20261117d"></script>
 <script>
 // Spiele, die als eigene Seite laufen (Feld, Wiese, Weide)
 const PAGES = { w: 'spiele/feld/index.html', m: 'spiele/wiese/index.html', g: 'spiele/schafe/index.html', K: 'spiele/kuehe/index.html' };
@@ -156,6 +156,7 @@ const HUB_MAP = [
 const Hub = (() => {
   let meadowRect, meadowVar = [];
   let type, ox, oy, flock = [], penRect, cowRect, fieldRect, gateRect, signRect, entering = false, started = false, uiOpen = false;
+  let doorT = 0, doorDone = -1; const DOOR_WAIT = 0.8;
   let active = 'person', posKey = '', fieldVar = [], idleT = 0, boardT = 0;
   const ENT = {
     person:  { spr: PERSON,  m: null, speed: 2.8 },
@@ -487,7 +488,7 @@ const Hub = (() => {
       passable: passableFor(active), speed: e.speed,
       onArrive: m => {
         const t = cellType(m.r, m.c);
-        if (t === 'B' && active === 'person') { sfx.enter(); openBarn(); return; }
+        if (FOOT_ONLY.includes(t)) return;          // Tor, Melkstand, Scheune: erst nach kurzem Stehenbleiben (siehe unten)
         if (!PAGES[t]) return;
         if (FOOT_ONLY.includes(t) !== (active === 'person')) return;   // Weide/Melkstand zu Fuß, Feld/Wiese mit Fahrzeug
         entering = true; sfx.enter();
@@ -496,6 +497,18 @@ const Hub = (() => {
         return 'stop';
       }
     });
+    // Zu Fuß auf Tor/Melkstand/Scheune stehen bleiben → nach kurzer Zeit hinein (darüberlaufen geht)
+    { const pm = ENT.person.m, t = active === 'person' && !pm.moving && !held && !uiOpen && !entering ? cellType(pm.r, pm.c) : '';
+      const key = pm.r * 1000 + pm.c;
+      if (key !== doorDone && !(FOOT_ONLY.includes(cellType(pm.r, pm.c)))) doorDone = -1;   // Feld verlassen: Tür wieder bereit
+      if (FOOT_ONLY.includes(t) && key !== doorDone) {
+        doorT += dt;
+        if (doorT > DOOR_WAIT) {
+          doorT = 0; doorDone = key;                 // erst nach Weggehen erneut auslösen
+          if (t === 'B') { sfx.enter(); openBarn(); }
+          else { entering = true; sfx.enter(); try { sessionStorage.setItem('bauernhof.fahrzeug', active); } catch (er) {} setTimeout(() => { location.href = PAGES[t]; }, 350); }
+        }
+      } else doorT = 0; }
     if (active === 'person') setEngine(false, false); else setEngine(true, e.m.moving, e.pitch);
     // Hinweis erst nach längerem Nichtstun: das benötigte Fahrzeug blinkt
     const n = need(), cls = (idleT > HINT_AFTER && n && n !== active) ? n : '';
@@ -566,6 +579,11 @@ const Hub = (() => {
       drawAnimalPix(VISITOR, npc.x - 8, npc.y - 17 - bob, npc.flip, 0);
     }
     drawMover(ENT[active].m, ENT[active].spr, time);
+    if (doorT > 0.1 && active === 'person') {            // Ring füllt sich, bis es hineingeht
+      const p = moverPos(ENT.person.m);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1, doorT / DOOR_WAIT)); ctx.stroke();
+    }
     // Anzeigen nur, wenn kein Fenster (Laden, Menü, Start) offen ist
     $('hubhud').classList.toggle('hidden', !started || uiOpen || entering);
     const sk = $('startKnopf'); if (sk) sk.style.display = (uiOpen || entering) ? 'none' : '';
@@ -610,6 +628,6 @@ addEventListener('pageshow', e => { if (e.persisted && scene === Hub) Hub.enter(
 startLoop(Hub);
 </script>
 <script>window.START_URL = 'index.html';</script>
-<script src="gemeinsam/startseite.js?v=20261117c"></script>
+<script src="gemeinsam/startseite.js?v=20261117d"></script>
 </body>
 </html>

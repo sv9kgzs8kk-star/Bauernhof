@@ -90,6 +90,15 @@ function houseGeo(x, y, w, h) {
   const beam = i => x + Math.round(w * (i + 1) / 4);
   return { x, y, w, h, rz, fz, roof, row, col, beam };
 }
+// Tür und Fenster der Fassade (gleich für Zeichnen und Mauer-Spiel)
+function facadeHoles(g) {
+  const { x, y, w, h, rz, fz } = g;
+  const doorW = Math.max(6, Math.round(w * 0.17)), doorX = x + Math.round((w - doorW) / 2), doorH = Math.max(6, fz - 3);
+  const winW = Math.max(6, Math.round(w * 0.2)), winH = Math.max(4, Math.round(fz * 0.42)), winY = y + rz + Math.max(2, Math.round(fz * 0.22));
+  const wins = [x + Math.round(w * 0.1), x + w - Math.round(w * 0.1) - winW];
+  const rects = [[doorX, y + h - doorH, doorW, doorH], ...wins.map(wx => [wx, winY, winW, winH])];
+  return { doorW, doorX, doorH, winW, winH, winY, wins, rects };
+}
 function drawHouseTop(F, x, y, w, h, o = {}) {
   const g = houseGeo(x, y, w, h), st = o.step || 0, t = o.time || 0, done = o.done || st >= 5;
   const rz = g.rz, fz = g.fz;
@@ -98,9 +107,7 @@ function drawHouseTop(F, x, y, w, h, o = {}) {
   F('#6a7076', x - 2, y - 2, w + 4, h + 4); F('#a2a8ae', x - 1, y - 1, w + 2, h + 2);
   if (st < 3) return g;
   // Fassade (vorne): Steine im Rohbau, fertig verputzt wie das Bauernhaus
-  const doorW = Math.max(6, Math.round(w * 0.17)), doorX = x + Math.round((w - doorW) / 2), doorH = Math.max(6, fz - 3);
-  const winW = Math.max(6, Math.round(w * 0.2)), winH = Math.max(4, Math.round(fz * 0.42)), winY = y + rz + Math.max(2, Math.round(fz * 0.22));
-  const wins = [x + Math.round(w * 0.1), x + w - Math.round(w * 0.1) - winW];
+  const { doorW, doorX, doorH, winW, winH, winY, wins } = facadeHoles(g);
   if (done) {
     F('#e9dcc0', x, y + rz, w, fz); F('#cdbf9f', x, y + h - 2, w, 2);
     F('#7a4a22', doorX, y + h - doorH, doorW, doorH); F('#a0673a', doorX + 1, y + h - doorH + 1, doorW - 2, 2); F('#ffcc00', doorX + doorW - 3, y + h - Math.round(doorH / 2), 1, 1);

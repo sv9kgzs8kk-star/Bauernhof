@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261117i">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261117k">
 <title>Baustelle</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -48,9 +48,9 @@ window.addEventListener('error', function (e) {
   </div>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261117i"></script>
-<script src="../gemeinsam/basis.js?v=20261117i"></script>
-<script src="../gemeinsam/bau.js?v=20261117i"></script>
+<script src="../gemeinsam/sterne.js?v=20261117k"></script>
+<script src="../gemeinsam/basis.js?v=20261117k"></script>
+<script src="../gemeinsam/bau.js?v=20261117k"></script>
 <script>
 /* =====================================================================
    WELT: BAUSTELLE – Bauhof als begehbare Karte (wie der Bauernhof)
@@ -59,7 +59,8 @@ window.addEventListener('error', function (e) {
    ===================================================================== */
 const save = Hof.save;
 // Bauplatz betreten → Minispiel je nach Bauschritt (und wer dafür gebraucht wird)
-const STEP_GAME = [ { who: 'digger', page: 'spiele/baggern/index.html' }, { who: 'pump', page: 'spiele/beton/index.html' }, { who: 'person', page: 'spiele/mauer/index.html' } ];
+const STEP_GAME = [ { who: 'digger', page: 'spiele/baggern/index.html' }, { who: 'pump', page: 'spiele/beton/index.html' }, { who: 'person', page: 'spiele/mauer/index.html' },
+                     { who: 'person', page: 'spiele/kran/index.html' }, { who: 'person', page: 'spiele/dach/index.html' } ];
 let backFrom = (location.hash || '').slice(1) || null;
 const HINT_AFTER = 10;
 const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
@@ -136,7 +137,7 @@ const Hub = (() => {
       ENT.pump.m   = newMover(oy+4, ox+1, -Math.PI/2);
       posKey = key; active = 'person';
     }
-    const BACK = { baggern: 'digger', beton: 'pump', mauer: 'person' };   // zurück: wer gearbeitet hat, steht unten am Bauplatz
+    const BACK = { baggern: 'digger', beton: 'pump', mauer: 'person', kran: 'person', dach: 'person' };   // zurück: wer gearbeitet hat, steht unten am Bauplatz
     if (BACK[from]) {
       const who = BACK[from];
       Object.assign(ENT[who].m, { r: oy+3, c: ox+6, a: Math.PI/2 });
@@ -211,19 +212,15 @@ const Hub = (() => {
       for (let j = 0; j < (h-16)/T; j++) for (let i = 0; i < (w-16)/T; i++) ctx.drawImage(bauTiles.dug[(i*3+j) % 4], x0+8+i*T, y0+8+j*T);
       R('#3e2a18', x0+8, y0+8, w-16, 2); R('#3e2a18', x0+8, y0+8, 2, h-16);
     }
-    if (st >= 2) {                                  // Bodenplatte aus Beton
-      R('#7d838a', x0+8, y0+8, w-16, h-16); R('#a2a8ae', x0+9, y0+9, w-18, h-18);
-      for (let i = 0; i < 6; i++) R('#b8bec4', x0+14+((i*23)%(w-30)), y0+13+((i*11)%(h-28)), 4, 1);
+    if (st >= 2) drawHouseTop(R, x0 + 9, y0 + 7, w - 18, h - 12, { step: st, time });   // Haus im Stil des Bauernhauses
+    if (st === 3 || st === 4) drawCraneTop(R, x0 + w - 2, y0 + h + 4, -2.55, 66, 40);   // Baukran am Bauplatz
+    if (st >= 5) {                                  // fertig: Gartenweg zur Straße, Briefkasten, Blumen
+      const dx = x0 + Math.round(w / 2) - 3;
+      for (let y = y0 + h - 5; y < y0 + h + 4; y += 3) R('#c9b48a', dx, y, 6, 2);
+      R('#5a3b1c', x0 + w - 12, y0 + h - 12, 2, 8); R('#2a6fdb', x0 + w - 15, y0 + h - 16, 8, 5); R('#ffd23f', x0 + w - 14, y0 + h - 15, 2, 1);
+      for (const [fx, fy, c] of [[x0 + 4, y0 + h - 6, '#ff6b8a'], [x0 + 8, y0 + h - 4, '#ffd23f'], [x0 + w - 24, y0 + h - 5, '#ff6b8a']]) { R('#3f8f37', fx, fy + 1, 2, 2); R(c, fx, fy, 2, 1); }
     }
-    if (st >= 3) {                                  // Mauern: Ring aus Steinen, Vorderseite mit Tür und Fenstern
-      const wx = x0+8, wy = y0+8, ww = w-16, wh = h-16;
-      R('#8e2a20', wx, wy, ww, 4); R('#8e2a20', wx, wy, 4, wh); R('#8e2a20', wx+ww-4, wy, 4, wh);
-      R('#e06a5a', wx, wy, ww, 1);
-      R('#8e2a20', wx, wy+wh-4, ww, 12); R('#c0392b', wx+1, wy+wh-3, ww-2, 10);
-      for (let y = wy+wh; y < wy+wh+8; y += 3) for (let x = wx + ((y/3)%2 ? 3 : 0); x < wx+ww; x += 6) R('#8e2a20', x, y, 1, 3);
-      R('#2e1f10', wx+ww/2-4, wy+wh-1, 8, 9);                                         // Türöffnung
-      R('#2e1f10', wx+10, wy+wh+1, 8, 4); R('#2e1f10', wx+ww-18, wy+wh+1, 8, 4);      // Fensteröffnungen
-    }
+    if (st >= 5) return;                            // fertiges Haus: kein Bauzaun, kein Bauschild mehr
     // Bauzaun
     for (let x = x0; x <= x0 + w; x += 9) { R('#d35400', x, y0-2, 2, 8); R('#d35400', x, y0+h-6, 2, 8); }
     R('#ffffff', x0, y0+1, w, 2); R('#ffffff', x0, y0+h-3, w, 2);
@@ -233,7 +230,7 @@ const Hub = (() => {
       R('#5a3b1c', sx+16, sy+18, 2, 6);
       R('rgba(0,0,0,.25)', sx+1, sy+1, 34, 20); R('#5a3b1c', sx, sy, 34, 20); R('#fff8e0', sx+2, sy+2, 30, 16);
       R('#c0392b', sx+4, sy+5, 9, 3); R('#c0392b', sx+5, sy+4, 7, 1); R('#e9dcc0', sx+5, sy+8, 7, 6); R('#7a4a22', sx+8, sy+10, 2, 4);
-      for (let i = 0; i < 5; i++) { R('#5a3b1c', sx+15+i*3.4, sy+9, 3, 4); R(i < st ? '#7ed957' : '#fff8e0', sx+15.5+i*3.4, sy+9.5, 2, 3); } }
+      for (let i = 0; i < 5; i++) { R('#5a3b1c', sx+15+i*3, sy+9, 3, 4); R(i < st ? '#7ed957' : '#fff8e0', sx+16+i*3, sy+10, 1, 2); } }
   }
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
@@ -270,6 +267,6 @@ addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 startLoop(Hub);
 </script>
 <script>window.START_URL = '../index.html';</script>
-<script src="../gemeinsam/startseite.js?v=20261117i"></script>
+<script src="../gemeinsam/startseite.js?v=20261117k"></script>
 </body>
 </html>

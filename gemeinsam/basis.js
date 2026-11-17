@@ -584,8 +584,8 @@ document.addEventListener('click', e => { const el = e.target.closest('[data-say
 
 
 /* ---------- Zurück zum Hof ---------- */
-// Unterseiten setzen window.HOF_URL = '../../index.html'; das #-Zeichen sagt dem Hof, woher man kommt
-function goHof(tag) { location.href = (window.HOF_URL || 'index.html') + (tag ? '#' + tag : ''); }
+// Unterseiten setzen window.HOF_URL = '../../hof.html'; das #-Zeichen sagt dem Hof, woher man kommt
+function goHof(tag) { location.href = (window.HOF_URL || 'hof.html') + (tag ? '#' + tag : ''); }
 
 /* ---------- Laden: etwas mit Sternen kaufen, dann ▶ ---------- */
 // Wird nur gezeigt, wenn man etwas kaufen kann oder muss – sonst startet das Spiel direkt.

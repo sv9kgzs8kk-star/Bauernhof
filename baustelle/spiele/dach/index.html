@@ -20,13 +20,13 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261117j">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261117k">
 <title>Dach</title>
 </head>
 <body>
 <canvas id="game"></canvas>
 <div id="dhud" class="hud gamehud hidden">
-  <div class="pill" data-say="roof" style="pointer-events:auto"><span class="word">DACH</span> <span id="dcount">0/5</span></div>
+  <div class="pill" data-say="roof" style="pointer-events:auto"><span class="word">DACH</span> <span id="dcount">0/6</span></div>
   <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
 </div>
 <div id="gpause" class="overlay hidden">
@@ -45,9 +45,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261117j"></script>
-<script src="../../../gemeinsam/basis.js?v=20261117j"></script>
-<script src="../../../gemeinsam/bau.js?v=20261117j"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261117k"></script>
+<script src="../../../gemeinsam/basis.js?v=20261117k"></script>
+<script src="../../../gemeinsam/bau.js?v=20261117k"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -69,75 +69,89 @@ function finishStep(step, key, back) {
 </script>
 <script>
 /* =====================================================================
-   MINISPIEL: DACH DECKEN (Baustelle, Wohnhaus Schritt 5)
-   Mit dem Finger über die leuchtende Dachreihe wischen → dort werden Ziegel gelegt. Reihe für Reihe
-   von der Traufe bis zum First. Danach kommen Fenster, Tür und Schornstein: Haus fertig (house.step = 5).
+   MINISPIEL: DACH DECKEN (Baustelle, Wohnhaus Schritt 5) – von schräg oben wie der Hof
+   Mit dem Finger über die leuchtende Reihe wischen → Ziegel werden gelegt. Reihe für Reihe von vorne
+   bis hinten. Danach wird verputzt, Fenster, Tür und Schornstein kommen: Haus fertig (house.step = 5).
    ===================================================================== */
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('dach')));
 
+// Gleiche Lage des Hauses in Kran und Dach: Raster wie beim Baggern/Beton (scharfe Pixel, Hof-Maßstab)
+function siteGeo(withCrane) {
+  const hw = Math.min(6, gc - (withCrane ? 6 : 4)) * G, hh = Math.min(4, gr - 4) * G;
+  const hx = Math.round((gc * G - hw) / 2) - (withCrane ? G : 0), hy = Math.max(G, Math.round(((gr - 1) * G - hh) / 2));
+  return { hx, hy, hw, hh };
+}
+function paintGround(g) {
+  for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+    const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+  }
+  const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+  // Bauzaun um den Bauplatz
+  const x0 = g.hx - 14, y0 = g.hy - 14, w = g.hw + 28, h = g.hh + 26;
+  for (let x = x0; x <= x0 + w; x += 9) { B('#d35400', x, y0 - 2, 2, 7); }
+  for (let y = y0; y <= y0 + h; y += 9) { B('#d35400', x0, y, 2, 6); B('#d35400', x0 + w, y, 2, 6); }
+  B('#ffffff', x0, y0, w + 2, 2); B('#ffffff', x0, y0, 2, h); B('#ffffff', x0 + w, y0, 2, h);
+}
+
 const Dach = (() => {
-  const DW = 200, DH = 140, GROUND = 114, REACH = 9;
-  let st, state, roof, row, down = false, fin = null, pops = [];
-  function build() { st = bauStage(DW, DH, 0.7, (B, x0, x1, y0, y1) => bauSkyGround(B, x0, x1, y0, y1, GROUND)); }
+  let g, geo, state, roof, row, down = false, fin = null, pops = [], paused = false;
   function enter() {
     Hof.load();
     if (house().step !== 4) { goHof('dach'); return; }
-    build();
-    roof = Array.from({ length: H34.ROWS }, () => Array(H34.COLS).fill(false)); row = 0; fin = null; pops = [];
+    layout(true);
+    g = siteGeo(false); geo = houseGeo(g.hx, g.hy, g.hw, g.hh);
+    paintGround(g);
+    roof = Array.from({ length: ROOF_ROWS }, () => Array(ROOF_COLS).fill(false)); row = 0; fin = null; pops = [];
     state = 'play'; show('dhud'); hud();
     setTimeout(() => sayWord('roof'), 400);
   }
-  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; down = false; show('gpause'); });
-  $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
-  function hud() { $('dcount').textContent = row + '/' + H34.ROWS; }
-  const center = (r, c) => { const q = roofCell(r, c, 1); return [(q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4]; };
+  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; paused = true; down = false; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+  function hud() { $('dcount').textContent = row + '/' + ROOF_ROWS; }
   function lay(x, y) {
-    if (row >= H34.ROWS) return;
-    for (let c = 0; c < H34.COLS; c++) {
-      if (roof[row][c]) continue;
-      const [cx, cy] = center(row, c);
-      if (Math.hypot(cx - x, cy - y) < REACH + 3) {
+    if (row >= ROOF_ROWS) return;
+    const [ry, rh] = geo.row(row);
+    if (y < ry - 8 || y > ry + rh + 8) return;
+    for (let c = 0; c < ROOF_COLS; c++) {
+      const [rx, rw] = geo.col(c);
+      if (!roof[row][c] && x > rx - 4 && x < rx + rw + 4) {
         roof[row][c] = true; pops.push({ r: row, c, t: 0 }); sfx.click();
-        st.sp(cx, cy, rnd(-10, 10), rnd(-15, -5), .3, '#e06a5a', 40);
+        spawn(rx + rw / 2, ry + rh / 2, rnd(-15, 15), rnd(-25, -5), .3, '#e06a5a', 40);
       }
     }
-    if (roof[row].every(Boolean)) { row++; hud(); sfx.load(); if (row >= H34.ROWS) finishRoof(); }
+    if (roof[row].every(Boolean)) { row++; hud(); sfx.load(); if (row >= ROOF_ROWS) finishRoof(); }
   }
   function finishRoof() {
     state = 'done'; down = false; fin = 0; hide('dhud');
     setTimeout(() => { sfx.unlock(); sayWord('house'); confetti(); }, 700);
-    setTimeout(() => finishStep(5, 'house', 'dach'), 2200);
+    setTimeout(() => finishStep(5, 'house', 'dach'), 2400);
   }
   function onPointer(type, x, y) {
-    if (state !== 'play') return true;
-    const [sx, sy] = st.toStage(x, y);
-    if (type === 'down') { down = true; lay(sx, sy); }
-    else if (type === 'move' && down) lay(sx, sy);
+    if (state !== 'play' || paused) return true;
+    if (type === 'down') { down = true; lay(x, y); }
+    else if (type === 'move' && down) lay(x, y);
     else if (type === 'up') down = false;
     return true;
   }
-  function update(dt) { if (fin !== null) fin += dt; for (const p of pops) p.t += dt; pops = pops.filter(p => p.t < 0.25); }
+  function update(dt) { if (fin !== null) fin += dt; for (const p of pops) p.t += dt; pops = pops.filter(p => p.t < 0.2); }
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
-    ctx.setTransform(st.S, 0, 0, st.S, st.OX, st.OY);
-    drawHouse34({ trusses: 3, roof, done: fin !== null && fin > 0.5, time });
-    // leuchtende Reihe, in der gerade gedeckt wird
-    if (state === 'play' && row < H34.ROWS) {
-      const a = 0.25 + Math.abs(Math.sin(time / 260)) * 0.4;
-      for (let c = 0; c < H34.COLS; c++) if (!roof[row][c]) poly(`rgba(255,210,63,${a})`, roofCell(row, c, 1));
-      // Hinweis: Finger wischt an der Reihe entlang
-      if (!down) { const k = (time / 1500) % 1, [x0, y0] = center(row, 0), [x1, y1] = center(row, H34.COLS - 1);
-        const hx = x0 + (x1 - x0) * k, hy = y0 + (y1 - y0) * k;
-        ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke(); }
+    drawHouseTop(R, g.hx, g.hy, g.hw, g.hh, { step: 4, roof, done: fin !== null && fin > 0.5, time });
+    if (state === 'play' && row < ROOF_ROWS) {
+      const [ry, rh] = geo.row(row), on = Math.abs(Math.sin(time / 260)) > .5;
+      for (let c = 0; c < ROOF_COLS; c++) if (!roof[row][c]) { const [rx, rw] = geo.col(c); R(on ? 'rgba(255,210,63,.75)' : 'rgba(255,210,63,.4)', rx, ry, rw, rh); }
+      if (!down) {                                   // Hinweis: Finger wischt an der Reihe entlang
+        const k = (time / 1500) % 1, x = geo.roof.x + Math.round(geo.roof.w * k), y = ry + Math.round(rh / 2);
+        R('rgba(0,0,0,.35)', x - 3, y - 2, 7, 6); R('#ffffff', x - 2, y - 3, 5, 5);
+      }
     }
-    for (const p of pops) { const q = roofCell(p.r, p.c, 1), k = 1 - p.t / 0.25; ctx.globalAlpha = k; poly('#ffffff', q); ctx.globalAlpha = 1; }
-    if (fin !== null && fin < 0.8) { ctx.globalAlpha = 1 - fin / 0.8; ctx.fillStyle = '#ffffff'; ctx.fillRect(H34.x0, H34.yt, H34.x1 - H34.x0, H34.yb - H34.yt); ctx.globalAlpha = 1; }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (const p of pops) { const [ry, rh] = geo.row(p.r), [rx, rw] = geo.col(p.c); R('rgba(255,255,255,.7)', rx, ry, rw, rh); }
+    if (fin !== null && fin < 0.6) R(`rgba(255,255,255,${(0.6 - fin).toFixed(2)})`, g.hx, g.hy, g.hw, g.hh);
   }
-  function resize() { build(); }
+  function resize() { layout(false); }
   function exit() { clearTimeout(winTimer); }
-  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, st: { S: st.S, OX: st.OX, OY: st.OY }, centers: Array.from({ length: H34.ROWS }, (_, r) => Array.from({ length: H34.COLS }, (_, c) => center(r, c))) }) };
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, rows: Array.from({ length: ROOF_ROWS }, (_, i) => geo.row(i)), cols: Array.from({ length: ROOF_COLS }, (_, c) => geo.col(c)) }) };
 })();
 startLoop(Dach);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

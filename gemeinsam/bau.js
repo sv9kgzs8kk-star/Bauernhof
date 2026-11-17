@@ -71,114 +71,103 @@ function paintFront(canvas, fig) {
   fig.px.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') { g.fillStyle = fig.pal[ch]; g.fillRect(7 + i*2, 5 + j*2, 2, 2); } }));
 }
 
-/* ---------- Bühne für Bau-Szenen: festes Raster, auf den Bildschirm vergrößert ---------- */
-// paint(B, x0, x1, y0, y1) malt den Hintergrund in Bühnen-Koordinaten. Gibt { S, OX, OY, toStage, sp } zurück.
-function bauStage(DW, DH, yFrac, paint) {
-  layout(true);
-  const m = Math.min(W / DW, H / DH), st = {};
-  st.S = m >= 2 ? Math.floor(m) : m;
-  st.OX = Math.round((W - DW*st.S) / 2); st.OY = Math.round((H - DH*st.S) * yFrac);
-  st.toStage = (x, y) => [(x - st.OX) / st.S, (y - st.OY) / st.S];
-  st.sp = (x, y, vx, vy, life, col, grav = 0) => spawn(st.OX + x*st.S, st.OY + y*st.S, vx*st.S, vy*st.S, life, col, grav*st.S);
-  const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
-  bctx.imageSmoothingEnabled = false;
-  bctx.setTransform(st.S, 0, 0, st.S, st.OX, st.OY);
-  paint(B, Math.floor(-st.OX/st.S) - 1, Math.ceil((W-st.OX)/st.S) + 1, Math.floor(-st.OY/st.S) - 1, Math.ceil((H-st.OY)/st.S) + 1);
-  bctx.setTransform(1, 0, 0, 1, 0, 0);
-  return st;
-}
-function bauSkyGround(B, x0, x1, y0, y1, ground) {
-  B('#9fe3ff', x0, y0, x1-x0, ground - y0); B('#c8f0ff', x0, y0, x1-x0, 16 - y0);
-  B('#ffffff', 14, 10, 18, 3); B('#ffffff', 18, 8, 9, 2); B('#ffffff', 130, 14, 22, 3); B('#ffffff', 136, 12, 10, 2);
-  for (let x = x0 - (x0 % T) - T; x < x1; x += T) for (let y = ground; y < y1; y += T) bctx.drawImage(pick(bauTiles.gravel), x, y);
-  B('#8f8a82', x0, ground, x1-x0, 1);
+/* ---------- Pixel-Hilfen (scharfe Kanten, keine weichen Linien) ---------- */
+// Linie aus Pixel-Blöcken (w×w) – für Kranausleger und schwebende Balken
+function pixLine(F, x1, y1, x2, y2, w, col) {
+  const n = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1))), o = Math.floor(w / 2);
+  for (let i = 0; i <= n; i++) { const t = i / n; F(col, Math.round(x1 + (x2 - x1) * t) - o, Math.round(y1 + (y2 - y1) * t) - o, w, w); }
 }
 
-/* ---------- Wohnhaus schräg von vorne (Kran, Dach) ---------- */
-// Vorderseite (Giebel mit Tür) links, Seitenwand nach hinten rechts oben. d = Tiefe 0 (vorne) … 1 (hinten)
-const H34 = { x0: 60, x1: 124, yb: 114, yt: 70, apex: 44, ax: 92, dx: 48, dy: -24, ROWS: 5, COLS: 8 };
-const TRUSS_DEPTH = [1, 0.5, 0];                     // Reihenfolge beim Aufstellen: hinten zuerst
-const p34 = (x, y, d) => [x + d*H34.dx, y + d*H34.dy];
-function poly(col, pts) { ctx.fillStyle = col; ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); }
-function drawTruss34(d, col = '#a0673a', alpha = 1) {
-  const h = H34, [ax, ay] = p34(h.ax, h.apex, d), [lx, ly] = p34(h.x0 - 3, h.yt + 1, d), [rx, ry] = p34(h.x1 + 3, h.yt + 1, d);
-  ctx.globalAlpha = alpha; ctx.lineCap = 'square';
-  ctx.strokeStyle = '#5a3b1c'; ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(ax, ay); ctx.lineTo(rx, ry); ctx.closePath(); ctx.stroke();
-  ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(ax, ay); ctx.lineTo(rx, ry); ctx.closePath(); ctx.stroke();
-  ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo((lx+rx)/2, (ly+ry)/2);
-  ctx.moveTo((lx+ax)/2, (ly+ay)/2); ctx.lineTo((lx+rx)/2, (ly+ry)/2 - 4); ctx.lineTo((rx+ax)/2, (ry+ay)/2); ctx.stroke();
-  ctx.globalAlpha = 1;
+/* ---------- Wohnhaus von schräg oben (wie das Bauernhaus auf dem Hof) ---------- */
+// F(col,x,y,w,h) zeichnet (R für das Spielbild, B für den Hintergrund). Grundriss x,y,w,h in Pixeln.
+// o: { step 2..5, trusses 0..3, ridge, wreath 0..1, roof: Zeilen×Spalten (true = gedeckt), done, time }
+const ROOF_ROWS = 6, ROOF_COLS = 8;
+function houseGeo(x, y, w, h) {
+  const rz = Math.round(h * 0.55), fz = h - rz;
+  const roof = { x: x - 2, y: y - 3, w: w + 4, h: rz + 3 };
+  const row = i => { const y0 = roof.y + roof.h - Math.round((i + 1) * roof.h / ROOF_ROWS), y1 = roof.y + roof.h - Math.round(i * roof.h / ROOF_ROWS); return [y0, y1 - y0]; };
+  const col = c => { const x0 = roof.x + Math.round(c * roof.w / ROOF_COLS), x1 = roof.x + Math.round((c + 1) * roof.w / ROOF_COLS); return [x0, x1 - x0]; };
+  const beam = i => x + Math.round(w * (i + 1) / 4);
+  return { x, y, w, h, rz, fz, roof, row, col, beam };
 }
-// Ein Dachziegel-Feld auf der rechten Dachseite: Reihe r (0 = Traufe), Spalte c (Tiefe)
-function roofCell(r, c, side = 1) {
-  const h = H34, ex = side > 0 ? h.x1 + 3 : h.x0 - 3, E0 = [ex, h.yt + 1], R0 = [h.ax, h.apex - 1];
-  const P = (u, v) => [E0[0] + u*(R0[0]-E0[0]) + v*h.dx, E0[1] + u*(R0[1]-E0[1]) + v*h.dy];
-  const u0 = r / h.ROWS, u1 = (r + 1) / h.ROWS, v0 = c / h.COLS, v1 = (c + 1) / h.COLS;
-  return [P(u0, v0), P(u0, v1), P(u1, v1), P(u1, v0)];
+function drawHouseTop(F, x, y, w, h, o = {}) {
+  const g = houseGeo(x, y, w, h), st = o.step || 0, t = o.time || 0, done = o.done || st >= 5;
+  const rz = g.rz, fz = g.fz;
+  F('rgba(0,0,0,.25)', x + 3, y + 5, w + 1, h);
+  // Bodenplatte
+  F('#6a7076', x - 2, y - 2, w + 4, h + 4); F('#a2a8ae', x - 1, y - 1, w + 2, h + 2);
+  if (st < 3) return g;
+  // Fassade (vorne): Steine im Rohbau, fertig verputzt wie das Bauernhaus
+  const doorW = Math.max(6, Math.round(w * 0.17)), doorX = x + Math.round((w - doorW) / 2), doorH = Math.max(6, fz - 3);
+  const winW = Math.max(6, Math.round(w * 0.2)), winH = Math.max(4, Math.round(fz * 0.42)), winY = y + rz + Math.max(2, Math.round(fz * 0.22));
+  const wins = [x + Math.round(w * 0.1), x + w - Math.round(w * 0.1) - winW];
+  if (done) {
+    F('#e9dcc0', x, y + rz, w, fz); F('#cdbf9f', x, y + h - 2, w, 2);
+    F('#7a4a22', doorX, y + h - doorH, doorW, doorH); F('#a0673a', doorX + 1, y + h - doorH + 1, doorW - 2, 2); F('#ffcc00', doorX + doorW - 3, y + h - Math.round(doorH / 2), 1, 1);
+    for (const wx of wins) { F('#5a3b1c', wx, winY, winW, winH); F('#9fe3ff', wx + 1, winY + 1, winW - 2, winH - 2); F('#5a3b1c', wx + Math.floor(winW / 2), winY + 1, 1, winH - 2); F('#5a3b1c', wx + 1, winY + Math.floor(winH / 2), winW - 2, 1);
+      F('#ff6b8a', wx + 1, winY + winH, 2, 1); F('#ffd23f', wx + 4, winY + winH, 2, 1); }
+  } else {
+    F('#7a2218', x, y + rz, w, fz);
+    for (let yy = y + rz, r = 0; yy < y + h; yy += 4, r++) for (let xx = x + (r % 2 ? 0 : 3); xx < x + w; xx += 6) F('#c0392b', xx, yy, Math.min(5, x + w - xx), 3);
+    F('#2e1f10', doorX, y + h - doorH, doorW, doorH);
+    for (const wx of wins) F('#2e1f10', wx, winY, winW, winH);
+    // Mauerkrone von oben (Ring um den Innenraum)
+    F('#8e2a20', x, y, w, 3); F('#8e2a20', x, y, 3, rz); F('#8e2a20', x + w - 3, y, 3, rz); F('#8e2a20', x, y + rz - 2, w, 2);
+    F('#e06a5a', x, y, w, 1);
+  }
+  // Dachstuhl: Binder quer, Firstbalken längs
+  const tr = st >= 4 ? 3 : (o.trusses || 0);
+  const fullRoof = done || (o.roof && o.roof.every(r => r.every(Boolean)));
+  if (!fullRoof) {
+    for (let i = 0; i < tr; i++) { const bx = g.beam(i); F('#5a3b1c', bx - 2, y - 2, 5, rz + 3); F('#a0673a', bx - 1, y - 2, 3, rz + 3); F('#c9a067', bx - 1, y - 2, 1, rz + 3); }
+    if (st >= 4 || o.ridge) { const ry = y + Math.round(rz / 2) - 2; F('#5a3b1c', x - 2, ry, w + 4, 5); F('#a0673a', x - 2, ry + 1, w + 4, 3); F('#c9a067', x - 2, ry + 1, w + 4, 1); }
+  }
+  // Ziegel
+  for (let i = 0; i < ROOF_ROWS; i++) for (let c = 0; c < ROOF_COLS; c++) {
+    if (!done && !(o.roof && o.roof[i][c])) continue;
+    const [ry, rh] = g.row(i), [rx, rw] = g.col(c), back = i >= ROOF_ROWS / 2;
+    F(back ? '#b23427' : '#c0392b', rx, ry, rw, rh); F(back ? '#93261f' : '#a93226', rx, ry + rh - 1, rw, 1);
+    F('rgba(0,0,0,.12)', rx + rw - 1, ry, 1, rh - 1);
+  }
+  if (done) {
+    const r = g.roof; F('#8e1f1f', r.x, r.y, r.w, 1); F('#8e1f1f', r.x, r.y + r.h - 1, r.w, 1); F('#8e1f1f', r.x, r.y, 1, r.h); F('#8e1f1f', r.x + r.w - 1, r.y, 1, r.h);
+    const [my] = g.row(ROOF_ROWS / 2); F('#7a1a12', r.x, my + (g.row(ROOF_ROWS / 2)[1]) - 1, r.w, 2);   // First
+    F('#555', x + w - Math.round(w * 0.2), y - 4, 5, 7); F('#777', x + w - Math.round(w * 0.2) - 1, y - 5, 7, 2);   // Schornstein
+  }
+  // Richtbaum mit bunten Bändern auf dem First
+  if (o.wreath > 0 && !done) {
+    const cx = x + Math.round(w / 2), cy = y + Math.round(rz / 2) - 1 - Math.round(4 * Math.min(1, o.wreath));
+    F('rgba(0,0,0,.2)', cx - 3, cy + 4, 8, 2);
+    F('#6b4423', cx, cy - 2, 2, 6); F('#24561f', cx - 4, cy - 7, 10, 6); F('#2e7a2a', cx - 3, cy - 6, 8, 4); F('#2e7a2a', cx - 2, cy - 10, 6, 4); F('#5cb64f', cx - 1, cy - 9, 2, 2);
+    ['#e03b3b', '#ffd23f', '#3fa9f5', '#ff8ad8'].forEach((col, i) => F(col, cx - 4 + i * 3 + (Math.sin(t / 160 + i) > 0 ? 1 : 0), cy - 3, 1, 5 + (i % 2) * 2));
+  }
+  return g;
 }
-// o: { trusses 0..3, wreath 0..1, roof: Array ROWS×COLS (true = gedeckt), done: Fenster/Tür/Schornstein, time }
-function drawHouse34(o = {}) {
-  const h = H34, t = o.time || 0, trusses = o.trusses || 0, roof = o.roof;
-  const rowFull = r => roof && roof[r].every(Boolean);
-  const allRoof = roof && roof.every(row => row.every(Boolean));
-  // Schatten und Bodenplatte
-  poly('rgba(0,0,0,.18)', [[h.x0-4, h.yb+2], [h.x1+6, h.yb+2], p34(h.x1+6, h.yb+2, 1), p34(h.x0-4, h.yb+2, 1)]);
-  poly('#7d838a', [[h.x0-4, h.yb], [h.x1+4, h.yb], p34(h.x1+4, h.yb, 1), p34(h.x0-4, h.yb, 1)]);
-  ctx.fillStyle = '#6a7076'; ctx.fillRect(h.x0-4, h.yb, h.x1-h.x0+8, 3);
-  // Seitenwand (Steine, Fenster)
-  poly('#a83226', [[h.x1, h.yt], [h.x1, h.yb], p34(h.x1, h.yb, 1), p34(h.x1, h.yt, 1)]);
-  ctx.strokeStyle = 'rgba(216,200,168,.7)'; ctx.lineWidth = 0.7;
-  for (let y = h.yt + 11; y < h.yb; y += 11) { const [a, b] = p34(h.x1, y, 1); ctx.beginPath(); ctx.moveTo(h.x1, y); ctx.lineTo(a, b); ctx.stroke(); }
-  for (const d of [0.22, 0.62]) {
-    const q = [p34(h.x1, 80, d), p34(h.x1, 80, d + 0.2), p34(h.x1, 94, d + 0.2), p34(h.x1, 94, d)];
-    poly('#5a3b1c', q);
-    if (o.done) { const k = 1.2; poly('#9fe3ff', [p34(h.x1, 81, d + 0.02), p34(h.x1, 81, d + 0.18), p34(h.x1, 93, d + 0.18), p34(h.x1, 93, d + 0.02)]); poly('#e6f8ff', [p34(h.x1, 81, d + 0.02), p34(h.x1, 81, d + 0.07), p34(h.x1, 93, d + 0.07), p34(h.x1, 93, d + 0.02)]); }
-    else poly('#2e1f10', [p34(h.x1, 81, d + 0.02), p34(h.x1, 81, d + 0.18), p34(h.x1, 93, d + 0.18), p34(h.x1, 93, d + 0.02)]);
-  }
-  // Vorderwand (Giebelseite) mit Tür und zwei Fenstern
-  ctx.fillStyle = '#7a2218'; ctx.fillRect(h.x0, h.yt, h.x1-h.x0, h.yb-h.yt);
-  ctx.fillStyle = '#c0392b'; ctx.fillRect(h.x0+1, h.yt+1, h.x1-h.x0-2, h.yb-h.yt-2);
-  ctx.fillStyle = 'rgba(216,200,168,.8)';
-  for (let y = h.yt + 11, i = 0; y < h.yb; y += 11, i++) { ctx.fillRect(h.x0, y, h.x1-h.x0, 1); for (let x = h.x0 + (i % 2 ? 6 : 12); x < h.x1; x += 12) ctx.fillRect(x, y - 10, 1, 10); }
-  const holes = [[66, 78, 12, 12], [106, 78, 12, 12], [86, 90, 12, 24]];
-  holes.forEach(([x, y, w, hh], i) => {
-    ctx.fillStyle = '#5a3b1c'; ctx.fillRect(x - 1, y - 1, w + 2, hh + 1);
-    if (!o.done) { ctx.fillStyle = '#2e1f10'; ctx.fillRect(x, y, w, hh); return; }
-    if (i < 2) { ctx.fillStyle = '#9fe3ff'; ctx.fillRect(x, y, w, hh); ctx.fillStyle = '#e6f8ff'; ctx.fillRect(x, y, 3, hh); ctx.fillStyle = '#5a3b1c'; ctx.fillRect(x + w/2, y, 1, hh); ctx.fillRect(x, y + hh/2, w, 1); ctx.fillStyle = '#ff6b8a'; ctx.fillRect(x, y + hh, w, 2); }
-    else { ctx.fillStyle = '#7a4a22'; ctx.fillRect(x, y, w, hh); ctx.fillStyle = '#a0673a'; ctx.fillRect(x + 2, y + 2, w - 4, 8); ctx.fillRect(x + 2, y + 12, w - 4, 9); ctx.fillStyle = '#ffd23f'; ctx.fillRect(x + w - 4, y + 13, 2, 2); }
-  });
-  // Dachstuhl
-  for (let k = 0; k < trusses; k++) drawTruss34(TRUSS_DEPTH[k]);
-  if (trusses >= 3) { const [bx, by] = p34(h.ax, h.apex, 1); ctx.strokeStyle = '#5a3b1c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(h.ax, h.apex); ctx.lineTo(bx, by); ctx.stroke(); ctx.strokeStyle = '#a0673a'; ctx.lineWidth = 1.6; ctx.stroke(); }
-  // Dach: linke Seite (wächst mit), Giebel vorne, rechte Seite (wird gewischt)
-  if (roof) {
-    for (let r = 0; r < h.ROWS; r++) if (rowFull(r)) for (let c = 0; c < h.COLS; c++) poly(r % 2 ? '#a3302a' : '#b5372f', roofCell(r, c, -1));
-    if (allRoof) poly('#c9a067', [[h.x0-1, h.yt], [h.ax, h.apex+1], [h.x1+1, h.yt]]);
-    for (let r = 0; r < h.ROWS; r++) for (let c = 0; c < h.COLS; c++) {
-      if (!roof[r][c]) continue;
-      const q = roofCell(r, c, 1);
-      poly('#7a1c16', q); poly((r + c) % 2 ? '#d0453a' : '#c0392b', [q[0], q[1], [q[2][0], q[2][1] + 0.8], [q[3][0], q[3][1] + 0.8]]);
-    }
-  }
-  if (o.done) { const [cx, cy] = p34(108, 52, 0.6); ctx.fillStyle = '#555'; ctx.fillRect(cx, cy - 12, 6, 12); ctx.fillStyle = '#777'; ctx.fillRect(cx - 1, cy - 13, 8, 2); }
-  // Richtbaum mit Bändern auf dem First
-  if (o.wreath > 0) {
-    const [wx, wy0] = p34(h.ax, h.apex, 0.5), wy = wy0 - 14 * Math.min(1, o.wreath);
-    ctx.fillStyle = '#6b4423'; ctx.fillRect(wx - 1, wy, 2, 12);
-    ctx.fillStyle = '#2e7a2a'; ctx.fillRect(wx - 6, wy - 7, 12, 6); ctx.fillRect(wx - 4, wy - 12, 8, 6); ctx.fillRect(wx - 2, wy - 15, 4, 4);
-    ctx.fillStyle = '#5cb64f'; ctx.fillRect(wx - 2, wy - 11, 2, 3);
-    ['#e03b3b', '#ffd23f', '#3fa9f5', '#ff8ad8'].forEach((col, i) => { const sw = Math.sin(t / 150 + i) * 2.5; ctx.fillStyle = col; ctx.fillRect(wx - 5 + i * 3 + sw, wy - 3, 1.5, 8 + (i % 2) * 3); });
-  }
+// Baukran von oben: Turm (tx,ty), Ausleger in Richtung a (Länge L), Gegenausleger mit Gewicht
+function drawCraneTop(F, tx, ty, a, L, trolleyD) {
+  const ca = Math.cos(a), sa = Math.sin(a);
+  F('rgba(0,0,0,.2)', tx - 6, ty - 3, 16, 16);
+  pixLine(F, tx + 4, ty + 6, tx + 4 + ca * L, ty + 6 + sa * L, 3, 'rgba(0,0,0,.18)');            // Schatten des Auslegers
+  F('#7a5a00', tx - 7, ty - 7, 14, 14); F('#f5b700', tx - 6, ty - 6, 12, 12); pixLine(F, tx - 5, ty - 5, tx + 5, ty + 5, 1, '#c48a00'); pixLine(F, tx + 5, ty - 5, tx - 5, ty + 5, 1, '#c48a00');
+  pixLine(F, tx, ty, tx - ca * 22, ty - sa * 22, 4, '#c48a00');                                    // Gegenausleger
+  F('#555', Math.round(tx - ca * 22) - 4, Math.round(ty - sa * 22) - 4, 8, 8); F('#777', Math.round(tx - ca * 22) - 3, Math.round(ty - sa * 22) - 3, 6, 2);
+  pixLine(F, tx, ty, tx + ca * L, ty + sa * L, 4, '#c48a00'); pixLine(F, tx, ty, tx + ca * L, ty + sa * L, 2, '#f5b700');
+  for (let d = 6; d < L; d += 6) F('#7a5a00', Math.round(tx + ca * d), Math.round(ty + sa * d), 1, 1);
+  F('#c48a00', tx - 4, ty - 4, 8, 8); F('#9fe3ff', tx - 2, ty - 3, 4, 3);                           // Führerhaus
+  if (trolleyD != null) { const px = Math.round(tx + ca * trolleyD), py = Math.round(ty + sa * trolleyD); F('#333', px - 3, py - 3, 6, 6); F('#666', px - 2, py - 2, 4, 1); }
 }
-// Tieflader mit Dachbindern (von der Seite), n = Anzahl noch geladener Binder
-function drawFlatbed(x, y, n) {
-  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(x, y + 1, 54, 3);
-  ctx.fillStyle = '#2a6fdb'; ctx.fillRect(x + 40, y - 18, 14, 14); ctx.fillStyle = '#9fe3ff'; ctx.fillRect(x + 46, y - 16, 6, 5);
-  ctx.fillStyle = '#555'; ctx.fillRect(x, y - 8, 42, 4); ctx.fillStyle = '#888'; ctx.fillRect(x, y - 8, 42, 1);
-  for (const wx of [6, 16, 46]) { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + wx - 1, y - 4, 8, 5); ctx.fillStyle = '#888'; ctx.fillRect(x + wx + 2, y - 2, 2, 2); }
-  for (let i = 0; i < n; i++) {                    // liegende Binder (kleine Dreiecke) gestapelt
-    const bx = x + 4 + i * 3, by = y - 9 - i * 4;
-    ctx.strokeStyle = '#5a3b1c'; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 17, by - 9); ctx.lineTo(bx + 34, by); ctx.closePath(); ctx.stroke();
-    ctx.strokeStyle = '#a0673a'; ctx.lineWidth = 1.4; ctx.stroke();
-  }
+// Dachbinder von oben als Balken (Mitte cx,cy, Länge len, Winkel ang); lift 0..1 = Höhe (Schatten wandert)
+function drawBeamTop(F, cx, cy, len, ang, lift = 0) {
+  const ca = Math.cos(ang) * len / 2, sa = Math.sin(ang) * len / 2, sh = Math.round(2 + lift * 6);
+  pixLine(F, cx - ca + sh, cy - sa + sh, cx + ca + sh, cy + sa + sh, 4, 'rgba(0,0,0,.22)');
+  pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 5, '#5a3b1c'); pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 3, '#a0673a'); pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 1, '#c9a067');
+}
+// Tieflader von oben (fährt nach rechts), n Binder liegen längs auf der Ladefläche (Länge beamLen)
+const FLATBED_SLOTS = [4, 9, 14];                    // y-Versatz der liegenden Binder
+function drawFlatbedTop(F, x, y, n, beamLen) {
+  F('rgba(0,0,0,.25)', x + 2, y + 2, 56, 18);
+  for (const wx of [4, 14, 24, 48]) { F('#1a1a1a', x + wx, y - 1, 6, 2); F('#1a1a1a', x + wx, y + 17, 6, 2); }
+  F('#444', x, y + 1, 44, 16); F('#777', x + 1, y + 2, 42, 14);
+  F('#173f80', x + 44, y, 12, 18); F('#2a6fdb', x + 45, y + 1, 10, 16); F('#9fe3ff', x + 52, y + 2, 3, 14);
+  for (let i = 0; i < n; i++) drawBeamTop(F, x + 22, y + FLATBED_SLOTS[i] + 1, beamLen, 0, 0);
 }

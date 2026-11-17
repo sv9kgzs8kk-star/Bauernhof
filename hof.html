@@ -21,7 +21,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="gemeinsam/basis.css?v=20261117e">
+<link rel="stylesheet" href="gemeinsam/basis.css?v=20261117f">
 <title>Unser Bauernhof</title>
 </head>
 <body>
@@ -90,12 +90,13 @@ window.addEventListener('error', function (e) {
   </div>
 </div>
 
-<script src="gemeinsam/sterne.js?v=20261117e"></script>
-<script src="gemeinsam/basis.js?v=20261117e"></script>
+<script src="gemeinsam/sterne.js?v=20261117f"></script>
+<script src="gemeinsam/basis.js?v=20261117f"></script>
 <script>
 // Spiele, die als eigene Seite laufen (Feld, Wiese, Weide)
-const PAGES = { w: 'spiele/feld/index.html', m: 'spiele/wiese/index.html', g: 'spiele/schafe/index.html', K: 'spiele/kuehe/index.html' };
-const FOOT_ONLY = ['g', 'K', 'B'];   // nur zu Fuß: Weidetor, Melkstand, Scheunentor
+const PAGES = { w: 'spiele/feld/index.html', m: 'spiele/wiese/index.html', g: 'spiele/schafe/index.html', K: 'spiele/kuehe/index.html',
+                a: 'spiele/angeln/index.html', W: 'spiele/wald/index.html' };
+const FOOT_ONLY = ['g', 'K', 'B', 'a', 'W'];   // nur zu Fuß: Weidetor, Melkstand, Scheunentor, Angelsteg, Waldweg
 </script>
 <script>
 /* =====================================================================
@@ -140,16 +141,16 @@ drawVehicleButtons();
    SZENE: BAUERNHOF
    ===================================================================== */
 // T Baum, h Haus, b Scheune, s Silo, = Weg, w Feld, p Schafstall, o Teich,
-// g Tor zur Schafweide (→ Schafe hüten), q Kuhweide, m Wiese (→ Heu machen), w Feld (→ Ernten/Grubbern/Säen),
+// g Tor zur Schafweide (→ Schafe hüten), q Kuhweide, a Angelsteg am Teich (→ Angeln), W Waldweg (→ Bäume fällen), m Wiese (→ Heu machen), w Feld (→ Ernten/Grubbern/Säen),
 // B Scheunentor (→ Laden), K Melkstand-Tür (→ Kühe melken), k Melkstand
 const HUB_MAP = [
   'TT.T...T',
-  'Thh.bbs.',
+  'Thh.bbsW',
   '.hh.Bbs.',
   '========',
   'ww=.gppp',
   'ww=..ppp',
-  'T.=..ooT',
+  'T.=.aooT',
   'T.mmKkkT',
   'T...qqqT',
 ];
@@ -178,7 +179,7 @@ const Hub = (() => {
   const passableFor = name => (r, c) => {
     if (occupied(name, r, c)) return false;
     const t = cellType(r, c);
-    if (name === 'person') return ['.', '=', 'f', 'g', 'B', 'K'].includes(t);   // zu Fuß: nicht aufs Feld
+    if (name === 'person') return ['.', '=', 'f', 'g', 'B', 'K', 'a', 'W'].includes(t);   // zu Fuß: nicht aufs Feld
     if (t === 'w') return need() === name;                                  // Fahrzeug: nur wenn es dran ist
     if (t === 'm') return name === 'tractor' && ['tall','mown','baled'].includes(save.meadow.stage);   // Wiese: nur Traktor
     return ['.', '=', 'f'].includes(t);
@@ -235,6 +236,14 @@ const Hub = (() => {
     B('#2f6fa8',ppx+2,ppy+2,2*G-4,G-4); B('#3b82c4',ppx+3,ppy+3,2*G-6,G-6);
     B('#7cc0f0',ppx+8,ppy+8,6,1); B('#7cc0f0',ppx+26,ppy+14,7,1); B('#7cc0f0',ppx+17,ppy+17,3,1);
     B('#2e8b3a',ppx+38,ppy+5,5,4); B('#3fa34d',ppx+39,ppy+6,3,2);
+    const dx0 = (ox+4)*G, dy0 = (oy+6)*G;          // Angelsteg (führt in den Teich)
+    B('#5a3b1c', dx0+4, dy0+6, G+2, 12); B('#a0673a', dx0+5, dy0+7, G, 10);
+    for (let i = 0; i < G; i += 5) B('#7a4a22', dx0+5+i, dy0+7, 1, 10);
+    B('#5a3b1c', dx0+6, dy0+17, 3, 4); B('#5a3b1c', dx0+G-2, dy0+17, 3, 4);
+    B('#6b4423', dx0+8, dy0+1, 2, 8); B('#6b4423', dx0+9, dy0, 8, 1); B('#ffffff', dx0+16, dy0+1, 1, 6); B('#e03b3b', dx0+15, dy0+6, 3, 2);   // Angel am Steg
+    const wx0 = (ox+7)*G, wy0 = (oy+1)*G;          // Waldweg mit Schild
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) bctx.drawImage(pickR(tiles.path), wx0 + i*T/2 + 6, wy0 + j*T/2 + 2, T/2, T/2);
+    B('#5a3b1c', wx0+3, wy0+8, 2, 14);
     const gx = (ox+4)*G, gy = (oy+4)*G;            // Tor zur Schafweide
     gateRect = { x: gx, y: gy };
     B('#6fbf4f',gx+1,gy+1,G-2,G-2);
@@ -282,8 +291,9 @@ const Hub = (() => {
       ENT.combine.m = newMover(oy+3, ox+6, Math.PI);
       posKey = key; active = 'person';
     }
-    if (from === 'schafe' || from === 'kuehe') {
-      Object.assign(ENT.person.m, from === 'schafe' ? { r: oy+5, c: ox+4, a: -Math.PI/2 } : { r: oy+6, c: ox+4, a: -Math.PI/2 }); active = 'person';
+    const BACK = { schafe: [5, 4], kuehe: [6, 3], angeln: [6, 3], wald: [2, 7] };   // neben dem Eingang abstellen
+    if (BACK[from]) {
+      Object.assign(ENT.person.m, { r: oy + BACK[from][0], c: ox + BACK[from][1], a: -Math.PI/2 }); active = 'person';
     } else if (returning && ENT[returning]) {
       const m = ENT[returning].m, oname = returning === 'tractor' ? 'combine' : 'tractor', o = ENT[oname].m;
       Object.assign(m, from === 'wiese' ? { r: oy+6, c: ox+2, a: -Math.PI/2 } : { r: oy+3, c: ox+1, a: -Math.PI/2 });
@@ -317,7 +327,8 @@ const Hub = (() => {
       from = backFrom; backFrom = null; started = true;
       try { ret = sessionStorage.getItem('bauernhof.fahrzeug'); } catch (e) {}
     }
-    placeAll(from === 'schafe' || from === 'kuehe' ? null : ret, from);
+    placeAll(['schafe', 'kuehe', 'angeln', 'wald'].includes(from) ? null : ret, from);
+    doorDone = ENT.person.m.r * 1000 + ENT.person.m.c;      // wer auf einem Eingang abgesetzt wird, löst ihn nicht gleich aus
     entering = false; uiOpen = false; idleT = 0; refreshVBtns(); hudCounts();
     restoreVisit();
     if (!started) { show('appstart'); hide('ctrl'); hide('hubhud'); }
@@ -563,6 +574,12 @@ const Hub = (() => {
       const wx = penRect.x + 2 + (i % 5) * 11, wy = penRect.y + penRect.h + (i < 5 ? -2 : -9);
       R('#e8e8e8', wx, wy, 7, 6); R('#ffffff', wx+1, wy, 4, 2); R('#c8c8c8', wx+2, wy+3, 4, 1);
     }
+    // Stern-Fortschritt: Angeln (auf dem Teich) und Wald (Schild am Waldweg)
+    drawStarParts(ctx, (ox+6)*G + 2, (oy+6)*G + G/2, 8, save.fishParts || 0);
+    { const sx = (ox+7)*G, sy = (oy+1)*G;
+      R('#5a3b1c', sx - 6, sy - 2, 22, 12); R('#fff8e0', sx - 5, sy - 1, 20, 10);
+      R('#2e7a2a', sx - 3, sy, 6, 5); R('#6b4423', sx - 1, sy + 5, 2, 3);
+      drawStarParts(ctx, sx + 9, sy + 4, 5, save.woodParts || 0); }
     // Laden-Schild über der Scheune: Stern auf einem Schild, wippt leicht
     { const sx = (ox+4)*G + G, sy = (oy+1)*G - 20 + Math.round(Math.sin(time/400) * 2);
       R('#5a3b1c', sx-1, sy+18, 2, 6);
@@ -628,6 +645,6 @@ addEventListener('pageshow', e => { if (e.persisted && scene === Hub) Hub.enter(
 startLoop(Hub);
 </script>
 <script>window.START_URL = 'index.html';</script>
-<script src="gemeinsam/startseite.js?v=20261117e"></script>
+<script src="gemeinsam/startseite.js?v=20261117f"></script>
 </body>
 </html>

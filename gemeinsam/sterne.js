@@ -19,7 +19,12 @@
       wide: {},                 // gekaufte breite Geräte: { harvest, cultivate, sow, mow: true }
       colors: { tractor: 'red', combine: 'green' },   // Fahrzeugfarben (kostenlos)
       field: { stage: 'ripe', crop: 'wheat', sownAt: 0, layout: null },
-      meadow: { stage: 'tall', at: 0, layout: null, bales: null }   // Wiese: tall → mown → baled → regrow → tall
+      meadow: { stage: 'tall', at: 0, layout: null, bales: null },  // Wiese: tall → mown → baled → regrow → tall
+      fishParts: 0,             // Angeln: gefangene Fische zum nächsten Stern (0–4, 5 Fische = 1 Stern)
+      woodParts: 0,             // Wald: gefällte Bäume zum nächsten Stern (0–4, 5 Bäume = 1 Stern)
+      saw: false,               // Kettensäge gekauft
+      trees: null,              // Wald: je Baum Zeitpunkt des Fällens (0 = steht)
+      house: { step: 0 }        // Baustelle Wohnhaus: erledigte Bauschritte (0–5)
     };
   }
 
@@ -36,6 +41,7 @@
       d.meadow = Object.assign(standard().meadow, s.meadow || {});
       d.colors = Object.assign(standard().colors, s.colors || {});
       d.wide = Object.assign({}, s.wide || {});
+      d.house = Object.assign(standard().house, s.house || {});
     }
     Object.keys(Hof.save).forEach(k => delete Hof.save[k]);
     Object.assign(Hof.save, d);
@@ -68,6 +74,14 @@
   Hof.addMilk = function (n) {
     Hof.load(); Hof.save.milk = Math.max(0, Hof.save.milk + n); Hof.persist();
     return Hof.save.milk;
+  };
+
+  // Sternteil dazu (z. B. 'fishParts'): bei 5 Teilen gibt es 1 ganzen Stern. Gibt true zurück, wenn der Stern voll wurde.
+  Hof.addPart = function (key) {
+    Hof.load();
+    const n = (Hof.save[key] || 0) + 1;
+    if (n >= 5) { Hof.save[key] = 0; Hof.save.stars += 1; Hof.persist(); return true; }
+    Hof.save[key] = n; Hof.persist(); return false;
   };
 
   Hof.addHay = function (n) {

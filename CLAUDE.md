@@ -8,7 +8,7 @@ index.html                  ← Startseite: Kacheln je Welt (WELTEN-Liste, aktiv
                               nur eine aktive Welt → direkte Weiterleitung)
 hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
 baustelle/index.html        ← Welt BAUSTELLE: Bauhof als begehbare Karte (Bauarbeiter, Bagger, Bauplatz `S`)
-baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/
+baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, kran/, dach/
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
 gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlesen, Steuerung, Layout, Laden, goHof()
@@ -44,7 +44,7 @@ spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 - **Erstes Gebäude: Wohnhaus.** Der Fortschritt liegt in `save.house.step` (0 = Grube fehlt, 1 = Grube fertig … 5 = Haus fertig). Gebaut wird in Etappen, alles im Stil des Hofs (schräg von oben, fahren/antippen statt nur zuschauen):
   1. Grube baggern wie Ernten, mit Kipper (fertig)
   2. Beton mit der Betonpumpe malen (Finger ziehen, ab 90 % läuft der Rest nach) und Wände mit Steinen setzen (Steine in leuchtende Lücken ziehen oder Lücke antippen) (fertig: `spiele/beton`, `spiele/mauer`; Bauplatz-Zugang je Schritt über `STEP_GAME` in `baustelle/index.html`)
-  3. Dachteile mit dem Kran vom LKW aufs Haus heben, Richtfest, Dach durch Wischen decken, danach Fenster/Tür
+  3. Dachbinder mit dem Kran vom Tieflader aufs Haus heben (Binder antippen, dann leuchtende Stelle), Richtfest (step 4), Dach durch Wischen decken, danach Fenster/Tür/Schornstein (step 5). Fertig: `spiele/kran`, `spiele/dach`. Das Haus ist schräg von vorne gezeichnet: `drawHouse34()` in `gemeinsam/bau.js`.
 
   Danach kann man es einrichten (Möbel platzieren).
 - **Bauaufträge** bestehen aus Schritten mit wiederverwendbaren Mechaniken: GRABEN (Bagger, Zellen abtragen), GIESSEN (Betonmischer, Schalung füllen), STAPELN (Steine nach Muster setzen), HEBEN (Kran, Teil an markierte Stelle), BELEGEN (Fläche reihenweise füllen: Ziegel, Schotter, Schienen), ZUORDNEN (Fenster/Türen in Öffnungen). Ein Auftrag ist eine Datenliste von Schritten, keine eigene Seite pro Schritt.

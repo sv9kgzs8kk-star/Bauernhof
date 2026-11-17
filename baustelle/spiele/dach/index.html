@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261117j">
+<title>Dach</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="dhud" class="hud gamehud hidden">
+  <div class="pill" data-say="roof" style="pointer-events:auto"><span class="word">DACH</span> <span id="dcount">0/5</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261117j"></script>
+<script src="../../../gemeinsam/basis.js?v=20261117j"></script>
+<script src="../../../gemeinsam/bau.js?v=20261117j"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+let winTimer = null;
+// Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: DACH DECKEN (Baustelle, Wohnhaus Schritt 5)
+   Mit dem Finger über die leuchtende Dachreihe wischen → dort werden Ziegel gelegt. Reihe für Reihe
+   von der Traufe bis zum First. Danach kommen Fenster, Tür und Schornstein: Haus fertig (house.step = 5).
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('dach')));
+
+const Dach = (() => {
+  const DW = 200, DH = 140, GROUND = 114, REACH = 9;
+  let st, state, roof, row, down = false, fin = null, pops = [];
+  function build() { st = bauStage(DW, DH, 0.7, (B, x0, x1, y0, y1) => bauSkyGround(B, x0, x1, y0, y1, GROUND)); }
+  function enter() {
+    Hof.load();
+    if (house().step !== 4) { goHof('dach'); return; }
+    build();
+    roof = Array.from({ length: H34.ROWS }, () => Array(H34.COLS).fill(false)); row = 0; fin = null; pops = [];
+    state = 'play'; show('dhud'); hud();
+    setTimeout(() => sayWord('roof'), 400);
+  }
+  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; down = false; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
+  function hud() { $('dcount').textContent = row + '/' + H34.ROWS; }
+  const center = (r, c) => { const q = roofCell(r, c, 1); return [(q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4]; };
+  function lay(x, y) {
+    if (row >= H34.ROWS) return;
+    for (let c = 0; c < H34.COLS; c++) {
+      if (roof[row][c]) continue;
+      const [cx, cy] = center(row, c);
+      if (Math.hypot(cx - x, cy - y) < REACH + 3) {
+        roof[row][c] = true; pops.push({ r: row, c, t: 0 }); sfx.click();
+        st.sp(cx, cy, rnd(-10, 10), rnd(-15, -5), .3, '#e06a5a', 40);
+      }
+    }
+    if (roof[row].every(Boolean)) { row++; hud(); sfx.load(); if (row >= H34.ROWS) finishRoof(); }
+  }
+  function finishRoof() {
+    state = 'done'; down = false; fin = 0; hide('dhud');
+    setTimeout(() => { sfx.unlock(); sayWord('house'); confetti(); }, 700);
+    setTimeout(() => finishStep(5, 'house', 'dach'), 2200);
+  }
+  function onPointer(type, x, y) {
+    if (state !== 'play') return true;
+    const [sx, sy] = st.toStage(x, y);
+    if (type === 'down') { down = true; lay(sx, sy); }
+    else if (type === 'move' && down) lay(sx, sy);
+    else if (type === 'up') down = false;
+    return true;
+  }
+  function update(dt) { if (fin !== null) fin += dt; for (const p of pops) p.t += dt; pops = pops.filter(p => p.t < 0.25); }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    ctx.setTransform(st.S, 0, 0, st.S, st.OX, st.OY);
+    drawHouse34({ trusses: 3, roof, done: fin !== null && fin > 0.5, time });
+    // leuchtende Reihe, in der gerade gedeckt wird
+    if (state === 'play' && row < H34.ROWS) {
+      const a = 0.25 + Math.abs(Math.sin(time / 260)) * 0.4;
+      for (let c = 0; c < H34.COLS; c++) if (!roof[row][c]) poly(`rgba(255,210,63,${a})`, roofCell(row, c, 1));
+      // Hinweis: Finger wischt an der Reihe entlang
+      if (!down) { const k = (time / 1500) % 1, [x0, y0] = center(row, 0), [x1, y1] = center(row, H34.COLS - 1);
+        const hx = x0 + (x1 - x0) * k, hy = y0 + (y1 - y0) * k;
+        ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke(); }
+    }
+    for (const p of pops) { const q = roofCell(p.r, p.c, 1), k = 1 - p.t / 0.25; ctx.globalAlpha = k; poly('#ffffff', q); ctx.globalAlpha = 1; }
+    if (fin !== null && fin < 0.8) { ctx.globalAlpha = 1 - fin / 0.8; ctx.fillStyle = '#ffffff'; ctx.fillRect(H34.x0, H34.yt, H34.x1 - H34.x0, H34.yb - H34.yt); ctx.globalAlpha = 1; }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function resize() { build(); }
+  function exit() { clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, st: { S: st.S, OX: st.OX, OY: st.OY }, centers: Array.from({ length: H34.ROWS }, (_, r) => Array.from({ length: H34.COLS }, (_, c) => center(r, c))) }) };
+})();
+startLoop(Dach);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

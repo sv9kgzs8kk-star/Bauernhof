@@ -95,21 +95,25 @@ const FieldGame = (() => {
     }
     return null;
   }
+  // Form bleibt einen ganzen Durchgang gleich (Feld: Ernten → Grubbern → Säen, Wiese: Mähen → Pressen → Einsammeln).
+  // Neue Form erst, wenn der vorige Durchgang fertig ist (newCycle) oder das Feld größer gekauft wurde.
+  // Je Bildschirmgröße (iPad hoch/quer) wird die Form gemerkt, damit Drehen sie nicht dauernd ändert.
+  function keptLayout(A, level, fresh, make) {
+    const key = gc + 'x' + gr;
+    if (fresh) { A.layouts = {}; A.layout = null; A.newCycle = false; }
+    if (!A.layouts || typeof A.layouts !== 'object') A.layouts = {};
+    let L = A.layouts[key] || (A.layout && A.layout.gc === gc && A.layout.gr === gr ? A.layout : null), made = false;
+    if (!L || L.level !== level) { L = null; while (!L) L = make(); made = true; }
+    A.layouts[key] = L; A.layout = L; persist();
+    return { L, made };
+  }
   function getMeadowLayout(fresh) {
-    let L = save.meadow.layout;
-    if (fresh || !L || L.gc !== gc || L.gr !== gr || L.level !== save.meadowLevel) {
-      L = null; while (!L) L = makeLayout(save.meadowLevel, MEADOW_P, MEADOW_MAX[save.meadowLevel]);
-      save.meadow.layout = L; save.meadow.bales = null; persist();
-    }
-    return L;
+    const k = keptLayout(save.meadow, save.meadowLevel, fresh, () => makeLayout(save.meadowLevel, MEADOW_P, MEADOW_MAX[save.meadowLevel]));
+    if (k.made) { save.meadow.bales = null; persist(); }
+    return k.L;
   }
   function getLayout(fresh) {
-    let L = save.field.layout;
-    if (fresh || !L || L.gc !== gc || L.gr !== gr || L.level !== save.level) {
-      L = null; while (!L) L = makeLayout(save.level);
-      save.field.layout = L; persist();
-    }
-    return L;
+    return keptLayout(save.field, save.level, fresh, () => makeLayout(save.level)).L;
   }
 
   function drawCell(r, c) {
@@ -139,7 +143,8 @@ const FieldGame = (() => {
   function enter(m) {
     mode = m; M = MODES[m];
     layout(true);
-    const L = M.meadow ? getMeadowLayout(mode === 'mow') : getLayout(mode === 'cultivate');   // neue Saison = neue Form
+    const L = M.meadow ? getMeadowLayout(mode === 'mow' && !!save.meadow.newCycle)
+                     : getLayout(mode === 'harvest' && !!save.field.newCycle);   // neuer Durchgang = neue Form
     ground = []; obst = L.obst.map(row => row.split(''));
     // Startzustand der Zellen: Feld = from-Zustand; Wiese je nach Schritt
     const startCell = r => mode === 'press' ? (r % 2 === 0 ? 'swath' : 'cut') : mode === 'collect' ? 'cut' : M.from;
@@ -179,12 +184,12 @@ const FieldGame = (() => {
   }));
   function play() { state = 'play'; clearHeld(); show('mhud'); show('ctrl'); }
 
-  /* --- Laden: größeres Feld / größere Wiese (nur am Anfang eines Durchgangs, nur wenn bezahlbar) --- */
+  /* --- Laden: größeres Feld / größere Wiese (am Anfang eines Durchgangs, auch wenn noch zu teuer – wie bei Kühen/Schafen) --- */
   let shopDone = false;
   function offerUpgrade() {
     const isM = !!M.meadow, start = isM ? mode === 'mow' : mode === 'harvest';
     const lvl = isM ? save.meadowLevel : save.level, prices = isM ? MEADOW_PRICE : FIELD_PRICE, max = isM ? 4 : 5;
-    if (!start || lvl >= max || save.stars < prices[lvl + 1]) return false;
+    if (!start || lvl >= max) return false;
     hide('mhud');
     openShop({
       stats: () => [['star', save.stars, 'star', 'shopstar']],
@@ -226,10 +231,10 @@ const FieldGame = (() => {
     Hof.addStars(gain);                          // liest frisch, zählt, speichert
     if (mode === 'mow') save.meadow.stage = 'mown';
     if (mode === 'press') { save.meadow.stage = 'baled'; save.meadow.bales = bales; }
-    if (mode === 'collect') { save.meadow.stage = 'regrow'; save.meadow.at = Date.now(); save.meadow.bales = null; persist(); Hof.addHay(loaded); }
+    if (mode === 'collect') { save.meadow.stage = 'regrow'; save.meadow.newCycle = true; save.meadow.at = Date.now(); save.meadow.bales = null; persist(); Hof.addHay(loaded); }
     if (mode === 'harvest') save.field.stage = 'stub';
     if (mode === 'cultivate') save.field.stage = 'tilled';
-    if (mode === 'sow') { save.field.stage = 'sown'; save.field.sownAt = Date.now(); }
+    if (mode === 'sow') { save.field.stage = 'sown'; save.field.sownAt = Date.now(); save.field.newCycle = true; }
     persist();
     setTimeout(() => {
       hide('mhud'); hide('ctrl'); $('winstars').textContent = save.stars; $('wingain').textContent = gain;

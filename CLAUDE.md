@@ -27,7 +27,8 @@ spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
 5. Wörter in GROSSBUCHSTABEN anzeigen und normal vorlesen (`WORDS`, `say()`/`sayWord()`).
 6. Pixel-Symbole statt Emojis (`<i class="ico" data-ico="…">`, `setIco()`).
 7. Anzeigen und Knöpfe bekommen die Klasse `.hud`, in Spielen zusätzlich `gamehud`.
-8. `openShop()` nur zeigen, wenn man etwas kaufen kann oder etwas fehlt.
+8. `openShop()` nur zeigen, wenn man etwas kaufen kann oder etwas fehlt. Ausnahme: Feld und Wiese zeigen zu Beginn jedes Durchgangs (Ernten bzw. Mähen) immer das nächstgrößere Feld, auch wenn es noch zu teuer ist.
+13. Feld- und Wiesenform bleiben einen ganzen Durchgang gleich (`newCycle` in `feldspiel.js`), je Bildschirmausrichtung gemerkt.
 9. Fahrspiele beherrschen Steuerkreuz **und** Antippen (`moverUpdate()`).
 10. Fehler erscheinen als rote Zeile unten.
 11. Kein Scheitern: Es gibt kein „verloren“, höchstens eine lustige Animation und einen neuen Versuch.

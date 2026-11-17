@@ -76,4 +76,12 @@
   };
 
   Hof.load();
+
+  // Nur in der Testversion (raw.githack.com): ?sterne=50 setzt Sterne, ?heu=10 setzt Heu – zum Ausprobieren.
+  // In der echten App (github.io) hat das keine Wirkung.
+  if (/githack\.com$/.test(location.hostname)) {
+    const q = new URLSearchParams(location.search);
+    if (q.has('sterne')) { Hof.save.stars = Math.max(0, parseInt(q.get('sterne'), 10) || 0); Hof.persist(); }
+    if (q.has('heu')) { Hof.save.hay = Math.max(0, parseInt(q.get('heu'), 10) || 0); Hof.persist(); }
+  }
 })();

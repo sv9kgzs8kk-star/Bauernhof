@@ -56,7 +56,7 @@ spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
   - **Testversion**: Link `https://raw.githack.com/sv9kgzs8kk-star/Bauernhof/<commit-sha>/<seite>` mit der **vollständigen Commit-SHA** des letzten Commits, nicht dem Zweignamen. Zweig-Links zwischenspeichert der Dienst und zeigt dann alte Stände. Nach jeder Nachbesserung den Link in der PR-Beschreibung aktualisieren und im Kommentar den neuen Link nennen.
   - **Bitte auf dem iPad testen** (nummerierte Schritte)
 
-  Dazu `Closes #<issue>`. Michael öffnet die Testversion in Safari, nicht in der Home-Bildschirm-App. Die Testversion hat einen eigenen Spielstand, dafür startet man dort mit 0 Sternen. Testschritte, die Sterne brauchen, müssen das berücksichtigen.
+  Dazu `Closes #<issue>`. Michael öffnet die Testversion in Safari, nicht in der Home-Bildschirm-App. Die Testversion hat einen eigenen Spielstand, dafür startet man dort mit 0 Sternen. Für Testschritte, die Sterne oder Heu brauchen, den Link mit `?sterne=50&heu=10` versehen. Das wirkt nur auf raw.githack.com, nicht in der echten App.
 - Vor dem PR mit Headless-Chrome testen (`/usr/bin/google-chrome` über Playwright, lokaler `python3 -m http.server`). Alle geänderten Seiten laden, es dürfen keine JS-Fehler auftreten, Screenshots ansehen.
 - GitHub nur über die REST-API (`gh api repos/sv9kgzs8kk-star/Bauernhof/...`). GraphQL ist gesperrt, `gh pr create` funktioniert also nicht.
 - Neue Vorschläge sind klein genug für eine Nacht und mindestens einer davon verbessert etwas Bestehendes, statt nur Neues hinzuzufügen.

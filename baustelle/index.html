@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="../icon.png">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261117g">
+<title>Baustelle</title>
+<style>
+  #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
+  #hubstats{position:absolute;top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 96px);
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-height:68px}
+  #hubside{position:absolute;top:calc(env(safe-area-inset-top) + 100px);left:calc(env(safe-area-inset-left) + 10px);
+    display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+  #hubside .vbtns{flex-direction:column}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- Anzeigen: Sterne oben, Bauarbeiter + Bagger links -->
+<div id="hubhud">
+  <div id="hubstats">
+    <div class="pill" id="starpill" data-say="star" style="pointer-events:auto"><i class="ico" data-ico="star"></i> <span id="starcount">0</span></div>
+  </div>
+  <div id="hubside">
+    <div class="vbtns">
+      <button class="vbtn act" id="vb-person" aria-label="Bauarbeiter"><canvas width="34" height="34"></canvas></button>
+      <button class="vbtn" id="vb-digger" aria-label="Bagger" data-say="digger"><canvas width="34" height="34"></canvas></button>
+    </div>
+  </div>
+</div>
+
+<script src="../gemeinsam/sterne.js?v=20261117g"></script>
+<script src="../gemeinsam/basis.js?v=20261117g"></script>
+<script src="../gemeinsam/bau.js?v=20261117g"></script>
+<script>
+/* =====================================================================
+   WELT: BAUSTELLE – Bauhof als begehbare Karte (wie der Bauernhof)
+   Bauarbeiter läuft, Bagger fährt. Mit dem Bagger auf den Bauplatz → Grube ausheben (spiele/baggern).
+   Hausbau-Fortschritt: save.house.step (0 = Grube fehlt, 1 = Grube fertig, … 5 = Haus fertig)
+   ===================================================================== */
+const save = Hof.save;
+const PAGES = { S: 'spiele/baggern/index.html' };
+let backFrom = (location.hash || '').slice(1) || null;
+const HINT_AFTER = 10;
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+
+// T Baum, c Baucontainer (Büro), S Bauplatz, = Straße, y Fahrzeughof (Schotter), k geparkter Kipper
+const HUB_MAP = [
+  'TT.T...T',
+  '.cc.=SSS',
+  '.cc.=SSS',
+  '========',
+  '.yyy=.T.',
+  'Tkky=..T',
+  'TT..=TTT',
+];
+paintFront($('vb-person').querySelector('canvas'), BUILDER_FRONT);
+{ const g = $('vb-digger').querySelector('canvas').getContext('2d'); g.drawImage(EXCAVATOR.frames[24], 0, 0); }
+
+const Hub = (() => {
+  let type, ox, oy, entering = false, active = 'person', posKey = '', boardT = 0, idleT = 0;
+  const ENT = {
+    person: { spr: BUILDER,   m: null, speed: 2.8 },
+    digger: { spr: EXCAVATOR, m: null, speed: 1.9, pitch: 40 },
+  };
+  const cellType = (r, c) => (r < 0 || c < 0 || r >= gr || c >= gc) ? 'X' : type[r][c];
+  const need = () => house().step === 0 ? 'digger' : null;
+  const passableFor = name => (r, c) => {
+    const t = cellType(r, c);
+    if (name === 'person') return ['.', '=', 'y'].includes(t);
+    if (t === 'S') return name === 'digger' && house().step === 0;           // Bauplatz: nur der Bagger, solange die Grube fehlt
+    return ['.', '=', 'y'].includes(t);
+  };
+
+  function build() {
+    layout(true);
+    ox = Math.floor((gc - 8) / 2); oy = Math.floor((gr - HUB_MAP.length) / 2);
+    const rr = seeded(4321 + gc*97 + gr), pickR = a => a[(rr()*a.length)|0];
+    type = [];
+    for (let r = 0; r < gr; r++) { type.push([]); for (let c = 0; c < gc; c++) {
+      const mr = r - oy, mc = c - ox;
+      type[r].push((mr >= 0 && mr < HUB_MAP.length && mc >= 0 && mc < 8) ? HUB_MAP[mr][mc] : (rr() < .16 ? 'T' : '.'));
+    }}
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const t = type[r][c], set = t === '=' ? tiles.road : (t === 'y' || t === 'k') ? bauTiles.gravel : t === 'S' ? bauTiles.site : tiles.grass;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pickR(set), c*G+i*T, r*G+j*T);
+    }
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) if (type[r][c] === 'T') drawObstacle(bctx, 't', c*G, r*G);
+    // Baucontainer (Büro) schräg von oben: Dach, blaue Front mit Tür und Fenster, Warnstreifen
+    { const x = (ox+1)*G, y = (oy+1)*G;
+      B('rgba(0,0,0,.25)', x+3, y+8, 2*G, 2*G-6);
+      B('#9aa4ad', x+1, y+2, 2*G-2, 14); B('#c3ccd4', x+2, y+3, 2*G-4, 4);
+      B('#173f80', x+1, y+16, 2*G-2, 2*G-18); B('#2a6fdb', x+2, y+17, 2*G-4, 2*G-20);
+      for (let i = 0; i < 2*G-4; i += 6) B(i % 12 ? '#222' : '#f5b700', x+2+i, y+16, 6, 3);
+      B('#9fe3ff', x+6, y+24, 12, 8); B('#e6f8ff', x+6, y+24, 3, 8); B('#173f80', x+11, y+24, 1, 8);
+      B('#5a3b1c', x+28, y+22, 10, 2*G-24); B('#ffd23f', x+35, y+34, 1, 2); }
+    // Fahrzeughof: Pylonen
+    for (const [cx, cy] of [[ox+3, oy+4], [ox+3, oy+5]]) {
+      const x = cx*G + 14, y = cy*G + 6;
+      B('rgba(0,0,0,.2)', x-1, y+12, 10, 2); B('#e67e22', x+3, y, 2, 3); B('#ffffff', x+2, y+3, 4, 2); B('#e67e22', x+1, y+5, 6, 3); B('#ffffff', x, y+8, 8, 2); B('#e67e22', x-1, y+10, 10, 3);
+    }
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  function placeAll(from) {
+    const key = gc + 'x' + gr;
+    if (key !== posKey || !ENT.person.m) {
+      ENT.person.m = newMover(oy+3, ox+1, 0);
+      ENT.digger.m = newMover(oy+4, ox+2, -Math.PI/2);
+      posKey = key; active = 'person';
+    }
+    if (from === 'baggern') {                        // zurück vom Ausheben: Bagger steht unten am Bauplatz
+      Object.assign(ENT.digger.m, { r: oy+3, c: ox+6, a: Math.PI/2 });
+      Object.assign(ENT.person.m, { r: oy+3, c: ox+5 });
+      active = 'digger';
+    }
+    for (const e of Object.values(ENT)) e.m.moving = false;
+  }
+  function freeNear(r, c) {
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]]) if (passableFor('person')(r+dy, c+dx)) return [r+dy, c+dx];
+    return [r, c];
+  }
+  function setActive(name) {
+    if (entering || name === active) return;
+    const am = ENT[active].m;
+    if (am.moving) { am.r = am.tr; am.c = am.tc; am.moving = false; am.prog = 0; }
+    idleT = 0; clearTapGoal(); clearHeld();
+    if (name === 'person') { const v = ENT[active].m; active = 'person'; const [r, c] = freeNear(v.r, v.c); Object.assign(ENT.person.m, { r, c, a: v.a, moving: false }); }
+    else { active = name; sayWord('digger'); }
+    sfx.click(); refreshVBtns();
+  }
+  function refreshVBtns() { ['person', 'digger'].forEach(n => $('vb-' + n).classList.toggle('act', active === n)); }
+  ['person', 'digger'].forEach(n => $('vb-' + n).addEventListener('click', () => setActive(n)));
+
+  function enter() {
+    Hof.load(); build();
+    const from = backFrom; backFrom = null;
+    placeAll(from); entering = false; idleT = 0; refreshVBtns();
+    $('starcount').textContent = save.stars;
+    show('ctrl'); show('hubhud');
+    if (!from) setTimeout(() => sayWord('site'), 400);
+  }
+
+  function update(dt) {
+    const e = ENT[active];
+    idleT = held ? 0 : idleT + dt;
+    if (active === 'person' && !e.m.moving && !held && !entering) {      // auf dem Bagger stehen bleiben = einsteigen
+      const on = ENT.digger.m.r === e.m.r && ENT.digger.m.c === e.m.c;
+      boardT = on ? boardT + dt : 0;
+      if (on && boardT > 0.9) { boardT = 0; setActive('digger'); sfx.enter(); }
+    } else boardT = 0;
+    if (!entering) moverUpdate(e.m, dt, {
+      passable: passableFor(active), speed: e.speed,
+      onArrive: m => {
+        const t = cellType(m.r, m.c);
+        if (!PAGES[t] || active !== 'digger') return;
+        entering = true; sfx.enter();
+        setTimeout(() => { location.href = PAGES[t]; }, 350);
+        return 'stop';
+      }
+    });
+    if (active === 'person') setEngine(false, false); else setEngine(true, e.m.moving, e.pitch);
+  }
+
+  function drawSite(time) {
+    const x0 = (ox+5)*G, y0 = (oy+1)*G, w = 3*G, h = 2*G, st = house().step;
+    // Grube: abgesteckt (Schritt 0) oder ausgehoben (ab Schritt 1)
+    if (st === 0) {
+      ctx.setLineDash([3, 3]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(x0+8.5, y0+8.5, w-17, h-17); ctx.setLineDash([]);
+      for (const [px, py] of [[x0+7, y0+7], [x0+w-10, y0+7], [x0+7, y0+h-10], [x0+w-10, y0+h-10]]) { R('#d35400', px, py, 3, 3); R('#fff', px, py, 3, 1); }
+    } else {
+      for (let j = 0; j < (h-16)/T; j++) for (let i = 0; i < (w-16)/T; i++) ctx.drawImage(bauTiles.dug[(i*3+j) % 4], x0+8+i*T, y0+8+j*T);
+      R('#3e2a18', x0+8, y0+8, w-16, 2); R('#3e2a18', x0+8, y0+8, 2, h-16);
+    }
+    // Bauzaun
+    for (let x = x0; x <= x0 + w; x += 9) { R('#d35400', x, y0-2, 2, 8); R('#d35400', x, y0+h-6, 2, 8); }
+    R('#ffffff', x0, y0+1, w, 2); R('#ffffff', x0, y0+h-3, w, 2);
+    for (let y = y0; y <= y0 + h; y += 9) R('#d35400', x0+w-2, y, 2, 6);
+    // Schild: Haus und 5 Kästchen für die Bauschritte
+    { const sx = (ox+5)*G + 6, sy = oy*G + 2;
+      R('#5a3b1c', sx+16, sy+18, 2, 6);
+      R('rgba(0,0,0,.25)', sx+1, sy+1, 34, 20); R('#5a3b1c', sx, sy, 34, 20); R('#fff8e0', sx+2, sy+2, 30, 16);
+      R('#c0392b', sx+4, sy+5, 9, 3); R('#c0392b', sx+5, sy+4, 7, 1); R('#e9dcc0', sx+5, sy+8, 7, 6); R('#7a4a22', sx+8, sy+10, 2, 4);
+      for (let i = 0; i < 5; i++) { R('#5a3b1c', sx+15+i*3.4, sy+9, 3, 4); R(i < st ? '#7ed957' : '#fff8e0', sx+15.5+i*3.4, sy+9.5, 2, 3); } }
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    drawSite(time);
+    drawTipper((ox+1)*G + 4, (oy+5)*G + 4, 0, TIPPERS[2]);                 // geparkter Kipper
+    if (active !== 'digger') drawMover(ENT.digger.m, ENT.digger.spr, time);
+    drawMover(ENT[active].m, ENT[active].spr, time);
+    // Hilfe: Pfeil zum Bagger bzw. zum Bauplatz, solange die Grube fehlt
+    const bounce = Math.abs(Math.sin(time/220)) * 4;
+    if (!entering && need() === 'digger') {
+      if (active === 'person') { const p = moverPos(ENT.digger.m); drawArrow(Math.round(p.x - 3), Math.round(p.y - 28 - bounce)); }
+      else drawArrow((ox+6)*G + 9, Math.round((oy+1)*G + 12 - bounce));
+    }
+    $('hubhud').classList.toggle('hidden', entering);
+  }
+  function onPointer(type, x, y) {
+    if (entering) return true;
+    idleT = 0;
+    if (type === 'down' && active !== 'digger') {           // Bagger antippen = einsteigen
+      const p = moverPos(ENT.digger.m);
+      if (Math.abs(x - p.x) < G*0.8 && Math.abs(y - p.y) < G*0.8) { setActive('digger'); return true; }
+    }
+    return false;
+  }
+  function resize() { build(); placeAll(null); }
+  function exit() { setEngine(false, false); }
+  return { enter, update, draw, exit, resize, onPointer, _dbg: () => ({ active, ox, oy, step: house().step }) };
+})();
+
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+startLoop(Hub);
+</script>
+<script>window.START_URL = '../index.html';</script>
+<script src="../gemeinsam/startseite.js?v=20261117g"></script>
+</body>
+</html>

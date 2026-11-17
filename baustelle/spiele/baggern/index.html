@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261117g">
+<title>Baggern</title>
+<style>.pill canvas.veh{width:clamp(30px,6vmin,46px);height:clamp(30px,6vmin,46px);image-rendering:pixelated}</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="mhud" class="hud gamehud hidden">
+  <div class="pill" id="mpill" data-say="dirt" style="pointer-events:auto"><canvas class="veh" id="mveh" width="34" height="34"></canvas><div class="bar"><div class="fill soil" id="mfill"></div></div></div>
+  <div class="pill" id="mcount" data-say="tipper" style="pointer-events:auto"><i class="ico" data-ico="truck"></i><span id="mloads">0/3</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" data-say="dig" style="cursor:pointer"><span class="word">BAGGERN</span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script src="../../../gemeinsam/sterne.js?v=20261117g"></script>
+<script src="../../../gemeinsam/basis.js?v=20261117g"></script>
+<script src="../../../gemeinsam/bau.js?v=20261117g"></script>
+<script>
+/* =====================================================================
+   MINISPIEL: GRUBE AUSHEBEN (Baustelle, Wohnhaus Schritt 1)
+   Wie beim Ernten: mit dem Bagger über die abgesteckte Grube fahren. Die Schaufel wird voll →
+   zum Kipper unten an der Straße fahren und abladen. Alles ausgehoben = Grube fertig (house.step = 1).
+   ===================================================================== */
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const goBack = () => goHof('baggern');
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goBack));
+{ const g = $('mveh').getContext('2d'); g.drawImage(EXCAVATOR.frames[24], 0, 0); }
+
+const DigGame = (() => {
+  const LOADS = 3;
+  let ground, total, left, cap, fill, loads, totalLoads, state, veh, truck, honked = false, truckColor = 0, winTimer = null, pit;
+  function makePit() {                                // Grube = Grundriss des Hauses, mittig, gleich groß auf allen Geräten
+    const w = Math.min(7, gc - 4), h = Math.min(4, gr - 5);
+    const c0 = Math.floor((gc - w) / 2), r0 = Math.max(1, Math.floor((gr - 2 - h) / 2));
+    return { c0, r0, w, h };
+  }
+  function drawCell(r, c) {
+    const x = c*G, y = r*G, g = ground[r][c];
+    const set = g === 'site' ? bauTiles.site : g === 'dug' ? bauTiles.dug : g === 'road' ? tiles.road : bauTiles.gravel;
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), x+i*T, y+j*T);
+    const B = (col,x2,y2,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x+x2,y+y2,w,h);};
+    if (g === 'site') { B('rgba(255,255,255,.55)',0,0,G,1); B('rgba(255,255,255,.55)',0,0,1,G); B('rgba(0,0,0,.12)',0,G-1,G,1); }
+    if (g === 'dug') {                              // Kante nach oben/links = Schatten der Grube
+      if (r > 0 && ground[r-1][c] !== 'dug') B('#2e1f10',0,0,G,3);
+      if (c > 0 && ground[r][c-1] !== 'dug') B('#2e1f10',0,0,3,G);
+    }
+  }
+  const inPit = (r, c) => r >= pit.r0 && r < pit.r0 + pit.h && c >= pit.c0 && c < pit.c0 + pit.w;
+  const isWork = (r, c) => ground[r][c] === 'site';
+  const truckCell = (r, c) => truck && r === gr-1 && ['arrive','park','pause'].includes(truck.state) && (c === truck.tx || c === truck.tx+1);
+  const passable = (r, c) => r >= 0 && c >= 0 && r < gr && c < gc && !truckCell(r, c);
+  const nearTruck = () => truck && !veh.moving && veh.r >= gr-2 && veh.c >= truck.tx-1 && veh.c <= truck.tx+2;
+  const canUnload = () => fill >= cap || (left === 0 && fill > 0);
+
+  function enter() {
+    Hof.load();
+    if ((save.house && save.house.step) >= 1) { goBack(); return; }   // Grube ist schon fertig
+    layout(true);
+    pit = makePit();
+    ground = [];
+    for (let r = 0; r < gr; r++) { ground.push([]); for (let c = 0; c < gc; c++) ground[r].push(r === gr-1 ? 'road' : inPit(r, c) ? 'site' : 'gravel'); }
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) drawCell(r, c);
+    // Pflöcke an den Ecken der Grube
+    for (const [r, c, dx, dy] of [[pit.r0, pit.c0, 1, 1], [pit.r0, pit.c0+pit.w-1, G-4, 1], [pit.r0+pit.h-1, pit.c0, 1, G-4], [pit.r0+pit.h-1, pit.c0+pit.w-1, G-4, G-4]]) {
+      bctx.fillStyle = '#d35400'; bctx.fillRect(c*G+dx, r*G+dy, 3, 3);
+    }
+    total = 0; for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) if (isWork(r, c)) total++;
+    left = total; loads = 0; cap = Math.ceil(total / LOADS); totalLoads = Math.ceil(total / cap); fill = 0;
+    veh = newMover(gr-2, 1, -Math.PI/2); veh.unloading = false;
+    truck = null; newTruck();
+    hud(); state = 'play'; clearHeld(); show('mhud'); show('ctrl');
+    setTimeout(() => sayWord('dig'), 400);
+  }
+  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; clearHeld(); show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
+
+  function newTruck() {
+    truckColor = (truckColor + 1) % TIPPERS.length;
+    let tx;
+    for (let t = 0; t < 30; t++) { tx = 1 + ((Math.random()*(gc-3))|0); if (!(veh.r === gr-1 && (veh.c === tx || veh.c === tx+1))) break; }
+    truck = { tx, x: W + 10, y: (gr-1)*G + 4, park: tx*G + 6, fill: 0, state: 'arrive', timer: 0, col: TIPPERS[truckColor] };
+  }
+  function hud() {
+    $('mfill').style.width = (100 * fill / cap) + '%';
+    $('mpill').classList.toggle('alert', canUnload());
+    $('mloads').textContent = loads + '/' + totalLoads;
+  }
+  function finish() {
+    if (state === 'won') return;
+    state = 'won'; clearHeld();
+    Hof.load(); if (!save.house || typeof save.house !== 'object') save.house = { step: 0 };
+    save.house.step = Math.max(save.house.step, 1); save.stars += BAU_STARS_DIG; Hof.persist();
+    setTimeout(() => {
+      hide('mhud'); hide('ctrl'); $('wingain').textContent = BAU_STARS_DIG;
+      const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_DIG); applyIcons(row);
+      show('gwin'); sfx.win(); confetti();
+      setTimeout(() => sayWord('dig'), 1400);
+      winTimer = setTimeout(goBack, 4200);
+    }, 300);
+  }
+  function work(m) {
+    if (m.done || m.prog < 0.25) return;
+    m.done = true;
+    const r = m.tr, c = m.tc;
+    if (!isWork(r, c)) return;
+    if (fill >= cap) { if (!honked) { sfx.honk(); honked = true; } return; }   // Schaufel voll: erst abladen
+    ground[r][c] = 'dug'; drawCell(r, c);
+    if (r + 1 < gr && ground[r+1][c] === 'dug') drawCell(r+1, c);
+    if (c + 1 < gc && ground[r][c+1] === 'dug') drawCell(r, c+1);
+    left--; fill++; honked = false; sfx.clod();
+    const px = cellX(c), py = cellY(r);
+    for (let i = 0; i < 14; i++) spawn(px+rnd(-10,10), py+rnd(-10,10), rnd(-25,25), rnd(-30,10), rnd(.3,.8), pick(['#4f3520','#6b4a2b','#8a6440']), 40);
+    hud();
+  }
+  function update(dt) {
+    if (state === 'play' && !veh.unloading) {
+      moverUpdate(veh, dt, { passable, speed: 1.9, onProg: m => {
+        work(m);
+        const p = moverPos(m);
+        if (Math.random() < .25) spawn(p.x - Math.cos(m.a)*12, p.y - Math.sin(m.a)*12, rnd(-6,6), rnd(-6,6), .5, 'rgba(90,80,70,.6)');
+      }});
+      if (truck.state === 'park' && canUnload() && nearTruck()) { veh.unloading = true; sfx.pour(); }
+    }
+    if (state === 'play' && veh.unloading) {
+      const amt = Math.min(fill, cap*dt/1.3); fill -= amt; truck.fill += amt/cap;
+      const p = moverPos(veh), tx = truck.x + 23, ty = truck.y + 8;
+      for (let i = 0; i < 3; i++) { const sx = p.x+rnd(-3,3), sy = p.y+rnd(-3,3), ex = tx+rnd(-7,7), ey = ty+rnd(-4,4); spawn(sx, sy, (ex-sx)/.4, (ey-sy)/.4, .4, pick(['#4f3520','#6b4a2b','#8a6440'])); }
+      if (fill <= 0.001) { fill = 0; veh.unloading = false; loads++; sfx.load(); bump($('mcount')); truck.state = 'pause'; truck.timer = 0.6; }
+      hud();
+    }
+    setEngine(state === 'play', veh.moving || veh.unloading, 40);
+    if (state === 'pause' || !truck) return;
+    const t = truck;
+    if (t.state === 'arrive') { t.x = approach(t.x, t.park, 80*dt); if (t.x === t.park) t.state = 'park'; }
+    else if (t.state === 'pause') { t.timer -= dt; if (t.timer <= 0) { t.state = 'leave'; t.v = 10; sfx.honk(); } }
+    else if (t.state === 'leave') { t.v += 90*dt; t.x -= t.v*dt; if (t.x < -50) { if (left === 0 && fill === 0) { t.state = 'gone'; finish(); } else newTruck(); } }
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    if (truck && truck.state !== 'gone') drawTipper(truck.x, truck.y, truck.fill, truck.col);
+    drawMover(veh, EXCAVATOR, time);
+    if (fill > 0) {                                  // Erde in der Schaufel
+      const p = moverPos(veh), fx = p.x + Math.cos(veh.a)*12, fy = p.y + Math.sin(veh.a)*12, n = Math.ceil(4 * fill / cap);
+      R('#4f3520', fx - 4, fy - 4, 8, 8); R('#6b4a2b', fx - 3, fy - 3 - n, 6, 3 + n); R('#8a6440', fx - 2, fy - 3 - n, 3, 1);
+    }
+    const bounce = Math.abs(Math.sin(time/180))*4;
+    if (state === 'play' && truck && canUnload() && truck.state === 'park' && !veh.unloading) drawArrow(Math.round(truck.x + 16), Math.round(truck.y - 12 - bounce));
+    else if (state === 'play' && left === total && !veh.moving) drawArrow(Math.round(cellX(pit.c0) - 3), Math.round(cellY(pit.r0) - 22 - bounce));
+  }
+  function onPointer() { return state !== 'play'; }
+  function resize() { layout(false); }
+  function exit() { setEngine(false, false); clearTimeout(winTimer); }
+  return { enter, exit, update, draw, resize, onPointer, _dbg: () => ({ state, left, total, fill, cap, loads, veh: veh && { r: veh.r, c: veh.c }, truck: truck && { tx: truck.tx, state: truck.state }, pit, todo: ground ? ground.flatMap((row, r) => row.map((g, c) => g === 'site' ? [r, c] : null)).filter(Boolean) : [] }) };
+})();
+
+startLoop(DigGame);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

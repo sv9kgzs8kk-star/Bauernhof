@@ -13,8 +13,8 @@ gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlese
 gemeinsam/basis.css         ← gemeinsames Aussehen
 gemeinsam/feldspiel.js      ← Feld- und Wiesen-Spiele
 gemeinsam/startseite.js     ← Knopf „zur Startseite“ (1 s halten) für die Hauptseite jeder Welt
-spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
 baustelle/index.html        ← Welt BAUSTELLE: Bauhof + Wohnhaus in 5 Schritten (eine Seite, Szenen Hub/Dig/Pour/Wall/Frame/Roof)
+spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
 ```
 - Vom Hof ins Spiel über `PAGES` in `hof.html`. Zurück mit `goHof('<name>')`, die Seiten setzen `window.HOF_URL = '../../hof.html'`.
 - Neue Welten bekommen einen eigenen Ordner (z. B. `stadt/index.html`, Minispiele in `stadt/spiele/<name>/`). Auf der Startseite werden sie in `WELTEN` eingetragen.

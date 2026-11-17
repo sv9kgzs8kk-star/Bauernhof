@@ -14,6 +14,7 @@ gemeinsam/basis.css         ← gemeinsames Aussehen
 gemeinsam/feldspiel.js      ← Feld- und Wiesen-Spiele
 gemeinsam/startseite.js     ← Knopf „zur Startseite“ (1 s halten) für die Hauptseite jeder Welt
 spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
+baustelle/index.html        ← Welt BAUSTELLE: Bauhof + Wohnhaus in 5 Schritten (eine Seite, Szenen Hub/Dig/Pour/Wall/Frame/Roof)
 ```
 - Vom Hof ins Spiel über `PAGES` in `hof.html`. Zurück mit `goHof('<name>')`, die Seiten setzen `window.HOF_URL = '../../hof.html'`.
 - Neue Welten bekommen einen eigenen Ordner (z. B. `stadt/index.html`, Minispiele in `stadt/spiele/<name>/`). Auf der Startseite werden sie in `WELTEN` eingetragen.
@@ -37,7 +38,7 @@ spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
 
 ## Vision (vom Vater festgelegt)
 - **Stadt/Bauhof als Herzstück:** Man startet am Bauhof und baut nach und nach eine Stadt: Gebäude (Wohnhaus, Bahnhof, Feuerwache …), Straßen, Brücken, Bahnstrecken. Ein fertig gebautes Gebäude lässt sich gegen Sterne freischalten und wird dann zu einer eigenen spielbaren Welt.
-- **Erstes Gebäude: Wohnhaus.** Danach kann man es einrichten (Möbel platzieren).
+- **Erstes Gebäude: Wohnhaus.** Steht als erste Version in `baustelle/index.html`. Der Fortschritt liegt in `save.house.step` (0–5), jeder Schritt gibt 2 Sterne. Die Schritte sind BAGGERN, BETON, MAUER, DACHSTUHL mit Kran + RICHTFEST und DACH (danach Fenster/Tür). Danach kann man es einrichten (Möbel platzieren). Weitere Gebäude und der Stadtplan bauen auf dieser Seite und ihren Zeichenfunktionen auf, nicht daneben neu.
 - **Bauaufträge** bestehen aus Schritten mit wiederverwendbaren Mechaniken: GRABEN (Bagger, Zellen abtragen), GIESSEN (Betonmischer, Schalung füllen), STAPELN (Steine nach Muster setzen), HEBEN (Kran, Teil an markierte Stelle), BELEGEN (Fläche reihenweise füllen: Ziegel, Schotter, Schienen), ZUORDNEN (Fenster/Türen in Öffnungen). Ein Auftrag ist eine Datenliste von Schritten, keine eigene Seite pro Schritt.
 - **Der Bauernhof bleibt einzeln spielbar**, so wie er ist, bis die Stadt so weit ist.
 - Später weitere Welten: Feuerwache, Rettungswache, Polizei, Krankenhaus, Bahnhof, Flughafen.

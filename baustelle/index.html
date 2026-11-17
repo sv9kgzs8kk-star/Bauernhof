@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="../icon.png">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261117f">
+<title>Baustelle</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="bhud" class="hud gamehud hidden">
+  <div class="pill" id="starpill" data-say="star" style="pointer-events:auto"><i class="ico" data-ico="star"></i> <span id="starcount">0</span></div>
+  <div class="pill hidden" id="steppill" style="pointer-events:auto;cursor:pointer"><span class="word" id="stepword"></span></div>
+  <button class="pill btn hidden" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" id="tohub" aria-label="Zum Bauhof"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row"><div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div></div>
+  <button class="home" id="winhub" aria-label="Zum Bauhof"><i class="ico" data-ico="home"></i></button>
+</div>
+
+<script>window.NO_PAD = true;   // hier wird nur getippt</script>
+<script src="../gemeinsam/sterne.js?v=20261117f"></script>
+<script src="../gemeinsam/basis.js?v=20261117f"></script>
+<script>window.START_URL = '../index.html';</script>
+<script src="../gemeinsam/startseite.js?v=20261117f"></script>
+<script>
+/* =====================================================================
+   WELT: BAUSTELLE – Bauhof mit Bauplatz, Wohnhaus in 5 Schritten
+   1 BAGGERN (Grube ausheben) · 2 BETON (Bodenplatte gießen) · 3 MAUER (Wände)
+   4 DACHSTUHL mit dem Kran + RICHTFEST · 5 DACH (Ziegel decken), danach Fenster und Tür
+   Fortschritt: save.house.step (0–5). Jeder Schritt gibt 2 Sterne (gleiche Sterne wie der Bauernhof).
+   ===================================================================== */
+Object.assign(WORDS, {
+  house: ['HAUS', 'Haus'], dig: ['BAGGERN', 'Baggern'], concrete: ['BETON', 'Beton'], wall: ['MAUER', 'Mauer'],
+  frame: ['DACHSTUHL', 'Dachstuhl'], richtfest: ['RICHTFEST', 'Richtfest!'], roof: ['DACH', 'Dach'], site: ['BAUSTELLE', 'Baustelle']
+});
+const save = Hof.save;
+const STEP_STARS = 2;
+const STEPS = ['dig', 'concrete', 'wall', 'frame', 'roof'];
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+
+/* ---------- Bühne: festes Raster, auf den Bildschirm vergrößert ---------- */
+const DW = 200, DH = 140, GROUND = 110;
+let S = 1, OX = 0, OY = 0;
+const sp = (x, y, vx, vy, life, col, grav = 0) => spawn(OX + x*S, OY + y*S, vx*S, vy*S, life, col, grav*S);
+const toStage = (x, y) => [(x - OX) / S, (y - OY) / S];
+function stageBg(paintFg) {
+  layout(true);
+  const m = Math.min(W / DW, H / DH);
+  S = m >= 2 ? Math.floor(m) : m;
+  OX = Math.round((W - DW*S) / 2); OY = Math.round((H - DH*S) * 0.7);
+  const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+  bctx.imageSmoothingEnabled = false;
+  bctx.setTransform(S, 0, 0, S, OX, OY);
+  const x0 = Math.floor(-OX/S) - 1, x1 = Math.ceil((W-OX)/S) + 1, y0 = Math.floor(-OY/S) - 1, y1 = Math.ceil((H-OY)/S) + 1;
+  B('#9fe3ff', x0, y0, x1-x0, GROUND-y0); B('#c8f0ff', x0, y0, x1-x0, 30-y0);
+  B('#ffffff', 20, 12, 18, 3); B('#ffffff', 24, 10, 10, 2); B('#ffffff', 120, 18, 22, 3); B('#ffffff', 126, 16, 10, 2);
+  for (let x = x0; x < x1; x += 26) { B('#8fc47a', x, GROUND - 14 - ((x * 7) % 6), 20, 20); }   // Hügel hinten
+  B('#7ec850', x0, GROUND - 6, x1-x0, 6);
+  B('#b5835a', x0, GROUND, x1-x0, y1-GROUND); B('#946640', x0, GROUND, x1-x0, 1);
+  for (let i = 0; i < 40; i++) B(i % 2 ? '#a07048' : '#c49468', x0 + ((i * 53) % (x1-x0)), GROUND + 4 + ((i * 17) % (y1-GROUND-4)), 2, 1);
+  if (paintFg) paintFg(B);
+  bctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/* ---------- Fahrzeuge ---------- */
+function drawExcavator(x, y, tx, ty, open) {         // Bagger nach rechts, Schaufel bei (tx, ty)
+  R('rgba(0,0,0,.2)', x - 1, y - 1, 34, 3);
+  R('#222', x, y - 7, 32, 7); R('#555', x + 1, y - 6, 30, 5); for (let i = 0; i < 4; i++) R('#888', x + 3 + i * 8, y - 5, 3, 3);
+  R('#c48a00', x + 3, y - 19, 24, 12); R('#f5b700', x + 4, y - 18, 22, 10);
+  R('#c48a00', x + 4, y - 31, 14, 13); R('#f5b700', x + 5, y - 30, 12, 11); R('#9fe3ff', x + 7, y - 28, 8, 6); R('#e6f8ff', x + 7, y - 28, 2, 6);
+  R('#555', x + 22, y - 24, 2, 6);
+  const px = x + 24, py = y - 16, ex = (px + tx) / 2 + 6, ey = Math.min(py, ty) - 18;
+  ctx.lineCap = 'square'; ctx.strokeStyle = '#c48a00'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.lineTo(tx, ty - 4); ctx.stroke();
+  ctx.strokeStyle = '#f5b700'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.lineTo(tx, ty - 4); ctx.stroke();
+  R('#555', tx - 4, ty - 5, 9, 6); R('#888', tx - 3, ty - 4, 7, 4);
+  if (open) R('#6b4a2b', tx - 3, ty - 6, 7, 3);       // Erde in der Schaufel
+}
+function drawMixer(x, y, rot, pouring) {             // Betonmischer nach rechts, Rutsche hinten links
+  R('rgba(0,0,0,.2)', x - 2, y - 1, 50, 3);
+  R('#333', x, y - 8, 46, 4);
+  R('#c0392b', x + 34, y - 24, 13, 16); R('#e04a3a', x + 35, y - 23, 11, 5); R('#9fe3ff', x + 37, y - 21, 7, 5);
+  R('#bbb', x + 4, y - 26, 28, 17); R('#ddd', x + 5, y - 25, 26, 15);
+  for (let i = 0; i < 4; i++) { const sx = x + 6 + ((i * 7 + rot) % 24); R('#e03b3b', sx, y - 25, 2, 15); }
+  R('#888', x - 2, y - 20, 7, 3);                     // Rutsche
+  R('#666', x - 8, y - 17, 8, 3); R('#888', x - 8, y - 17, 8, 1);
+  for (const wx of [x + 6, x + 22, x + 38]) { R('#222', wx - 1, y - 6, 9, 7); R('#888', wx + 2, y - 3, 3, 2); }
+}
+function drawCrane(tx, hookX, hookY, time) {           // Turm bei tx, Ausleger oben
+  const top = 6, base = GROUND;
+  R('#c48a00', tx, top, 6, base - top); R('#f5b700', tx + 1, top, 4, base - top);
+  for (let y = top + 4; y < base; y += 8) { R('#c48a00', tx + 1, y, 4, 1); }
+  R('#c48a00', 18, top - 2, tx - 10, 4); R('#f5b700', 18, top - 1, tx - 10, 2);
+  R('#555', tx + 4, top - 4, 16, 8); R('#888', tx + 6, top - 3, 12, 6);           // Gegengewicht
+  R('#c48a00', tx - 2, top - 10, 10, 8); R('#9fe3ff', tx, top - 8, 6, 4);           // Führerhaus
+  R('#333', hookX - 4, top + 2, 8, 3);                                               // Laufkatze
+  R('#333', hookX, top + 5, 1, hookY - top - 5);
+  R('#e0a800', hookX - 2, hookY, 5, 3);
+  R('#7a4a22', tx - 30, base - 8, 26, 8);                                           // Stapel Holz
+  for (let i = 0; i < 4; i++) R('#a0673a', tx - 29, base - 7 + i * 2, 24, 1);
+}
+
+/* ---------- Haus (Bauzustand) ---------- */
+// Lokale Einheiten: Breite 64 (x −32…32), Boden bei y = 0, Grube bis y = +10, Wände bis −36, Dachspitze −62
+const DIG_COLS = 6, DIG_ROWS = 2, WALL_ROWS = 6, TILE_ROWS = 5;
+function drawHouse(st, cx, gy, k, o = {}) {
+  ctx.save(); ctx.translate(cx, gy); ctx.scale(k, k);
+  const Rl = (c, x, y, w, h) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  const step = st;
+  // 1 Grube
+  if (step === 0) {
+    for (let r = 0; r < DIG_ROWS; r++) for (let c = 0; c < DIG_COLS; c++) {
+      const x = -36 + c * 12, y = r * 5, dug = o.dug && o.dug[r * DIG_COLS + c];
+      Rl(dug ? '#4f3520' : '#946640', x, y, 12, 5);
+      if (!dug) { Rl('#b5835a', x + 1, y + 1, 10, 3); }
+    }
+    if (!o.dug) for (let x = -36; x < 36; x += 6) Rl('#fff', x, -1, 3, 1);       // abgesteckt
+    for (const px of [-37, 36]) { Rl('#d35400', px, -6, 1, 7); Rl('#fff', px, -5, 1, 1); }
+  } else {
+    Rl('#4f3520', -36, 0, 72, 10);
+  }
+  // 2 Beton
+  const fill = step >= 2 ? 1 : (o.fill || 0);
+  if (step === 1 || (step === 0 && false)) { Rl('#a0673a', -38, -6, 2, 16); Rl('#a0673a', 36, -6, 2, 16); }   // Schalung
+  if (fill > 0) { const top = 10 - 16 * fill; Rl('#8e959c', -36, top, 72, 10 - top); Rl('#b0b6bc', -36, top, 72, 1); }
+  if (step === 1) { for (let x = -36; x < 36; x += 6) Rl('#ffd23f', x, -6, 3, 1); }             // Linie: bis hier voll
+  // 3 Mauer
+  const rows = step >= 3 ? WALL_ROWS : (o.rows || 0), drop = o.dropRow;
+  const hole = (r, c0) => {
+    const y = -6 - (r + 1) * 5, x = c0;
+    const inWin = (x >= -24 && x < -12 || x >= 12 && x < 24) && r >= 2 && r <= 4;
+    const inDoor = x >= -5 && x < 5 && r <= 3;
+    return inWin || inDoor;
+  };
+  for (let r = 0; r < WALL_ROWS; r++) {
+    const y = -6 - (r + 1) * 5, off = r % 2 ? 5 : 0;
+    for (let x = -30 - off; x < 30; x += 10) {
+      const x0 = Math.max(-30, x), x1 = Math.min(30, x + 10);
+      if (x1 <= x0) continue;
+      let yy = y;
+      if (r >= rows) {
+        if (r === rows && drop) { const i = Math.floor((x + 35) / 10); const t = clamp(drop.t * 8 - i * 0.6, 0, 1); if (t <= 0) continue; yy = y - (1 - t) * 30; }
+        else { if (step === 2) Rl('rgba(255,255,255,.18)', x0, y, x1 - x0, 5); continue; }
+      }
+      for (let xi = x0; xi < x1; xi += 2) {}       // (Platzhalter)
+      if (!hole(r, x0) || !hole(r, x1 - 1)) {
+        const segs = [];
+        let s = x0;
+        for (let xx = x0; xx <= x1; xx++) { const h = xx < x1 && hole(r, xx); if (h || xx === x1) { if (xx > s) segs.push([s, xx]); s = xx + 1; } }
+        for (const [a, b] of segs) { Rl('#8e2a20', a, yy, b - a, 5); Rl('#c0392b', a + 0.5, yy + 0.5, b - a - 1, 3.5); Rl('#e06a5a', a + 1, yy + 0.5, b - a - 2, 1); }
+      }
+    }
+  }
+  // 5 Fenster und Tür (nach dem Dach)
+  if (step >= 5 || o.windows) {
+    const p = o.windows != null ? clamp(o.windows, 0, 1) : 1;
+    if (p > 0) {
+      for (const wx of [-24, 12]) { Rl('#5a3b1c', wx, -31, 12, 15); Rl('#9fe3ff', wx + 1, -30, 10 * p, 13); Rl('#5a3b1c', wx + 5.5, -30, 1, 13); Rl('#5a3b1c', wx + 1, -24, 10, 1); Rl('#ff6b8a', wx + 1, -16, 3, 1); }
+      Rl('#5a3b1c', -5, -26, 10, 20); Rl('#7a4a22', -4, -25, 8 * p, 19); Rl('#ffd23f', 2, -16, 1, 1);
+    }
+  }
+  // 4 Dachstuhl (Holzgerüst)
+  const trusses = step >= 4 ? 3 : (o.trusses || 0), covered = step >= 5 || (o.tileRows || 0) > 0;
+  for (let i = trusses - 1; i >= 0; i--) {
+    if (covered && i > 0) continue;               // hintere Gerüste verschwinden unter den Ziegeln
+    const dx = i * 3, dy = -i * 2;
+    ctx.strokeStyle = i ? '#7a4a22' : '#a0673a'; ctx.lineWidth = 2.2; ctx.lineCap = 'square';
+    ctx.beginPath(); ctx.moveTo(-34 + dx, -36 + dy); ctx.lineTo(0 + dx, -62 + dy); ctx.lineTo(34 + dx, -36 + dy); ctx.closePath(); ctx.stroke();
+    ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(0 + dx, -62 + dy); ctx.lineTo(0 + dx, -36 + dy); ctx.moveTo(-17 + dx, -49 + dy); ctx.lineTo(0 + dx, -40 + dy); ctx.lineTo(17 + dx, -49 + dy); ctx.stroke();
+  }
+  if (trusses >= 3 && step < 5) { ctx.strokeStyle = '#a0673a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -62); ctx.lineTo(6, -66); ctx.stroke(); }   // Firstbalken
+  // Richtkranz
+  if ((step === 4 || o.wreath) && step < 5) {
+    const wy = -62 - (o.wreath != null ? 8 * clamp(o.wreath, 0, 1) : 8), t = o.time || 0;
+    Rl('#6b4423', -1, wy, 2, 10); Rl('#2e7a2a', -5, wy - 6, 10, 5); Rl('#2e7a2a', -3, wy - 10, 6, 5); Rl('#5cb64f', -2, wy - 9, 2, 3);
+    ['#e03b3b', '#ffd23f', '#3fa9f5', '#ff8ad8'].forEach((c, i) => { const sw = Math.sin(t / 150 + i) * 2; Rl(c, -4 + i * 2.5 + sw, wy - 2, 1, 7 + i % 2 * 2); });
+  }
+  // 5 Dachziegel
+  const tiles = step >= 5 ? TILE_ROWS : (o.tileRows || 0);
+  for (let r = 0; r < tiles; r++) {
+    const yb = -36 - r * 5.2, yt = yb - 5.2, half = 36 * (1 - (r * 5.2) / 26) , half2 = 36 * (1 - ((r + 1) * 5.2) / 26);
+    const slide = o.tileSlide != null && r === tiles - 1 ? (1 - clamp(o.tileSlide, 0, 1)) * 60 : 0;
+    ctx.fillStyle = '#8e1f1f'; ctx.beginPath(); ctx.moveTo(-half + slide, yb); ctx.lineTo(half + slide, yb); ctx.lineTo(half2 + slide, yt); ctx.lineTo(-half2 + slide, yt); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = r % 2 ? '#c0392b' : '#d0453a'; ctx.beginPath(); ctx.moveTo(-half + 1 + slide, yb - 1); ctx.lineTo(half - 1 + slide, yb - 1); ctx.lineTo(half2 - 1 + slide, yt + 0.5); ctx.lineTo(-half2 + 1 + slide, yt + 0.5); ctx.closePath(); ctx.fill();
+    for (let x = -half + 4; x < half - 2; x += 5) Rl('#8e1f1f', x + slide, yb - 4.5, 0.7, 3.5);
+  }
+  if (step >= 5) { Rl('#555', 16, -58, 6, 10); Rl('#777', 16, -59, 6, 2); }      // Schornstein
+  ctx.restore();
+}
+
+/* ---------- Szene: Bauhof mit Bauplatz ---------- */
+const Hub = (() => {
+  const SITE = { x: 100, y: 40, w: 98, h: 80 }, HCX = 150, HK = 0.78;
+  let celebrate = 0;
+  function build() {
+    stageBg(B => {
+      // Bauhof links: Container-Büro, Schild, Zaun
+      B('#2a6fdb', 6, 74, 34, 22); B('#3f7be0', 7, 75, 32, 6); B('#173f80', 6, 95, 34, 2);
+      B('#9fe3ff', 10, 82, 8, 6); B('#5a3b1c', 26, 82, 8, 14);
+      B('#f5b700', 6, 66, 34, 8); for (let x = 8; x < 38; x += 6) B('#222', x, 66, 3, 8);   // Warnstreifen
+      // Bauplatz-Zaun
+      for (let x = SITE.x; x <= SITE.x + SITE.w; x += 8) { B('#d35400', x, GROUND - 14, 2, 14); }
+      B('#ffffff', SITE.x, GROUND - 12, SITE.w, 2); B('#d35400', SITE.x, GROUND - 6, SITE.w, 2);
+    });
+  }
+  function enter() {
+    build(); show('bhud'); hide('steppill'); hide('pausebtn'); hud();
+    const k = $('startKnopf'); if (k) k.style.display = '';
+    setTimeout(() => sayWord(house().step >= 5 ? 'house' : 'site'), 400);
+  }
+  function hud() { $('starcount').textContent = save.stars; }
+  function onPointer(type, x, y) {
+    if (type !== 'down') return true;
+    const [sx, sy] = toStage(x, y);
+    if (sx > SITE.x - 6 && sx < SITE.x + SITE.w + 6 && sy > 10 && sy < GROUND + 14) {
+      const st = house().step;
+      if (st >= 5) { celebrate = 2; sfx.win(); confetti(); sayWord('house'); }
+      else { sfx.enter(); go(STEP_SCENES[STEPS[st]]); }
+    }
+    return true;
+  }
+  function update(dt) { celebrate = Math.max(0, celebrate - dt); }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    ctx.setTransform(S, 0, 0, S, OX, OY);
+    const st = house().step;
+    // Fahrzeuge im Bauhof (das nächste, das gebraucht wird, hüpft)
+    const need = STEPS[st], hop = n => need === n ? Math.round(Math.abs(Math.sin(time / 200)) * 3) : 0;
+    drawMixer(50, GROUND + 18 - hop('concrete'), (time / 40) % 24, false);
+    drawExcavator(2, GROUND + 28 - hop('dig'), 40, GROUND + 22 - hop('dig'), false);
+    // kleiner Kran am Bauplatz, Ziegelpalette
+    R('#c48a00', 186, 30, 3, GROUND - 30); R('#c48a00', 150, 28, 40, 3); R('#333', 160, 31, 1, 10 - hop('frame'));
+    drawHouse(st, HCX, GROUND, HK, { time });
+    if (st < 5) drawArrow(HCX - 3, GROUND - 70 - Math.abs(Math.sin(time / 250)) * 5);
+    if (celebrate > 0) for (let i = 0; i < 2; i++) sp(HCX + rnd(-30, 30), GROUND - 60, rnd(-20, 20), rnd(-40, -10), 1, pick(['#ffd23f', '#ff6b8a', '#3fa9f5']), 40);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function resize() { build(); }
+  return { enter, update, draw, resize, onPointer };
+})();
+
+/* ---------- Gemeinsames für die Bauschritte ---------- */
+const HC = 112, HG = GROUND, HKS = 1.3;          // Haus in den Bauschritten: Mitte, Boden, Vergrößerung
+let stepDone = false, winT = null;
+function stepEnter(key) {
+  stepDone = false; show('bhud'); show('steppill'); show('pausebtn');
+  $('stepword').textContent = WORDS[key][0]; $('steppill').dataset.say = key;
+  const k = $('startKnopf'); if (k) k.style.display = 'none';
+  $('starcount').textContent = save.stars;
+  setTimeout(() => sayWord(key), 350);
+}
+function finishStep(n, key, big) {
+  if (stepDone) return; stepDone = true;
+  Hof.load(); house().step = Math.max(house().step, n); save.stars += STEP_STARS; Hof.persist();
+  $('starcount').textContent = save.stars;
+  setTimeout(() => {
+    hide('bhud');
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(STEP_STARS); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = '+' + STEP_STARS + ' ' + WORDS[key][0];
+    show('gwin'); sfx.win(); confetti(); if (big) setTimeout(confetti, 600);
+    setTimeout(() => sayWord(key), 1200);
+    winT = setTimeout(backToHub, 4000);
+  }, big ? 1400 : 700);
+}
+function backToHub() { clearTimeout(winT); hide('gwin'); hide('gpause'); go(Hub); }
+$('winhub').addEventListener('click', backToHub);
+$('tohub').addEventListener('click', backToHub);
+let paused = false;
+$('pausebtn').addEventListener('click', () => { paused = true; show('gpause'); });
+$('gresume').addEventListener('click', () => { paused = false; hide('gpause'); });
+const local = (x, y) => { const [sx, sy] = toStage(x, y); return [(sx - HC) / HKS, (sy - HG) / HKS, sx, sy]; };
+
+/* 1 BAGGERN: Felder der Grube antippen, der Bagger schaufelt sie aus */
+const Dig = (() => {
+  let dug, arm, pile;
+  function enter() { stageBg(); dug = Array(DIG_COLS * DIG_ROWS).fill(false); arm = null; pile = 0; paused = false; stepEnter('dig'); }
+  function cellCenter(i) { const c = i % DIG_COLS, r = (i / DIG_COLS) | 0; return [HC + (-36 + c * 12 + 6) * HKS, HG + (r * 5 + 2.5) * HKS]; }
+  function onPointer(type, x, y) {
+    if (type !== 'down' || paused || stepDone || arm) return true;
+    const [lx, ly, sx, sy] = local(x, y);
+    if (lx < -44 || lx > 44 || ly < -20 || ly > 20) return true;
+    let best = -1, bd = 1e9;
+    dug.forEach((d, i) => { if (d) return; const [cx, cy] = cellCenter(i), dd = Math.hypot(cx - sx, cy - sy); if (dd < bd) { bd = dd; best = i; } });
+    if (best >= 0) { arm = { i: best, t: 0 }; sfx.enter(); }
+    return true;
+  }
+  function update(dt) {
+    if (paused || !arm) return;
+    arm.t += dt;
+    if (arm.t >= 0.35 && !arm.done) {
+      arm.done = true; dug[arm.i] = true; sfx.clod();
+      const [cx, cy] = cellCenter(arm.i); for (let k = 0; k < 10; k++) sp(cx, cy, rnd(-25, 25), rnd(-50, -15), rnd(.4, .7), pick(['#6b4a2b', '#8a6440', '#4f3520']), 120);
+    }
+    if (arm.t >= 0.8) { arm = null; pile++; sfx.clod(); if (dug.every(Boolean)) finishStep(1, 'dig'); }
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0); ctx.setTransform(S, 0, 0, S, OX, OY);
+    drawHouse(0, HC, HG, HKS, { dug });
+    // Erdhaufen links
+    const ph = Math.min(22, 4 + pile * 1.6);
+    ctx.fillStyle = '#6b4a2b'; ctx.beginPath(); ctx.moveTo(4, HG + 2); ctx.lineTo(18, HG + 2 - ph); ctx.lineTo(34, HG + 2); ctx.fill();
+    // Bagger: Schaufel fährt zum Feld und zurück
+    let tx = 52, ty = HG - 8, full = false;
+    if (arm) {
+      const [cx, cy] = cellCenter(arm.i), t = arm.t;
+      if (t < 0.35) { const k = t / 0.35; tx = 52 + (cx - 52) * k; ty = HG - 8 + (cy - (HG - 8)) * k; }
+      else { const k = Math.min(1, (t - 0.35) / 0.45); tx = cx + (24 - cx) * k; ty = cy + (HG - 20 - cy) * k - Math.sin(k * Math.PI) * 14; full = k < 0.95; }
+    }
+    drawExcavator(14, HG + 22, tx, ty, full);
+    if (!arm && !stepDone) { const i = dug.findIndex(d => !d); if (i >= 0) { const [cx, cy] = cellCenter(i); drawArrow(cx - 3, cy - 22 - Math.abs(Math.sin(time / 250)) * 4); } }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  return { enter, update, draw, resize: () => stageBg(), onPointer };
+})();
+
+/* 2 BETON: Finger auf den Bildschirm halten (oder tippen) – Beton läuft in die Schalung bis zur gelben Linie */
+const Pour = (() => {
+  let fill, holding, burst, rot;
+  function enter() { stageBg(); fill = 0; holding = false; burst = 0; rot = 0; paused = false; stepEnter('concrete'); }
+  function onPointer(type) {
+    if (paused || stepDone) return true;
+    if (type === 'down') { holding = true; burst = 0.5; sfx.pour(); }
+    if (type === 'up') holding = false;
+    return true;
+  }
+  function update(dt) {
+    if (paused || stepDone) return;
+    const on = holding || burst > 0; burst = Math.max(0, burst - dt); rot += dt * (on ? 60 : 15);
+    if (on) {
+      fill = Math.min(1, fill + dt / 4.5);
+      if (Math.random() < .6) sp(67, HG - 2, rnd(10, 40), rnd(-5, 5), .5, pick(['#8e959c', '#a8aeb4']), 60);
+      if (Math.random() < .03) sfx.pour();
+      if (fill >= 1) { sfx.load(); finishStep(2, 'concrete'); }
+    }
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0); ctx.setTransform(S, 0, 0, S, OX, OY);
+    drawHouse(1, HC, HG, HKS, { fill });
+    const on = holding || burst > 0;
+    ctx.save(); ctx.translate(62, 0); ctx.scale(-1, 1); drawMixer(0, HG + 2, rot % 24, on); ctx.restore();   // Rutsche rechts zur Grube
+    if (on) { R('#8e959c', 66, HG - 14, 3, 16); R('#a8aeb4', 66, HG - 14, 1, 16); }
+    if (!on && !stepDone) { const p = 0.5 + Math.abs(Math.sin(time / 300)) * 0.5; ctx.globalAlpha = p; drawArrow(HC - 3, HG - 30); ctx.globalAlpha = 1; }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  return { enter, update, draw, resize: () => stageBg(), onPointer };
+})();
+
+/* 3 MAUER: jedes Tippen setzt eine Reihe Steine */
+const Wall = (() => {
+  let rows, drop;
+  function enter() { stageBg(); rows = 0; drop = null; paused = false; stepEnter('wall'); }
+  function onPointer(type) {
+    if (type !== 'down' || paused || stepDone || drop || rows >= WALL_ROWS) return true;
+    drop = { t: 0 }; sfx.click();
+    return true;
+  }
+  function update(dt) {
+    if (paused || !drop) return;
+    drop.t += dt;
+    if (drop.t >= 0.75) { drop = null; rows++; sfx.clod(); for (let k = 0; k < 6; k++) sp(HC + rnd(-40, 40), HG - (6 + rows * 5) * HKS, rnd(-10, 10), rnd(-15, -5), .4, '#d8c8a8', 40); if (rows >= WALL_ROWS) finishStep(3, 'wall'); }
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0); ctx.setTransform(S, 0, 0, S, OX, OY);
+    drawHouse(2, HC, HG, HKS, { rows, dropRow: drop });
+    // Steinpalette links
+    R('#7a4a22', 10, HG - 3, 28, 4);
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 3; i++) { R('#8e2a20', 11 + i * 9, HG - 8 - j * 5, 8, 5); R('#c0392b', 11.5 + i * 9, HG - 7.5 - j * 5, 7, 3.5); }
+    if (!drop && !stepDone) drawArrow(HC - 3, HG - (12 + rows * 5) * HKS - 14 - Math.abs(Math.sin(time / 250)) * 4);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  return { enter, update, draw, resize: () => stageBg(), onPointer };
+})();
+
+/* 4 DACHSTUHL: der Kran schwenkt das Holzgerüst – tippen, wenn es über dem Haus ist. Danach RICHTFEST */
+const Frame = (() => {
+  const TX = 184, HOOK_TOP = 14, ON_TOP = HG - 36 * HKS;    // Unterkante Gerüst sitzt auf der Mauer
+  let trusses, t, fallT, miss, fest;
+  const hookX = () => HC + Math.sin(t * 1.1) * 58;
+  window.Frame_hook = hookX;                       // (für automatische Tests)
+  function enter() { stageBg(); trusses = 0; t = -1.2; fallT = null; miss = 0; fest = null; paused = false; stepEnter('frame'); }
+  function onPointer(type) {
+    if (type !== 'down' || paused || stepDone || fallT !== null || fest) return true;
+    fallT = 0; miss = Math.abs(hookX() - HC) > 12 ? 1 : 0; sfx.click();
+    return true;
+  }
+  function update(dt) {
+    if (paused) return;
+    if (fest) { fest.t += dt; if (Math.random() < .3) sp(HC + rnd(-20, 20), HG - 90, rnd(-20, 20), rnd(-30, 0), 1, pick(['#e03b3b', '#ffd23f', '#3fa9f5', '#ff8ad8']), 30); return; }
+    if (fallT === null) { t += dt; return; }
+    fallT += dt;
+    if (!miss && fallT >= 0.45) {
+      trusses++; fallT = null; sfx.load(); t = -1.2;
+      for (let k = 0; k < 8; k++) sp(HC + rnd(-30, 30), ON_TOP, rnd(-15, 15), rnd(-25, -5), .4, '#e8c27a', 60);
+      if (trusses >= 3) { fest = { t: 0 }; setTimeout(() => { sfx.unlock(); sayWord('richtfest'); confetti(); }, 500); finishStep(4, 'richtfest', true); }
+    } else if (miss && fallT >= 0.9) { fallT = null; }
+    if (miss && fallT !== null && fallT > 0.3 && fallT < 0.32) sfx.bonk();
+  }
+  function trussPos() {                            // Gerüst am Haken bzw. fallend
+    const hx = hookX(), carryY = ON_TOP - 8;
+    if (fallT === null) return [hx, carryY];
+    if (!miss) { const k = Math.min(1, fallT / 0.45); return [hx + (HC - hx) * k, carryY + (ON_TOP - carryY) * k * k]; }
+    const k = fallT < 0.3 ? fallT / 0.3 : 1 - (fallT - 0.3) / 0.6;   // daneben: kurz runter, wieder hoch
+    return [hx, carryY + 16 * Math.max(0, k)];
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0); ctx.setTransform(S, 0, 0, S, OX, OY);
+    drawHouse(3, HC, HG, HKS, { trusses, wreath: fest ? Math.min(1, fest.t / 1.2) : undefined, time });
+    const over = Math.abs(hookX() - HC) <= 12 && fallT === null && !fest;
+    if (!fest && trusses < 3) {                   // Zielmarke auf der Mauer
+      ctx.strokeStyle = over ? '#7ed957' : 'rgba(255,255,255,.7)'; ctx.lineWidth = over ? 2 : 1; ctx.setLineDash([3, 2]);
+      ctx.beginPath(); ctx.moveTo(HC - 34 * HKS, ON_TOP); ctx.lineTo(HC, ON_TOP - 26 * HKS); ctx.lineTo(HC + 34 * HKS, ON_TOP); ctx.stroke(); ctx.setLineDash([]);
+    }
+    const [px, py] = trussPos();
+    const showTruss = !fest && trusses < 3;
+    drawCrane(TX, showTruss ? px : HC, showTruss ? py - 26 * HKS - 4 : HOOK_TOP + 20, time);
+    if (showTruss) {
+      ctx.save(); ctx.translate(px, py); ctx.scale(HKS, HKS);
+      ctx.strokeStyle = '#a0673a'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(-34, 0); ctx.lineTo(0, -26); ctx.lineTo(34, 0); ctx.closePath(); ctx.stroke();
+      ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(0, -26); ctx.lineTo(0, 0); ctx.moveTo(-17, -13); ctx.lineTo(0, -4); ctx.lineTo(17, -13); ctx.stroke();
+      ctx.restore();
+      R('#333', px - 10 * HKS, py - 26 * HKS - 4, 1, 4); R('#333', px + 10 * HKS, py - 26 * HKS - 4, 1, 4); R('#333', px - 10 * HKS, py - 26 * HKS - 4, 20 * HKS, 1);
+    }
+    for (let i = 0; i < 3; i++) R(i < trusses ? '#a0673a' : 'rgba(0,0,0,.25)', 8 + i * 9, 30, 7, 7);   // 3 Gerüste
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  return { enter, update, draw, resize: () => stageBg(), onPointer };
+})();
+
+/* 5 DACH: jedes Tippen deckt eine Reihe Ziegel, danach kommen Fenster und Tür */
+const Roof = (() => {
+  let rows, slide, win;
+  function enter() { stageBg(); rows = 0; slide = null; win = null; paused = false; stepEnter('roof'); }
+  function onPointer(type) {
+    if (type !== 'down' || paused || stepDone || slide !== null || rows >= TILE_ROWS) return true;
+    rows++; slide = 0; sfx.click();
+    return true;
+  }
+  function update(dt) {
+    if (paused) return;
+    if (slide !== null) { slide += dt * 2.5; if (slide >= 1) { slide = null; sfx.clod(); if (rows >= TILE_ROWS) { win = 0; } } }
+    if (win !== null) { win += dt; if (win > 0.2 && win < 0.25) sfx.unlock(); if (win >= 0.9 && !stepDone) { finishStep(5, 'house', true); } }
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0); ctx.setTransform(S, 0, 0, S, OX, OY);
+    drawHouse(4, HC, HG, HKS, { tileRows: rows, tileSlide: slide, windows: win !== null ? win / 0.6 : undefined, time });
+    // Ziegelstapel rechts
+    R('#7a4a22', 168, HG - 3, 26, 4); for (let j = 0; j < 3; j++) R(j % 2 ? '#c0392b' : '#d0453a', 169, HG - 6 - j * 3, 24, 3);
+    if (slide === null && rows < TILE_ROWS && !stepDone) drawArrow(HC - 3, HG - (40 + rows * 5.2) * HKS - 14 - Math.abs(Math.sin(time / 250)) * 4);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  return { enter, update, draw, resize: () => stageBg(), onPointer };
+})();
+
+const STEP_SCENES = { dig: Dig, concrete: Pour, wall: Wall, frame: Frame, roof: Roof };
+startLoop(Hub);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

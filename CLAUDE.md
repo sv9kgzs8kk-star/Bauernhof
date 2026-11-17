@@ -7,13 +7,13 @@ Pixel-Spiele für Kinder ab 4 Jahren, gehostet auf GitHub Pages und auf dem iPad
 index.html                  ← Startseite: Kacheln je Welt (WELTEN-Liste, aktiv:false = versteckt;
                               nur eine aktive Welt → direkte Weiterleitung)
 hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
+baustelle/index.html        ← Welt BAUSTELLE: Bauhof + Wohnhaus in 5 Schritten (eine Seite, Szenen Hub/Dig/Pour/Wall/Frame/Roof)
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
 gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlesen, Steuerung, Layout, Laden, goHof()
 gemeinsam/basis.css         ← gemeinsames Aussehen
 gemeinsam/feldspiel.js      ← Feld- und Wiesen-Spiele
 gemeinsam/startseite.js     ← Knopf „zur Startseite“ (1 s halten) für die Hauptseite jeder Welt
-baustelle/index.html        ← Welt BAUSTELLE: Bauhof + Wohnhaus in 5 Schritten (eine Seite, Szenen Hub/Dig/Pour/Wall/Frame/Roof)
 spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
 ```
 - Vom Hof ins Spiel über `PAGES` in `hof.html`. Zurück mit `goHof('<name>')`, die Seiten setzen `window.HOF_URL = '../../hof.html'`.

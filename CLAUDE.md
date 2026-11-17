@@ -48,7 +48,13 @@ spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
   - `claude`: Pull Request von Claude
 - **Nie direkt auf `main` pushen.** Jede Änderung kommt über einen Pull Request mit dem Label `claude`. Michael testet auf dem iPad und führt den PR selbst zusammen. Das ist die Freigabe zum Live-Schalten.
 - Es ist immer höchstens **ein** offener `claude`-PR erlaubt. Solange einer offen ist, werden nur Kommentare dazu eingearbeitet und keine neuen Features gebaut.
-- Die PR-Beschreibung ist auf Deutsch, für Nicht-Programmierer geschrieben und hat zwei Teile: **Was ist neu** und **Bitte auf dem iPad testen** (nummerierte Schritte). Dazu `Closes #<issue>`.
+- Zweignamen ohne Schrägstrich: `feature-<nummer>-<kurzname>`.
+- Die PR-Beschreibung ist auf Deutsch, für Nicht-Programmierer geschrieben und hat drei Teile:
+  - **Was ist neu**
+  - **Testversion**: Link `https://raw.githack.com/sv9kgzs8kk-star/Bauernhof/<zweig>/<seite>`, direkt auf die geänderte Seite (z. B. `stadt/index.html`)
+  - **Bitte auf dem iPad testen** (nummerierte Schritte)
+
+  Dazu `Closes #<issue>`. Michael öffnet die Testversion in Safari, nicht in der Home-Bildschirm-App. Die Testversion hat einen eigenen Spielstand, dafür startet man dort mit 0 Sternen. Testschritte, die Sterne brauchen, müssen das berücksichtigen.
 - Vor dem PR mit Headless-Chrome testen (`/usr/bin/google-chrome` über Playwright, lokaler `python3 -m http.server`). Alle geänderten Seiten laden, es dürfen keine JS-Fehler auftreten, Screenshots ansehen.
 - GitHub nur über die REST-API (`gh api repos/sv9kgzs8kk-star/Bauernhof/...`). GraphQL ist gesperrt, `gh pr create` funktioniert also nicht.
 - Neue Vorschläge sind klein genug für eine Nacht und mindestens einer davon verbessert etwas Bestehendes, statt nur Neues hinzuzufügen.

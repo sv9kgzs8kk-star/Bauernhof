@@ -33,6 +33,11 @@ var WELTEN = [
   }
   location.replace(ziel.url + '#' + h);
 })();
+/* Nur eine Welt aktiv? Dann ohne Umweg direkt dorthin (kein Extra-Tipp). */
+(function () {
+  var aktiv = WELTEN.filter(function (w) { return w.aktiv; });
+  if (aktiv.length === 1 && !location.hash) location.replace(aktiv[0].url);
+})();
 </script>
 <style>
   html, body { margin: 0; height: 100%; background: #8fd3ff; overflow: hidden;

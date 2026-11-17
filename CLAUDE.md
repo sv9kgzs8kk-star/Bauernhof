@@ -1,0 +1,54 @@
+# Unsere Spiele – Regeln für Claude
+
+Pixel-Spiele für Kinder ab 4 Jahren, gehostet auf GitHub Pages und auf dem iPad als Home-Bildschirm-App gespielt. Die Kinder können noch nicht lesen. Der Vater (Michael) programmiert nicht selbst: Er testet auf dem iPad und entscheidet über GitHub (Issues, Pull Requests).
+
+## Ordnerstruktur
+```
+index.html                  ← Startseite: Kacheln je Welt (WELTEN-Liste, aktiv:false = versteckt;
+                              nur eine aktive Welt → direkte Weiterleitung)
+hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
+manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
+gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
+gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlesen, Steuerung, Layout, Laden, goHof()
+gemeinsam/basis.css         ← gemeinsames Aussehen
+gemeinsam/feldspiel.js      ← Feld- und Wiesen-Spiele
+gemeinsam/startseite.js     ← Knopf „zur Startseite“ (1 s halten) für die Hauptseite jeder Welt
+spiele/feld|wiese|schafe|kuehe/index.html  ← Bauernhof-Minispiele
+```
+- Vom Hof ins Spiel über `PAGES` in `hof.html`. Zurück mit `goHof('<name>')`, die Seiten setzen `window.HOF_URL = '../../hof.html'`.
+- Neue Welten bekommen einen eigenen Ordner (z. B. `stadt/index.html`, Minispiele in `stadt/spiele/<name>/`). Auf der Startseite werden sie in `WELTEN` eingetragen.
+- Neue Minispiele binden `sterne.js`, `basis.js` und `basis.css` mit `?v=JJJJMMTTx` ein. Bei jeder Änderung an `gemeinsam/` die Versionsnummer in **allen** Seiten erhöhen.
+
+## Regeln beim Programmieren
+1. Nur relative Links, keine externen Dateien oder CDNs. Alles muss offline aus dem Repository laufen.
+2. Den Spielstand nur über `Hof.addStars/spend/addWool/addHay/addMilk` (bzw. neue Funktionen in `sterne.js`) ändern. Der Schlüssel `bauernhof.spielstand` gilt für **alle** Welten, damit die Sterne gemeinsam zählen.
+3. **Spielstand nur erweitern, nie umbauen oder umbenennen.** Neue Felder brauchen einen Standardwert, wenn sie fehlen. Bestehende Sterne der Kinder dürfen nie verloren gehen.
+4. Jede Seite hat einen Haus-Knopf. Die App hat keinen Zurück-Knopf.
+5. Wörter in GROSSBUCHSTABEN anzeigen und normal vorlesen (`WORDS`, `say()`/`sayWord()`).
+6. Pixel-Symbole statt Emojis (`<i class="ico" data-ico="…">`, `setIco()`).
+7. Anzeigen und Knöpfe bekommen die Klasse `.hud`, in Spielen zusätzlich `gamehud`.
+8. `openShop()` nur zeigen, wenn man etwas kaufen kann oder etwas fehlt.
+9. Fahrspiele beherrschen Steuerkreuz **und** Antippen (`moverUpdate()`).
+10. Fehler erscheinen als rote Zeile unten.
+11. Kein Scheitern: Es gibt kein „verloren“, höchstens eine lustige Animation und einen neuen Versuch.
+12. Eine Spielrunde dauert höchstens 3–5 Minuten. Große Bauaufträge speichern den Fortschritt und lassen sich in Etappen spielen.
+
+## Vision (vom Vater festgelegt)
+- **Stadt/Bauhof als Herzstück:** Man startet am Bauhof und baut nach und nach eine Stadt: Gebäude (Wohnhaus, Bahnhof, Feuerwache …), Straßen, Brücken, Bahnstrecken. Ein fertig gebautes Gebäude lässt sich gegen Sterne freischalten und wird dann zu einer eigenen spielbaren Welt.
+- **Erstes Gebäude: Wohnhaus.** Danach kann man es einrichten (Möbel platzieren).
+- **Bauaufträge** bestehen aus Schritten mit wiederverwendbaren Mechaniken: GRABEN (Bagger, Zellen abtragen), GIESSEN (Betonmischer, Schalung füllen), STAPELN (Steine nach Muster setzen), HEBEN (Kran, Teil an markierte Stelle), BELEGEN (Fläche reihenweise füllen: Ziegel, Schotter, Schienen), ZUORDNEN (Fenster/Türen in Öffnungen). Ein Auftrag ist eine Datenliste von Schritten, keine eigene Seite pro Schritt.
+- **Der Bauernhof bleibt einzeln spielbar**, so wie er ist, bis die Stadt so weit ist.
+- Später weitere Welten: Feuerwache, Rettungswache, Polizei, Krankenhaus, Bahnhof, Flughafen.
+
+## Arbeitsweise (nächtlicher Lauf)
+- Labels:
+  - `vorschlag`: Idee, noch nicht entschieden
+  - `freigegeben`: bauen
+  - `in-arbeit`: wird gerade gebaut
+  - `claude`: Pull Request von Claude
+- **Nie direkt auf `main` pushen.** Jede Änderung kommt über einen Pull Request mit dem Label `claude`. Michael testet auf dem iPad und führt den PR selbst zusammen. Das ist die Freigabe zum Live-Schalten.
+- Es ist immer höchstens **ein** offener `claude`-PR erlaubt. Solange einer offen ist, werden nur Kommentare dazu eingearbeitet und keine neuen Features gebaut.
+- Die PR-Beschreibung ist auf Deutsch, für Nicht-Programmierer geschrieben und hat zwei Teile: **Was ist neu** und **Bitte auf dem iPad testen** (nummerierte Schritte). Dazu `Closes #<issue>`.
+- Vor dem PR mit Headless-Chrome testen (`/usr/bin/google-chrome` über Playwright, lokaler `python3 -m http.server`). Alle geänderten Seiten laden, es dürfen keine JS-Fehler auftreten, Screenshots ansehen.
+- GitHub nur über die REST-API (`gh api repos/sv9kgzs8kk-star/Bauernhof/...`). GraphQL ist gesperrt, `gh pr create` funktioniert also nicht.
+- Neue Vorschläge sind klein genug für eine Nacht und mindestens einer davon verbessert etwas Bestehendes, statt nur Neues hinzuzufügen.

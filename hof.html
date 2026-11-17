@@ -21,25 +21,36 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="gemeinsam/basis.css?v=20261117b">
+<link rel="stylesheet" href="gemeinsam/basis.css?v=20261117c">
 <title>Unser Bauernhof</title>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<!-- HUD Hof -->
-<div id="hubhud" class="hud hidden">
-  <div class="row" style="gap:6px">
+<!-- HUD Hof: Zähler oben neben dem Startseiten-Knopf, Fahrzeuge + Zahnrad links darunter -->
+<style>
+  #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
+  #hubstats{position:absolute;top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 96px);
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-height:68px}
+  #hubside{position:absolute;top:calc(env(safe-area-inset-top) + 100px);left:calc(env(safe-area-inset-left) + 10px);
+    display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+  #hubside .vbtns{flex-direction:column}
+  #menubtn.vbtn{display:flex;align-items:center;justify-content:center;font-size:clamp(28px,5vmin,42px)}
+</style>
+<div id="hubhud" class="hidden">
+  <div id="hubstats">
     <div class="pill" id="starpill" data-say="star" style="pointer-events:auto"><i class="ico" data-ico="star"></i> <span id="starcount">0</span></div>
     <div class="pill" id="woolpill" data-say="wool" style="pointer-events:auto"><i class="ico" data-ico="wool"></i> <span id="woolcount">0</span></div>
     <div class="pill" id="milkpill" data-say="milk" style="pointer-events:auto"><i class="ico" data-ico="milk"></i> <span id="milkcount">0</span></div>
     <div class="pill" id="haypill" data-say="hay" style="pointer-events:auto"><i class="ico" data-ico="hay"></i> <span id="haycount">0</span></div>
-    <button class="pill btn" id="menubtn" aria-label="Menü"><i class="ico" data-ico="gear"></i></button>
   </div>
-  <div class="vbtns">
-    <button class="vbtn" id="vb-person" aria-label="Bauer"><canvas width="34" height="34"></canvas></button>
-    <button class="vbtn" id="vb-tractor" aria-label="Traktor"><canvas width="34" height="34"></canvas></button>
-    <button class="vbtn" id="vb-combine" aria-label="Mähdrescher"><canvas width="34" height="34"></canvas></button>
+  <div id="hubside">
+    <div class="vbtns">
+      <button class="vbtn" id="vb-person" aria-label="Bauer"><canvas width="34" height="34"></canvas></button>
+      <button class="vbtn" id="vb-tractor" aria-label="Traktor"><canvas width="34" height="34"></canvas></button>
+      <button class="vbtn" id="vb-combine" aria-label="Mähdrescher"><canvas width="34" height="34"></canvas></button>
+    </div>
+    <button class="vbtn" id="menubtn" aria-label="Menü"><i class="ico" data-ico="gear"></i></button>
   </div>
 </div>
 
@@ -79,8 +90,8 @@ window.addEventListener('error', function (e) {
   </div>
 </div>
 
-<script src="gemeinsam/sterne.js?v=20261117b"></script>
-<script src="gemeinsam/basis.js?v=20261117b"></script>
+<script src="gemeinsam/sterne.js?v=20261117c"></script>
+<script src="gemeinsam/basis.js?v=20261117c"></script>
 <script>
 // Spiele, die als eigene Seite laufen (Feld, Wiese, Weide)
 const PAGES = { w: 'spiele/feld/index.html', m: 'spiele/wiese/index.html', g: 'spiele/schafe/index.html', K: 'spiele/kuehe/index.html' };
@@ -129,21 +140,22 @@ drawVehicleButtons();
    SZENE: BAUERNHOF
    ===================================================================== */
 // T Baum, h Haus, b Scheune, s Silo, = Weg, w Feld, p Schafstall, o Teich,
-// g Weidetor (→ Schafe hüten), m Wiese (→ Heu machen), w Feld (→ Ernten/Grubbern/Säen),
+// g Tor zur Schafweide (→ Schafe hüten), q Kuhweide, m Wiese (→ Heu machen), w Feld (→ Ernten/Grubbern/Säen),
 // B Scheunentor (→ Laden), K Melkstand-Tür (→ Kühe melken), k Melkstand
 const HUB_MAP = [
-  'TT.TTT.T',
+  'TT.T...T',
   'Thh.bbs.',
   '.hh.Bbs.',
   '========',
+  'ww=.gppp',
   'ww=..ppp',
-  'ww=..ppp',
-  'Tg=..ooT',
+  'T.=..ooT',
   'T.mmKkkT',
+  'T...qqqT',
 ];
 const Hub = (() => {
   let meadowRect, meadowVar = [];
-  let type, ox, oy, flock = [], penRect, fieldRect, gateRect, signRect, entering = false, started = false, uiOpen = false;
+  let type, ox, oy, flock = [], penRect, cowRect, fieldRect, gateRect, signRect, entering = false, started = false, uiOpen = false;
   let active = 'person', posKey = '', fieldVar = [], idleT = 0, boardT = 0;
   const ENT = {
     person:  { spr: PERSON,  m: null, speed: 2.8 },
@@ -222,7 +234,7 @@ const Hub = (() => {
     B('#2f6fa8',ppx+2,ppy+2,2*G-4,G-4); B('#3b82c4',ppx+3,ppy+3,2*G-6,G-6);
     B('#7cc0f0',ppx+8,ppy+8,6,1); B('#7cc0f0',ppx+26,ppy+14,7,1); B('#7cc0f0',ppx+17,ppy+17,3,1);
     B('#2e8b3a',ppx+38,ppy+5,5,4); B('#3fa34d',ppx+39,ppy+6,3,2);
-    const gx = (ox+1)*G, gy = (oy+6)*G;            // Weidetor
+    const gx = (ox+4)*G, gy = (oy+4)*G;            // Tor zur Schafweide
     gateRect = { x: gx, y: gy };
     B('#6fbf4f',gx+1,gy+1,G-2,G-2);
     B('#7a4a22',gx+1,gy+3,3,19); B('#7a4a22',gx+G-4,gy+3,3,19);
@@ -235,6 +247,12 @@ const Hub = (() => {
     B('#5a3b1c',kx+5,ky+9,13,G-10); B('#3a2410',kx+7,ky+11,9,G-12);          // offene Tür
     B('#5a3b1c',kx+G+10,ky+11,14,8); B('#9fe3ff',kx+G+11,ky+12,12,6);       // Fenster
     B('#ffffff',kx+2*G+6,ky+11,12,8); B('#222',kx+2*G+8,ky+13,3,2); B('#222',kx+2*G+14,ky+12,2,3);   // Kuh-Schild
+    const qx = (ox+4)*G, qy = (oy+8)*G;            // Kuhweide unter dem Kuhstall
+    cowRect = { x: qx+4, y: qy+1, w: 3*G-8, h: 16 };
+    B('#5fa83a',qx+1,qy+1,3*G-2,G-2);
+    B(F2,qx+1,qy+G-4,3*G-2,2); B(F2,qx+1,qy,2,G-2); B(F2,qx+3*G-3,qy,2,G-2);
+    for (let i=0;i<=6;i++) B(F,qx+1+i*((3*G-4)/6|0),qy+G-5,3,4);
+    B(F,qx,qy,4,3); B(F,qx+3*G-4,qy,4,3);
     fieldRect = { x: ox*G, y: (oy+4)*G, w: 2*G, h: 2*G };
     meadowRect = { x: (ox+2)*G, y: (oy+7)*G, w: 2*G, h: G };
     meadowVar = []; for (let i = 0; i < 8; i++) meadowVar.push((rr()*6)|0);
@@ -243,9 +261,10 @@ const Hub = (() => {
   function buildFlock() {
     const p = penRect; flock = [];
     for (let i = 0; i < Math.min(save.sheep, MAX_SHEEP); i++)
-      flock.push({ a: ANIMALS[1], x: rnd(p.x, p.x+p.w-16), y: rnd(p.y, p.y+p.h-12), tx: 0, ty: 0, wait: rnd(0,2), flip: Math.random() < .5 });
+      flock.push({ a: ANIMALS[1], rect: p, x: rnd(p.x, p.x+p.w-16), y: rnd(p.y, p.y+p.h-12), tx: 0, ty: 0, wait: rnd(0,2), flip: Math.random() < .5 });
+    const q = cowRect;                            // Kühe auf ihrer eigenen Weide
     for (let i = 0; i < Math.min(save.cows, 4); i++)
-      flock.push({ a: ANIMALS[3], x: rnd(p.x, p.x+p.w-16), y: rnd(p.y, p.y+p.h-12), tx: 0, ty: 0, wait: rnd(0,2), flip: Math.random() < .5 });
+      flock.push({ a: ANIMALS[3], rect: q, x: rnd(q.x, q.x+q.w-16), y: rnd(q.y, q.y+q.h-12), tx: 0, ty: 0, wait: rnd(0,2), flip: Math.random() < .5 });
   }
   function freeNear(r, c) {                     // freies Nachbarfeld zum Aussteigen
     for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]]) {
@@ -263,7 +282,7 @@ const Hub = (() => {
       posKey = key; active = 'person';
     }
     if (from === 'schafe' || from === 'kuehe') {
-      Object.assign(ENT.person.m, from === 'schafe' ? { r: oy+6, c: ox+2, a: -Math.PI/2 } : { r: oy+6, c: ox+4, a: -Math.PI/2 }); active = 'person';
+      Object.assign(ENT.person.m, from === 'schafe' ? { r: oy+5, c: ox+4, a: -Math.PI/2 } : { r: oy+6, c: ox+4, a: -Math.PI/2 }); active = 'person';
     } else if (returning && ENT[returning]) {
       const m = ENT[returning].m, oname = returning === 'tractor' ? 'combine' : 'tractor', o = ENT[oname].m;
       Object.assign(m, from === 'wiese' ? { r: oy+6, c: ox+2, a: -Math.PI/2 } : { r: oy+3, c: ox+1, a: -Math.PI/2 });
@@ -486,7 +505,7 @@ const Hub = (() => {
       lastNeedCls = cls;
     }
     for (const an of flock) {
-      if (an.wait > 0) { an.wait -= dt; if (an.wait <= 0) { an.tx = rnd(penRect.x, penRect.x+penRect.w-16); an.ty = rnd(penRect.y, penRect.y+penRect.h-12); } continue; }
+      if (an.wait > 0) { an.wait -= dt; if (an.wait <= 0) { const q = an.rect; an.tx = rnd(q.x, q.x+q.w-16); an.ty = rnd(q.y, q.y+q.h-12); } continue; }
       const dx = an.tx - an.x, dy = an.ty - an.y, d = Math.hypot(dx, dy);
       if (d < 1) { an.wait = rnd(1, 3.5); continue; }
       an.x += dx/d*8*dt; an.y += dy/d*8*dt; an.flip = dx < 0;
@@ -531,6 +550,12 @@ const Hub = (() => {
       const wx = penRect.x + 2 + (i % 5) * 11, wy = penRect.y + penRect.h + (i < 5 ? -2 : -9);
       R('#e8e8e8', wx, wy, 7, 6); R('#ffffff', wx+1, wy, 4, 2); R('#c8c8c8', wx+2, wy+3, 4, 1);
     }
+    // Laden-Schild über der Scheune: Stern auf einem Schild, wippt leicht
+    { const sx = (ox+4)*G + G, sy = (oy+1)*G - 20 + Math.round(Math.sin(time/400) * 2);
+      R('#5a3b1c', sx-1, sy+18, 2, 6);
+      R('rgba(0,0,0,.25)', sx-11, sy+1, 24, 20); R('#5a3b1c', sx-12, sy, 24, 20); R('#fff8e0', sx-10, sy+2, 20, 16);
+      const ST = ['....y....','...yyy...','yyyyyyyyy','.yyyyyyy.','..yyyyy..','..yy.yy..','.yy...yy.'];
+      ST.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === 'y') R(i === 4 && j < 3 ? '#fff3a8' : '#ffc400', sx-9+i*2, sy+3+j*2, 2, 2); })); }
     flock.slice().sort((a, b) => a.y - b.y).forEach(an =>
       drawAnimalPix(an.a, an.x, an.y, an.flip, (an.wait <= 0 && Math.sin(time/90) > 0) ? 1 : 0));
     // Fahrzeuge und Bauer
@@ -541,6 +566,9 @@ const Hub = (() => {
       drawAnimalPix(VISITOR, npc.x - 8, npc.y - 17 - bob, npc.flip, 0);
     }
     drawMover(ENT[active].m, ENT[active].spr, time);
+    // Anzeigen nur, wenn kein Fenster (Laden, Menü, Start) offen ist
+    $('hubhud').classList.toggle('hidden', !started || uiOpen || entering);
+    const sk = $('startKnopf'); if (sk) sk.style.display = (uiOpen || entering) ? 'none' : '';
     // Sprechblase der Besucherin (als HTML, damit das Wort scharf ist)
     const nb = $('npcbubble');
     if (started && npc.phase === 'wait' && !uiOpen) {
@@ -582,6 +610,6 @@ addEventListener('pageshow', e => { if (e.persisted && scene === Hub) Hub.enter(
 startLoop(Hub);
 </script>
 <script>window.START_URL = 'index.html';</script>
-<script src="gemeinsam/startseite.js?v=20261117b"></script>
+<script src="gemeinsam/startseite.js?v=20261117c"></script>
 </body>
 </html>

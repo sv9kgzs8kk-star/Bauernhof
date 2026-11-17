@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../manifest.json">
 <link rel="apple-touch-icon" href="../../icon.png">
-<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261117b">
+<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261117c">
 <title>Wiese</title>
 </head>
 <body>
@@ -29,7 +29,6 @@ window.addEventListener('error', function (e) {
 <!-- Anzeigen (kommen automatisch in den Bedienbereich) -->
 <div id="mhud" class="hud gamehud hidden">
   <div class="pill" id="mpill"><i class="ico" id="micon" data-ico="wheat"></i><div class="bar"><div class="fill" id="mfill"></div></div></div>
-  <div class="pill"><i class="ico" data-ico="flag"></i> <span id="mlvl">1</span></div>
   <div class="pill" id="mcount"><i class="ico" id="mcounticon" data-ico="truck"></i><span id="mloads">0/3</span></div>
   <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
 </div>
@@ -56,9 +55,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../../gemeinsam/sterne.js?v=20261117b"></script>
-<script src="../../gemeinsam/basis.js?v=20261117b"></script>
-<script src="../../gemeinsam/feldspiel.js?v=20261117b"></script>
+<script src="../../gemeinsam/sterne.js?v=20261117c"></script>
+<script src="../../gemeinsam/basis.js?v=20261117c"></script>
+<script src="../../gemeinsam/feldspiel.js?v=20261117c"></script>
 <script>
 window.HOF_URL = '../../hof.html';
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('wiese')));

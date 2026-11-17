@@ -172,7 +172,6 @@ const FieldGame = (() => {
     setIco($('mcounticon'), mode === 'collect' ? 'hay' : 'truck');
     $('mfill').className = 'fill ' + M.fillCls;
     $('mcount').classList.toggle('hidden', mode !== 'harvest' && mode !== 'collect');
-    $('mlvl').textContent = M.meadow ? save.meadowLevel : save.level;
     hud();
     if (mode === 'sow') { state = 'pick'; hide('ctrl'); hide('mhud'); show('seedpick'); }
     else if (!shopDone && offerUpgrade()) state = 'shop';

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../manifest.json">
+<link rel="apple-touch-icon" href="../../icon.png">
+<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261117f">
+<title>Angeln</title>
+<style>
+  .starpill canvas{width:clamp(44px,8vmin,68px);height:clamp(44px,8vmin,68px);display:block}
+  .starpill{display:flex;align-items:center;gap:6px;pointer-events:auto;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="ahud" class="hud gamehud hidden">
+  <div class="pill starpill" data-say="fish"><i class="ico" data-ico="fish"></i> <canvas id="fishstar" width="64" height="64"></canvas></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+
+<div id="gwin" class="overlay hidden">
+  <div class="stars"><i class="ico" data-ico="star"></i></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer"><i class="ico" data-ico="star"></i> +1</div>
+  </div>
+  <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
+</div>
+
+<script>window.NO_PAD = true;   // hier wird nur getippt</script>
+<script src="../../gemeinsam/sterne.js?v=20261117f"></script>
+<script src="../../gemeinsam/basis.js?v=20261117f"></script>
+<script>
+/* =====================================================================
+   MINISPIEL: ANGELN AM TEICH
+   Aufs Wasser tippen = Angel auswerfen → warten, bis ein Fisch anbeißt
+   (Schwimmer taucht ab) → antippen = Fisch fangen. 5 Fische = 1 Stern.
+   Der Stern-Fortschritt bleibt gespeichert (fishParts), auch wenn man vorher zum Hof geht.
+   ===================================================================== */
+window.HOF_URL = '../../hof.html';
+const save = Hof.save;
+const goHome = () => goHof('angeln');
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
+
+// Bunte Fische: Körper, Streifen, Flossen – jeder Fisch sieht anders aus
+const FISH_COLS = ['#ff8a1f', '#e03b3b', '#3fa9f5', '#7ed957', '#ff8ad8', '#ffd23f', '#9b59b6', '#1abc9c'];
+const FISH_PX = ['....bbbbb.......','..bbbbbbbbb...ff','.bbkbbsbbbbb.fff','bbbbbbsbbbbbbff.','bbbbbbsbbbbbbff.','.bbbbbsbbbbb.fff','..bbbbbbbbb...ff','....bbbbb.......'];
+let colorBag = [];
+function newFishLook() {
+  if (colorBag.length < 3) colorBag = FISH_COLS.slice().sort(() => Math.random() - .5);
+  const b = colorBag.pop(), s = colorBag[(Math.random() * colorBag.length) | 0];
+  return { b, s, f: shade(b, -50) };
+}
+function shade(hex, d) {
+  const n = parseInt(hex.slice(1), 16), c = v => Math.max(0, Math.min(255, v + d));
+  return '#' + [c(n >> 16), c((n >> 8) & 255), c(n & 255)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+function drawFish(look, x, y, flip, scale = 1, alpha = 1) {
+  ctx.globalAlpha = alpha;
+  FISH_PX.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (ch === '.') return;
+    const col = ch === 'b' ? look.b : ch === 's' ? look.s : ch === 'f' ? look.f : '#222';
+    const ii = flip ? 15 - i : i;
+    ctx.fillStyle = col; ctx.fillRect(Math.round(x + ii * scale), Math.round(y + j * scale), scale, scale);
+  }));
+  ctx.globalAlpha = 1;
+}
+
+const Angeln = (() => {
+  const DW = 200, DH = 140, WATER = { x: 14, y: 34, w: 172, h: 66 };
+  let S = 1, OX = 0, OY = 0;
+  const FARMER = { x: 92, y: 98 };
+  let state = 'start', bob = null, biter = null, caught = null, swimmers = [], bucket = [], timer = 0, winTimer = null, glow = 0, hintT = 0;
+  const sp = (x, y, vx, vy, life, col, grav = 0) => spawn(OX + x*S, OY + y*S, vx*S, vy*S, life, col, grav*S);
+
+  function build() {
+    layout(true);
+    const m = Math.min(W / DW, H / DH);
+    S = m >= 2 ? Math.floor(m) : m;
+    OX = Math.round((W - DW*S) / 2); OY = Math.round((H - DH*S) * 0.6);
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    bctx.imageSmoothingEnabled = false;
+    bctx.setTransform(S, 0, 0, S, OX, OY);
+    const x0 = Math.floor(-OX/S) - 1, x1 = Math.ceil((W-OX)/S) + 1, y0 = Math.floor(-OY/S) - 1, y1 = Math.ceil((H-OY)/S) + 1;
+    // Himmel, Ufer mit Bäumen hinten
+    B('#9fe3ff', x0, y0, x1-x0, 22-y0); B('#c8f0ff', x0, y0, x1-x0, 10-y0);
+    B('#ffffff', 30, 6, 16, 3); B('#ffffff', 33, 4, 9, 2); B('#ffffff', 140, 10, 20, 3); B('#ffffff', 145, 8, 10, 2);
+    B('#ffd23f', 172, 3, 9, 9); B('#fff3a8', 174, 5, 3, 3);
+    for (let x = x0 - (x0 % T) - T; x < x1; x += T) for (let y = 22; y < 40; y += T) bctx.drawImage(pick(tiles.grass), x, y);
+    for (let x = x0 + 4; x < x1; x += 22) drawObstacle(bctx, 't', x + ((x * 7) % 9), 12);
+    // Wasser (Teich)
+    B('#2f6fa8', x0, WATER.y, x1-x0, WATER.h + 8); B('#3b82c4', x0, WATER.y + 3, x1-x0, WATER.h + 2);
+    for (let i = 0; i < 26; i++) B('#5aa0dc', (x0 + ((i * 37) % (x1-x0))) | 0, WATER.y + 6 + ((i * 13) % (WATER.h - 6)), 6, 1);
+    // Seerosen und Schilf
+    for (const [lx, ly] of [[24, 46], [168, 52], [40, 88], [156, 84]]) { B('#2e8b3a', lx, ly, 8, 5); B('#3fa34d', lx + 1, ly + 1, 6, 3); B('#2f6fa8', lx + 4, ly, 2, 2); }
+    B('#ff8ad8', 170, 52, 3, 2);
+    for (const rx of [8, 12, 186, 190]) { B('#4f7a2a', rx, 70, 1, 32); B('#7a4a22', rx - 1, 70, 3, 5); }
+    // Ufer vorne
+    for (let x = x0 - (x0 % T) - T; x < x1; x += T) for (let y = 104; y < y1; y += T) bctx.drawImage(pick(tiles.grass), x, y);
+    B('#c9a86a', x0, 102, x1-x0, 4); B('#a98745', x0, 105, x1-x0, 1);
+    // Steg
+    B('#5a3b1c', 82, 86, 36, y1 - 86); B('#a0673a', 83, 86, 34, y1 - 86);
+    for (let y = 88; y < y1; y += 5) B('#7a4a22', 83, y, 34, 1);
+    B('#5a3b1c', 82, 98, 3, 8); B('#5a3b1c', 115, 98, 3, 8);
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (!swimmers.length) for (let i = 0; i < 5; i++) swimmers.push(newSwimmer());
+  }
+  function newSwimmer() {
+    return { look: newFishLook(), x: rnd(WATER.x + 10, WATER.x + WATER.w - 30), y: rnd(WATER.y + 12, WATER.y + WATER.h - 14), vx: rnd(6, 14) * (Math.random() < .5 ? -1 : 1), t: rnd(0, 6) };
+  }
+  function hud(g = 0) { paintStarCanvas('fishstar', save.fishParts, g); }
+
+  function enter() { build(); state = 'ready'; show('ahud'); hud(); setTimeout(() => sayWord('fish'), 400); }
+  function exit() { clearTimeout(winTimer); }
+  $('pausebtn').addEventListener('click', () => { if (state === 'won' || state === 'pause') return; state0 = state; state = 'pause'; show('gpause'); });
+  let state0 = 'ready';
+  $('gresume').addEventListener('click', () => { hide('gpause'); state = state0; });
+
+  const rodBase = () => ({ x: FARMER.x + 9, y: FARMER.y - 2 });
+  function rodTip() {
+    const b = rodBase(), tx = bob ? bob.tx : 100, ty = bob ? bob.ty : 60, dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1;
+    return { x: b.x + dx / d * 30, y: b.y + dy / d * 30 - 6 };
+  }
+
+  function onPointer(type, x, y) {
+    if (type !== 'down') return true;
+    initAudio();
+    x = (x - OX) / S; y = (y - OY) / S;
+    if (state === 'ready') {
+      const tx = clamp(x, WATER.x + 8, WATER.x + WATER.w - 8), ty = clamp(y, WATER.y + 8, WATER.y + WATER.h - 6);
+      const t = rodTip();
+      bob = { sx: t.x, sy: t.y, tx, ty, t: 0, dip: 0 };
+      state = 'cast'; sfx.reel(); hintT = 0;
+    } else if (state === 'bite') {
+      catchFish();
+    } else if (state === 'wait' && bob) {
+      bob.jig = 0.3;                                 // zu früh: Schwimmer wackelt nur
+    }
+    return true;
+  }
+  function startWait() {
+    state = 'wait'; timer = rnd(1.8, 3.8);
+    biter = { look: newFishLook(), x: bob.tx + rnd(-50, 50), y: clamp(bob.ty + rnd(-14, 14), WATER.y + 6, WATER.y + WATER.h - 8) };
+    biter.sx = biter.x; biter.sy = biter.y; biter.t = 0;
+  }
+  function catchFish() {
+    state = 'catch'; sfx.reel(); sfx.splash();
+    for (let i = 0; i < 16; i++) sp(bob.tx, bob.ty, rnd(-30, 30), rnd(-60, -20), rnd(.4, .8), pick(['#ffffff', '#c8f0ff', '#7cc0f0']), 90);
+    caught = { look: biter.look, x: bob.tx - 8, y: bob.ty - 4, t: 0, sx: bob.tx - 8, sy: bob.ty - 4 };
+    biter = null; bob = null; timer = 0;
+  }
+  function landed() {
+    bucket.push(caught.look); caught = null;
+    const full = Hof.addPart('fishParts');
+    sfx.load(); sayWord('fish');
+    if (full) {
+      hud(0); glow = 1; state = 'won';
+      setTimeout(() => {
+        sfx.win(); confetti(); hide('ahud'); show('gwin'); applyIcons($('gwin'));
+        setTimeout(() => sayWord('star'), 1200);
+        winTimer = setTimeout(goHome, 4500);
+      }, 900);
+      paintStarCanvas('fishstar', 5, 1);
+    } else { hud(); bump($('fishstar')); state = 'ready'; }
+  }
+
+  function update(dt) {
+    for (const f of swimmers) {
+      f.t += dt; f.x += f.vx * dt; f.y += Math.sin(f.t * 1.3) * 2 * dt;
+      if (f.x < WATER.x || f.x > WATER.x + WATER.w - 16) { f.vx *= -1; f.x = clamp(f.x, WATER.x, WATER.x + WATER.w - 16); }
+    }
+    if (state === 'pause' || state === 'won') return;
+    hintT += dt;
+    if (state === 'cast') {
+      bob.t += dt * 1.8;
+      if (bob.t >= 1) { bob.t = 1; sfx.splash(); for (let i = 0; i < 8; i++) sp(bob.tx, bob.ty, rnd(-20, 20), rnd(-40, -10), .4, '#ffffff', 80); startWait(); }
+    } else if (state === 'wait') {
+      timer -= dt; biter.t = clamp(1 - timer / 3, 0, 1);
+      biter.x = biter.sx + (bob.tx - 8 - biter.sx) * biter.t; biter.y = biter.sy + (bob.ty + 2 - biter.sy) * biter.t;
+      if (bob.jig) bob.jig = Math.max(0, bob.jig - dt);
+      if (timer <= 0) { state = 'bite'; timer = 2.6; sfx.splash(); sfx.beep(); }
+    } else if (state === 'bite') {
+      timer -= dt;
+      if (Math.random() < .2) sp(bob.tx + rnd(-3, 3), bob.ty, rnd(-10, 10), rnd(-25, -5), .3, '#ffffff', 60);
+      if (timer <= 0) {                             // nicht erwischt: der Fisch knabbert gleich nochmal
+        biter.sx = biter.x - 20; biter.sy = biter.y; state = 'wait'; timer = rnd(1.5, 2.5);
+      }
+    } else if (state === 'catch') {
+      caught.t += dt;
+      const t1 = Math.min(1, caught.t / 0.6);                       // hoch zum Bauern
+      const hx = FARMER.x - 6, hy = FARMER.y - 40;
+      if (caught.t < 0.6) { caught.x = caught.sx + (hx - caught.sx) * t1; caught.y = caught.sy + (hy - caught.sy) * t1 - Math.sin(t1 * Math.PI) * 24; }
+      else if (caught.t > 1.6) {
+        const t2 = Math.min(1, (caught.t - 1.6) / 0.4);              // in den Eimer
+        caught.x = hx + (66 - hx) * t2; caught.y = hy + (100 - hy) * t2;
+        if (t2 >= 1) landed();
+      }
+    }
+    glow = Math.max(0, glow - dt);
+  }
+
+  function drawFarmer(time) {
+    const x = FARMER.x, y = FARMER.y;
+    R('rgba(0,0,0,.2)', x - 2, y + 9, 22, 3);
+    R('#2a5db0', x, y, 16, 10); R('#3f7be0', x + 1, y + 1, 14, 8);           // Latzhose (von hinten)
+    R('#c0392b', x + 1, y - 9, 14, 10); R('#e04a3a', x + 2, y - 8, 12, 3);  // Hemd
+    R('#f1c27d', x + 4, y - 15, 8, 6);                                      // Nacken
+    R('#7a5a22', x - 1, y - 20, 18, 4); R('#e8c25a', x + 2, y - 24, 12, 6); R('#f6dc8a', x + 4, y - 23, 5, 2);   // Strohhut
+    R('#f1c27d', x + 13, y - 4, 4, 3);                                      // Hand
+  }
+  function drawBucket() {
+    const x = 60, y = 100;
+    R('#6f7d88', x, y, 18, 12); R('#9aa8b2', x + 1, y + 1, 16, 10); R('#5a6872', x, y, 18, 2);
+    bucket.slice(-4).forEach((lk, i) => { R(lk.f, x + 3 + i * 4, y - 3, 3, 4); R(lk.b, x + 3 + i * 4, y - 1, 3, 2); });
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    ctx.setTransform(S, 0, 0, S, OX, OY);
+    // Wellen
+    for (let i = 0; i < 6; i++) { const wx = WATER.x + ((i * 31 + time / 60) % WATER.w), wy = WATER.y + 10 + i * 9; R('rgba(255,255,255,.25)', wx, wy, 5, 1); }
+    // Fische unter Wasser (bunt, leicht durchsichtig)
+    for (const f of swimmers) drawFish(f.look, f.x, f.y, f.vx > 0, 1, 0.55);
+    if (biter) drawFish(biter.look, biter.x, biter.y, biter.sx < bob.tx, 1, state === 'bite' ? 0.9 : 0.7);
+    // Ziel-Hinweis vor dem ersten Auswerfen
+    if (state === 'ready' && hintT > 0.6) {
+      const r = 6 + Math.abs(Math.sin(time / 300)) * 4;
+      ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(100, 62, r, 0, Math.PI * 2); ctx.stroke();
+      drawArrow(97, 44 - Math.abs(Math.sin(time / 250)) * 4);
+    }
+    drawBucket(); drawFarmer(time);
+    // Angel und Schnur
+    const b = rodBase(), tip = rodTip();
+    ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    if (bob) {
+      const t = bob.t, bx = bob.sx + (bob.tx - bob.sx) * t, by = bob.sy + (bob.ty - bob.sy) * t - Math.sin(t * Math.PI) * 30;
+      const dip = state === 'bite' ? (Math.sin(time / 70) > 0 ? 3 : 1) : (bob.jig ? Math.sin(time / 40) : 0);
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + bx) / 2, Math.max(tip.y, by) + 8, bx, by + dip); ctx.stroke();
+      R('#ffffff', bx - 2, by - 3 + dip, 4, 3); R('#e03b3b', bx - 2, by + dip, 4, 3);
+      if (state === 'bite') {
+        ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(bx, by + 3, 6 + (time / 60) % 6, 0, Math.PI * 2); ctx.stroke();
+        drawArrow(bx - 3, by - 18 - Math.abs(Math.sin(time / 120)) * 4);
+      }
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(tip.x, tip.y + 10); ctx.stroke();
+    }
+    // Gefangener Fisch: groß und zappelnd
+    if (caught) {
+      const wig = Math.sin(time / 60) > 0;
+      drawFish(caught.look, caught.x - 8, caught.y, wig, caught.t < 1.6 ? 2 : 1);
+    }
+    // Stern-Fortschritt groß einblenden, wenn er voll ist
+    if (glow > 0 || state === 'won') drawStarParts(ctx, 100, 60, 26, 5, state === 'won' ? Math.abs(Math.sin(time / 200)) : glow);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function resize() { build(); }
+  return { enter, exit, update, draw, resize, onPointer, _dbg: () => ({ state, parts: save.fishParts, bob, S, OX, OY }) };
+})();
+
+startLoop(Angeln);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

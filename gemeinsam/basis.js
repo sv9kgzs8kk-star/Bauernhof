@@ -74,6 +74,14 @@ const ICONS = {
     '...k......','..kk......','kkkk.r..r.','kkkk..rr..','kkkk..rr..','kkkk.r..r.','..kk......','...k......'], outline: false },
   milk:  { pal: { w:'#ffffff', s:'#c8d4dc', b:'#2a6fdb', g:'#9aa8b2' }, px: [
     '..gggg..','..gwwg..','.gwwwwg.','gwwwwwwg','gwbbbbwg','gwbwwbwg','gwbbbbwg','gwwwwwsg','gwwwwwsg','.gggggg.'] },
+  fish:  { pal: { o:'#ff8a1f', d:'#d9600a', k:'#222', w:'#fff' }, px: [
+    '..........','...ooo...o','.oooooo.oo','owkooddoo.','ooooooooo.','.oooooo.oo','...ooo...o','..........'] },
+  saw:   { pal: { o:'#f08c00', d:'#9a5a00', g:'#b8c6d0', s:'#6f7d88', k:'#222' }, px: [
+    '..........','.oo.......','oooo......','okoogggggg','oooosssssg','okoogggggg','.oo.......','..........'] },
+  tree:  { pal: { g:'#3f8f37', l:'#5cb64f', d:'#24561f', b:'#6b4423' }, px: [
+    '...dggd...','..dglggd..','.dgglgggd.','dgggggglgd','dglggggggd','.dgggglgd.','..dggggd..','....bb....','....bb....','...bbbb...'] },
+  house: { pal: { r:'#c0392b', d:'#8e1f1f', w:'#e9dcc0', b:'#7a4a22', f:'#9fe3ff' }, px: [
+    '....dd....','...drrd...','..drrrrd..','.drrrrrrd.','drrrrrrrrd','.wwwwwwww.','.wffwwbbw.','.wffwwbbw.','.wwwwwbbw.','.wwwwwbbw.'] },
   cow:   { pal: { w:'#ffffff', k:'#222', n:'#f7a8b8', h:'#c9b28a' }, px: [
     'h........h','hkwwwwwwkh','.kwwkkwwk.','.wwwkkwww.','.wkwwwwkw.','.wwwwwwww.','..nnnnnn..','..nknnkn..','...nnnn...'] },
   check: { pal: { g:'#3fa34d' }, px: [
@@ -159,7 +167,12 @@ const sfx = {
   squirt() { noise(2500, 4000, .06, 1); },
   munch()  { noise(400, 900, .08, 2); },
   baa()    { const f = rnd(300, 380); tone(f, .12, 'sawtooth', .05, 0, f*.9); tone(f*.95, .3, 'sawtooth', .05, .1, f*.8); },
-  bark()   { tone(520, .07, 'square', .09, 0, 320); tone(560, .07, 'square', .09, .12, 330); }
+  bark()   { tone(520, .07, 'square', .09, 0, 320); tone(560, .07, 'square', .09, .12, 330); },
+  splash() { noise(400, 1400, .1, 4); },
+  reel()   { tone(700, .25, 'triangle', .06, 0, 1300); },
+  saw()    { noise(900, 2200, .07, 3); tone(110, .18, 'sawtooth', .05, 0, 140); },
+  timber() { tone(220, .5, 'triangle', .12, 0, 60); noise(150, 500, .15, 4); },
+  beep()   { tone(880, .08, 'square', .06); }
 };
 function setEngine(on, moving, base = 46) {
   if (!AC) return;
@@ -550,6 +563,29 @@ function confetti() {
   for (let i = 0; i < 160; i++) spawn(rnd(0,W), rnd(-H*.5,0), rnd(-15,15), rnd(10,40), rnd(2,4), pick(cols), 30);
 }
 
+/* ---------- Stern aus 5 Teilen (z. B. 5 Fische = 1 Stern) ---------- */
+// g: Zeichenfläche, (cx, cy) Mitte, r Außenradius, parts gefüllte Zacken (0–5), glow: 0–1 Aufleuchten
+function drawStarParts(g, cx, cy, r, parts, glow = 0) {
+  const ri = r * 0.45, pt = k => { const a = -Math.PI/2 + k * Math.PI/5; const rr = k % 2 ? ri : r; return [cx + Math.cos(a)*rr, cy + Math.sin(a)*rr]; };
+  g.save();
+  g.beginPath(); for (let k = 0; k < 10; k++) { const [x, y] = pt(k); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath();
+  g.fillStyle = 'rgba(0,0,0,.28)'; g.fill();
+  for (let i = 0; i < 5; i++) {                    // Zacke i: Mitte → innen links → Spitze → innen rechts
+    if (i >= parts) continue;
+    const a = pt(i*2 - 1 < 0 ? 9 : i*2 - 1), b = pt(i*2), c = pt(i*2 + 1);
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.closePath();
+    g.fillStyle = i % 2 ? '#ffc400' : '#ffd23f'; g.fill();
+  }
+  g.beginPath(); for (let k = 0; k < 10; k++) { const [x, y] = pt(k); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath();
+  g.lineWidth = Math.max(1, r / 8); g.strokeStyle = glow ? `rgba(255,255,255,${glow})` : '#5a3d00'; g.stroke();
+  g.restore();
+}
+// Stern-Anzeige als HTML-Canvas in einer Pille (id), z. B. <canvas id="fishstar" width="64" height="64">
+function paintStarCanvas(id, parts, glow = 0) {
+  const c = $(id); if (!c) return; const g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
+  drawStarParts(g, c.width/2, c.height/2 + c.height*0.04, c.width*0.46, parts, glow);
+}
+
 /* ---------- Wörter & Vorlesen ---------- */
 // Angezeigt wird immer in GROSSBUCHSTABEN, vorgelesen in normaler Schreibweise
 // (sonst buchstabiert die Sprachausgabe manchmal „W-O-L-L-E“).
@@ -558,7 +594,11 @@ const WORDS = {
   sheep: ['SCHAF', 'Schaf'], wool: ['WOLLE', 'Wolle'], field: ['FELD', 'Feld'],
   star: ['STERNE', 'Sterne'], thanks: ['DANKE', 'Danke!'],
   hay: ['HEU', 'Heu'], meadow: ['WIESE', 'Wiese'], bale: ['BALLEN', 'Ballen'],
-  milk: ['MILCH', 'Milch'], cow: ['KUH', 'Kuh'], shop: ['LADEN', 'Laden']
+  milk: ['MILCH', 'Milch'], cow: ['KUH', 'Kuh'], shop: ['LADEN', 'Laden'],
+  fish: ['FISCH', 'Fisch'], tree: ['BAUM', 'Baum'], saw: ['SÄGE', 'Säge'], wood: ['HOLZ', 'Holz'],
+  house: ['HAUS', 'Haus'], dig: ['BAGGERN', 'Baggern'], concrete: ['BETON', 'Beton'], wall: ['MAUER', 'Mauer'],
+  frame: ['DACHSTUHL', 'Dachstuhl'], richtfest: ['RICHTFEST', 'Richtfest!'], roof: ['DACH', 'Dach'],
+  crane: ['KRAN', 'Kran'], site: ['BAUSTELLE', 'Baustelle']
 };
 let deVoice = null;
 function pickVoice() {

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../manifest.json">
+<link rel="apple-touch-icon" href="../../icon.png">
+<link rel="stylesheet" href="../../gemeinsam/basis.css?v=20261117f">
+<title>Wald</title>
+<style>
+  .starpill canvas{width:clamp(44px,8vmin,68px);height:clamp(44px,8vmin,68px);display:block}
+  .starpill{display:flex;align-items:center;gap:6px;pointer-events:auto;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="whud" class="hud gamehud hidden">
+  <div class="pill starpill" data-say="tree"><i class="ico" data-ico="tree"></i> <canvas id="woodstar" width="64" height="64"></canvas></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+
+<div id="gwin" class="overlay hidden">
+  <div class="stars"><i class="ico" data-ico="star"></i></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer"><i class="ico" data-ico="star"></i> +1</div>
+  </div>
+  <button class="home" data-home aria-label="Zum Hof"><i class="ico" data-ico="home"></i></button>
+</div>
+
+<script>window.NO_PAD = true;   // hier wird nur getippt</script>
+<script src="../../gemeinsam/sterne.js?v=20261117f"></script>
+<script src="../../gemeinsam/basis.js?v=20261117f"></script>
+<script>
+/* =====================================================================
+   MINISPIEL: WALD MIT KETTENSÄGE
+   Kettensäge einmal im Laden kaufen. Baum antippen (mehrmals) = sägen, bis er umfällt.
+   5 Bäume = 1 Stern (woodParts, bleibt gespeichert). Gefällte Bäume wachsen langsam nach.
+   ===================================================================== */
+window.HOF_URL = '../../hof.html';
+const save = Hof.save;
+const goHome = () => goHof('wald');
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
+const SAW_PRICE = 10, CUTS = 4, REGROW_MS = 4 * 60 * 1000;   // 4 Minuten bis ein Baum wieder steht
+
+const Wald = (() => {
+  const DW = 200, DH = 140;
+  const SPOTS = [[22, 74], [62, 70], [138, 70], [178, 74], [40, 120], [82, 116], [120, 116], [160, 120]];
+  let S = 1, OX = 0, OY = 0;
+  let state = 'start', state0 = 'play', cutting = null, falling = [], logs = [], winTimer = null, glow = 0;
+  const sp = (x, y, vx, vy, life, col, grav = 0) => spawn(OX + x*S, OY + y*S, vx*S, vy*S, life, col, grav*S);
+
+  function trees() {                                 // Spielstand erweitern: je Baum 0 = steht, sonst Zeitpunkt des Fällens
+    if (!Array.isArray(save.trees) || save.trees.length !== SPOTS.length) { save.trees = SPOTS.map(() => 0); Hof.persist(); }
+    return save.trees;
+  }
+  const growth = i => { const t = trees()[i]; return t ? clamp((Date.now() - t) / REGROW_MS, 0, 1) : 1; };
+
+  function build() {
+    layout(true);
+    const m = Math.min(W / DW, H / DH);
+    S = m >= 2 ? Math.floor(m) : m;
+    OX = Math.round((W - DW*S) / 2); OY = Math.round((H - DH*S) * 0.6);
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    bctx.imageSmoothingEnabled = false;
+    bctx.setTransform(S, 0, 0, S, OX, OY);
+    const x0 = Math.floor(-OX/S) - 1, x1 = Math.ceil((W-OX)/S) + 1, y0 = Math.floor(-OY/S) - 1, y1 = Math.ceil((H-OY)/S) + 1;
+    B('#9fe3ff', x0, y0, x1-x0, 30-y0);
+    for (let x = x0 - (x0 % T) - T; x < x1; x += T) for (let y = 24; y < y1; y += T) bctx.drawImage(pick(tiles.grass), x, y);
+    // dunkler Wald im Hintergrund
+    for (let x = x0; x < x1; x += 14) { B('#1f4a1a', x, 14 + ((x * 5) % 7), 16, 18); B('#2b5f24', x + 2, 16 + ((x * 3) % 5), 12, 12); }
+    B('#24561f', x0, 30, x1-x0, 4);
+    // Waldweg und Pilze
+    for (let y = 34; y < y1; y += 4) B('#b8935a', 96 + Math.round(Math.sin(y / 9) * 4), y, 10, 4);
+    for (const [mx, my] of [[12, 100], [190, 104], [70, 92]]) { B('#f2f2f2', mx + 1, my + 3, 2, 3); B('#e03b3b', mx, my, 4, 3); B('#fff', mx + 1, my + 1, 1, 1); }
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function hud(g = 0) { paintStarCanvas('woodstar', save.woodParts, g); }
+
+  function enter() {
+    build(); trees(); state = 'start'; hide('whud');
+    if (!save.saw) {
+      openShop({
+        stats: () => [['star', save.stars, 'star', 'shopstar']],
+        item: { word: WORDS.saw[0], sayKey: 'saw', price: () => save.saw ? null : SAW_PRICE,
+                draw: el => { el.innerHTML = '<i class="ico" data-ico="saw"></i>'; applyIcons(el); } },
+        canPlay: () => !!save.saw,
+        missingId: () => 'shopbuy',
+        onBuy: () => { save.saw = true; Hof.persist(); sfx.saw(); },
+        onPlay: start, onHome: goHome
+      });
+    } else start();
+  }
+  function start() { state = 'play'; show('whud'); hud(); setTimeout(() => sayWord('tree'), 400); }
+  function exit() { clearTimeout(winTimer); }
+  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state0 = state; state = 'pause'; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); state = state0; });
+
+  function treeAt(x, y) {
+    for (let i = SPOTS.length - 1; i >= 0; i--) {
+      const [tx, ty] = SPOTS[i];
+      if (x > tx - 14 && x < tx + 14 && y > ty - 34 && y < ty + 4) return i;
+    }
+    return -1;
+  }
+  function onPointer(type, x, y) {
+    if (type !== 'down' || state !== 'play') return true;
+    initAudio();
+    x = (x - OX) / S; y = (y - OY) / S;
+    const i = treeAt(x, y); if (i < 0) return true;
+    if (growth(i) < 1 || falling.some(f => f.i === i)) { sfx.bonk(); wiggle[i] = 0.4; return true; }   // wächst noch
+    if (!cutting || cutting.i !== i) cutting = { i, n: 0, shake: 0 };
+    cutting.n++; cutting.shake = 0.25; sfx.saw();
+    const [tx, ty] = SPOTS[i];
+    for (let k = 0; k < 10; k++) sp(tx + 4, ty - 4, rnd(-30, 30), rnd(-40, -10), rnd(.3, .6), pick(['#e8c27a', '#c9a86a', '#f6dc8a']), 90);
+    if (cutting.n >= CUTS) fell(i);
+    return true;
+  }
+  const wiggle = {};
+  function fell(i) {
+    cutting = null;
+    trees()[i] = Date.now(); Hof.persist();
+    falling.push({ i, t: 0, dir: SPOTS[i][0] < 100 ? -1 : 1 });
+    sfx.timber();
+  }
+  function felled(f) {
+    const [tx, ty] = SPOTS[f.i];
+    logs.push({ x: tx + f.dir * 14, y: ty - 4, t: 0 });
+    for (let k = 0; k < 16; k++) sp(tx + f.dir * 18, ty, rnd(-30, 30), rnd(-30, -5), rnd(.4, .8), pick(['#3f8f37', '#5cb64f', '#8a6440']), 80);
+    const full = Hof.addPart('woodParts');
+    sayWord('wood');
+    if (full) {
+      glow = 1; state = 'won'; paintStarCanvas('woodstar', 5, 1);
+      setTimeout(() => {
+        sfx.win(); confetti(); hide('whud'); show('gwin'); applyIcons($('gwin'));
+        setTimeout(() => sayWord('star'), 1200);
+        winTimer = setTimeout(goHome, 4500);
+      }, 900);
+    } else { hud(); bump($('woodstar')); sfx.load(); }
+  }
+
+  function update(dt) {
+    if (state === 'pause') return;
+    if (cutting) cutting.shake = Math.max(0, cutting.shake - dt);
+    for (const k in wiggle) wiggle[k] = Math.max(0, wiggle[k] - dt);
+    for (const f of falling) { f.t += dt; if (f.t >= 0.9 && !f.done) { f.done = true; felled(f); } }
+    falling = falling.filter(f => f.t < 0.9);
+    for (const l of logs) l.t += dt;
+    logs = logs.filter(l => l.t < 1.6);
+    glow = Math.max(0, glow - dt);
+  }
+
+  function drawTree(x, y, size, time, wig) {        // size 0..1 (Setzling → großer Baum)
+    const s = 0.35 + size * 0.65, cw = Math.round(28 * s), ch = Math.round(26 * s), tw = Math.max(2, Math.round(6 * s)), th = Math.round(10 * s);
+    const dx = wig ? Math.round(Math.sin(time / 30) * 1.5) : 0;
+    R('rgba(0,0,0,.22)', x - cw/2 + 2, y - 2, cw, 4);
+    R('#4a2e16', x - tw/2 - 1 + dx, y - th, tw + 2, th); R('#6b4423', x - tw/2 + dx, y - th, tw, th);
+    const cx = x - cw/2 + dx, cy = y - th - ch + 2;
+    R('#1f4a1a', cx, cy + 3, cw, ch - 5); R('#1f4a1a', cx + 3, cy, cw - 6, ch);
+    R('#2e7a2a', cx + 1, cy + 4, cw - 2, ch - 8); R('#2e7a2a', cx + 4, cy + 1, cw - 8, ch - 3);
+    R('#45a03c', cx + 4, cy + 4, Math.round(cw * .35), Math.round(ch * .3)); R('#5cb64f', cx + 6, cy + 5, Math.round(cw * .15), Math.round(ch * .12));
+  }
+  function drawStump(x, y) {
+    R('rgba(0,0,0,.2)', x - 6, y - 2, 13, 3);
+    R('#4a2e16', x - 5, y - 6, 10, 6); R('#6b4423', x - 4, y - 5, 8, 5); R('#e8c27a', x - 4, y - 7, 8, 2); R('#c9a86a', x - 2, y - 7, 4, 1);
+  }
+  function drawSaw(x, y, time) {
+    const j = Math.sin(time / 25) > 0 ? 1 : 0;
+    R('#222', x - 1, y - 5 + j, 12, 9); R('#f08c00', x, y - 4 + j, 10, 7); R('#9a5a00', x + 1, y - 2 + j, 3, 2);
+    R('#6f7d88', x - 13, y - 2 + j, 13, 3); R('#b8c6d0', x - 13, y - 1 + j, 13, 1);
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    ctx.setTransform(S, 0, 0, S, OX, OY);
+    const order = SPOTS.map((p, i) => i).sort((a, b) => SPOTS[a][1] - SPOTS[b][1]);
+    for (const i of order) {
+      const [x, y] = SPOTS[i], fall = falling.find(f => f.i === i);
+      if (fall) {
+        drawStump(x, y);
+        ctx.save(); ctx.translate(x, y - 6); ctx.rotate(fall.dir * Math.min(1, fall.t / 0.8) ** 2 * Math.PI / 2); ctx.translate(-x, -(y - 6));
+        drawTree(x, y - 6, 1, time, false); ctx.restore();
+        continue;
+      }
+      const g = growth(i);
+      if (g >= 1) {
+        const c = cutting && cutting.i === i;
+        drawTree(x, y, 1, time, (c && cutting.shake > 0) || wiggle[i] > 0);
+        if (c) { drawSaw(x + 10, y - 5, time); for (let k = 0; k < cutting.n; k++) R('#e8c27a', x - 3 + k * 2, y - 5, 1, 2); }
+      } else {
+        drawStump(x, y);
+        if (g > 0.25) drawTree(x + 7, y + 1, (g - 0.25) / 0.75 * 0.6, time, wiggle[i] > 0);   // nachwachsender Baum neben dem Stumpf
+      }
+    }
+    for (const l of logs) {                         // Holzstamm rollt zum Stapel
+      const t = Math.min(1, l.t / 1.4), lx = l.x + (186 - l.x) * t, ly = l.y + (128 - l.y) * t;
+      R('#4a2e16', lx - 8, ly - 3, 16, 6); R('#6b4423', lx - 7, ly - 2, 14, 4); R('#e8c27a', lx + 6, ly - 2, 2, 4);
+    }
+    // Holzstapel unten rechts
+    for (let k = 0; k < 3; k++) { R('#4a2e16', 176 + k * 6, 126, 6, 6); R('#e8c27a', 177 + k * 6, 127, 4, 4); }
+    R('#4a2e16', 179, 120, 6, 6); R('#e8c27a', 180, 121, 4, 4); R('#4a2e16', 185, 120, 6, 6); R('#e8c27a', 186, 121, 4, 4);
+    // Hinweis: auf einen stehenden Baum tippen
+    if (state === 'play' && !cutting && !falling.length) {
+      const i = SPOTS.findIndex((p, k) => growth(k) >= 1);
+      if (i >= 0) drawArrow(SPOTS[i][0] - 3, SPOTS[i][1] - 50 - Math.abs(Math.sin(time / 250)) * 4);
+    }
+    if (glow > 0 || state === 'won') drawStarParts(ctx, 100, 60, 26, 5, state === 'won' ? Math.abs(Math.sin(time / 200)) : glow);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function resize() { build(); }
+  return { enter, exit, update, draw, resize, onPointer, _dbg: () => ({ state, parts: save.woodParts, trees: save.trees, S, OX, OY }) };
+})();
+
+startLoop(Wald);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

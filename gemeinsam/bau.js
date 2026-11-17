@@ -4,9 +4,11 @@
    ===================================================================== */
 Object.assign(WORDS, {
   site: ['BAUSTELLE', 'Baustelle'], digger: ['BAGGER', 'Bagger'], dig: ['BAGGERN', 'Baggern'],
-  dirt: ['ERDE', 'Erde'], tipper: ['KIPPER', 'Kipper'], house: ['HAUS', 'Haus'], concrete: ['BETON', 'Beton']
+  dirt: ['ERDE', 'Erde'], tipper: ['KIPPER', 'Kipper'], house: ['HAUS', 'Haus'], concrete: ['BETON', 'Beton'],
+  pump: ['BETONPUMPE', 'Betonpumpe'], wall: ['MAUER', 'Mauer'], brick: ['STEIN', 'Stein'], builder: ['BAUARBEITER', 'Bauarbeiter']
 });
 const BAU_STARS_DIG = 3;                       // Sterne für die fertige Grube
+const BAU_STARS_STEP = 3;                      // Sterne je weiterem Bauschritt (Beton, Mauer …)
 
 // Bauarbeiter von oben (gelber Helm, orange Warnweste), schaut nach rechts
 const BUILDER = rotateSprite(sprite(20, R => {
@@ -30,6 +32,15 @@ const EXCAVATOR = rotateSprite(sprite(28, R => {
   R('#444',22,9,4,10); R('#777',23,10,2,8); R('#aaa',26,9,1,10);       // Schaufel
 }));
 
+// Betonpumpe von oben, schaut nach rechts (Fahrerhaus vorne, Pumpenarm zusammengeklappt)
+const PUMP = rotateSprite(sprite(32, R => {
+  for (const x of [4, 11, 19]) { R('#1a1a1a',x,5,5,3); R('#1a1a1a',x,24,5,3); }
+  R('#444',2,8,24,16); R('#777',3,9,22,14);
+  R('#8e1f1f',24,7,7,18); R('#d83a3a',25,8,5,16); R('#9fe3ff',29,9,2,14); R('#e6f8ff',29,9,2,3);
+  R('#999',4,11,9,10); R('#cfcfcf',5,12,7,8);                       // Drehturm
+  R('#8e1f1f',7,13,19,6); R('#d83a3a',8,14,17,4); R('#ffffff',8,15,17,1);   // Arm, zusammengeklappt
+  R('#222',24,15,2,2);
+}));
 // Kipper (Lastwagen mit Mulde) von oben, schaut nach links; fill 0..1 Erde in der Mulde
 const TIPPERS = [['#e03b3b','#8e1f1f'],['#2a6fdb','#173f80'],['#f08c00','#9a5a00'],['#16a085','#0b5e4e']];
 function drawTipper(x, y, fill, col) {

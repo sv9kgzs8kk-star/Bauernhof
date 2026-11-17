@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261117g">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261117i">
 <title>Baustelle</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -43,21 +43,23 @@ window.addEventListener('error', function (e) {
     <div class="vbtns">
       <button class="vbtn act" id="vb-person" aria-label="Bauarbeiter"><canvas width="34" height="34"></canvas></button>
       <button class="vbtn" id="vb-digger" aria-label="Bagger" data-say="digger"><canvas width="34" height="34"></canvas></button>
+      <button class="vbtn" id="vb-pump" aria-label="Betonpumpe" data-say="pump"><canvas width="34" height="34"></canvas></button>
     </div>
   </div>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261117g"></script>
-<script src="../gemeinsam/basis.js?v=20261117g"></script>
-<script src="../gemeinsam/bau.js?v=20261117g"></script>
+<script src="../gemeinsam/sterne.js?v=20261117i"></script>
+<script src="../gemeinsam/basis.js?v=20261117i"></script>
+<script src="../gemeinsam/bau.js?v=20261117i"></script>
 <script>
 /* =====================================================================
    WELT: BAUSTELLE – Bauhof als begehbare Karte (wie der Bauernhof)
-   Bauarbeiter läuft, Bagger fährt. Mit dem Bagger auf den Bauplatz → Grube ausheben (spiele/baggern).
+   Bauarbeiter läuft, Bagger fährt. Bauplatz betreten → Minispiel des nächsten Bauschritts: Bagger → baggern, Betonpumpe → beton, zu Fuß → mauer.
    Hausbau-Fortschritt: save.house.step (0 = Grube fehlt, 1 = Grube fertig, … 5 = Haus fertig)
    ===================================================================== */
 const save = Hof.save;
-const PAGES = { S: 'spiele/baggern/index.html' };
+// Bauplatz betreten → Minispiel je nach Bauschritt (und wer dafür gebraucht wird)
+const STEP_GAME = [ { who: 'digger', page: 'spiele/baggern/index.html' }, { who: 'pump', page: 'spiele/beton/index.html' }, { who: 'person', page: 'spiele/mauer/index.html' } ];
 let backFrom = (location.hash || '').slice(1) || null;
 const HINT_AFTER = 10;
 const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
@@ -74,19 +76,24 @@ const HUB_MAP = [
 ];
 paintFront($('vb-person').querySelector('canvas'), BUILDER_FRONT);
 { const g = $('vb-digger').querySelector('canvas').getContext('2d'); g.drawImage(EXCAVATOR.frames[24], 0, 0); }
+{ const g = $('vb-pump').querySelector('canvas').getContext('2d'); g.drawImage(PUMP.frames[24], 0, 0); }
 
 const Hub = (() => {
-  let type, ox, oy, entering = false, active = 'person', posKey = '', boardT = 0, idleT = 0;
+  let type, ox, oy, entering = false, active = 'person', posKey = '', boardT = 0, idleT = 0, siteT = 0;
   const ENT = {
     person: { spr: BUILDER,   m: null, speed: 2.8 },
     digger: { spr: EXCAVATOR, m: null, speed: 1.9, pitch: 40 },
+    pump:   { spr: PUMP,      m: null, speed: 2.1, pitch: 36 },
   };
+  const VEHICLES = ['digger', 'pump'];
   const cellType = (r, c) => (r < 0 || c < 0 || r >= gr || c >= gc) ? 'X' : type[r][c];
-  const need = () => house().step === 0 ? 'digger' : null;
+  const game = () => STEP_GAME[house().step] || null;
+  const need = () => game() ? game().who : null;
   const passableFor = name => (r, c) => {
     const t = cellType(r, c);
+    if (t === 'S') return need() === name;                                  // Bauplatz: nur wer für den nächsten Bauschritt gebraucht wird
     if (name === 'person') return ['.', '=', 'y'].includes(t);
-    if (t === 'S') return name === 'digger' && house().step === 0;           // Bauplatz: nur der Bagger, solange die Grube fehlt
+    if (VEHICLES.some(v => v !== name && ENT[v].m && ENT[v].m.r === r && ENT[v].m.c === c)) return false;   // Fahrzeuge fahren nicht ineinander
     return ['.', '=', 'y'].includes(t);
   };
 
@@ -126,17 +133,21 @@ const Hub = (() => {
     if (key !== posKey || !ENT.person.m) {
       ENT.person.m = newMover(oy+3, ox+1, 0);
       ENT.digger.m = newMover(oy+4, ox+2, -Math.PI/2);
+      ENT.pump.m   = newMover(oy+4, ox+1, -Math.PI/2);
       posKey = key; active = 'person';
     }
-    if (from === 'baggern') {                        // zurück vom Ausheben: Bagger steht unten am Bauplatz
-      Object.assign(ENT.digger.m, { r: oy+3, c: ox+6, a: Math.PI/2 });
-      Object.assign(ENT.person.m, { r: oy+3, c: ox+5 });
-      active = 'digger';
+    const BACK = { baggern: 'digger', beton: 'pump', mauer: 'person' };   // zurück: wer gearbeitet hat, steht unten am Bauplatz
+    if (BACK[from]) {
+      const who = BACK[from];
+      Object.assign(ENT[who].m, { r: oy+3, c: ox+6, a: Math.PI/2 });
+      if (who !== 'person') Object.assign(ENT.person.m, { r: oy+3, c: ox+5 });
+      for (const v of VEHICLES) if (v !== who && ENT[v].m.r === oy+3 && ENT[v].m.c === ox+6) Object.assign(ENT[v].m, { r: oy+4, c: ox + (v === 'pump' ? 1 : 2) });
+      active = who;
     }
     for (const e of Object.values(ENT)) e.m.moving = false;
   }
   function freeNear(r, c) {
-    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]]) if (passableFor('person')(r+dy, c+dx)) return [r+dy, c+dx];
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]]) if (cellType(r+dy, c+dx) !== 'S' && passableFor('person')(r+dy, c+dx)) return [r+dy, c+dx];
     return [r, c];
   }
   function setActive(name) {
@@ -145,11 +156,14 @@ const Hub = (() => {
     if (am.moving) { am.r = am.tr; am.c = am.tc; am.moving = false; am.prog = 0; }
     idleT = 0; clearTapGoal(); clearHeld();
     if (name === 'person') { const v = ENT[active].m; active = 'person'; const [r, c] = freeNear(v.r, v.c); Object.assign(ENT.person.m, { r, c, a: v.a, moving: false }); }
-    else { active = name; sayWord('digger'); }
+    else { active = name; sayWord(name); }
     sfx.click(); refreshVBtns();
   }
-  function refreshVBtns() { ['person', 'digger'].forEach(n => $('vb-' + n).classList.toggle('act', active === n)); }
-  ['person', 'digger'].forEach(n => $('vb-' + n).addEventListener('click', () => setActive(n)));
+  function refreshVBtns() {
+    ['person', ...VEHICLES].forEach(n => $('vb-' + n).classList.toggle('act', active === n));
+    $('vb-person').classList.toggle('need', need() === 'person' && active !== 'person');
+  }
+  ['person', ...VEHICLES].forEach(n => $('vb-' + n).addEventListener('click', () => setActive(n)));
 
   function enter() {
     Hof.load(); build();
@@ -164,20 +178,26 @@ const Hub = (() => {
     const e = ENT[active];
     idleT = held ? 0 : idleT + dt;
     if (active === 'person' && !e.m.moving && !held && !entering) {      // auf dem Bagger stehen bleiben = einsteigen
-      const on = ENT.digger.m.r === e.m.r && ENT.digger.m.c === e.m.c;
+      const on = VEHICLES.find(v => ENT[v].m.r === e.m.r && ENT[v].m.c === e.m.c);
       boardT = on ? boardT + dt : 0;
-      if (on && boardT > 0.9) { boardT = 0; setActive('digger'); sfx.enter(); }
+      if (on && boardT > 0.9) { boardT = 0; setActive(on); sfx.enter(); }
     } else boardT = 0;
     if (!entering) moverUpdate(e.m, dt, {
       passable: passableFor(active), speed: e.speed,
       onArrive: m => {
-        const t = cellType(m.r, m.c);
-        if (!PAGES[t] || active !== 'digger') return;
+        const t = cellType(m.r, m.c), g = game();
+        if (t !== 'S' || !g || active !== g.who) return;
         entering = true; sfx.enter();
-        setTimeout(() => { location.href = PAGES[t]; }, 350);
+        setTimeout(() => { location.href = g.page; }, 350);
         return 'stop';
       }
     });
+    // Steht der Richtige schon still auf dem Bauplatz (z. B. nach dem Aussteigen), geht es nach kurzer Zeit los
+    { const g = game();
+      if (!entering && g && active === g.who && !e.m.moving && cellType(e.m.r, e.m.c) === 'S') {
+        siteT += dt;
+        if (siteT > 0.6) { entering = true; sfx.enter(); setTimeout(() => { location.href = g.page; }, 300); }
+      } else siteT = 0; }
     if (active === 'person') setEngine(false, false); else setEngine(true, e.m.moving, e.pitch);
   }
 
@@ -190,6 +210,19 @@ const Hub = (() => {
     } else {
       for (let j = 0; j < (h-16)/T; j++) for (let i = 0; i < (w-16)/T; i++) ctx.drawImage(bauTiles.dug[(i*3+j) % 4], x0+8+i*T, y0+8+j*T);
       R('#3e2a18', x0+8, y0+8, w-16, 2); R('#3e2a18', x0+8, y0+8, 2, h-16);
+    }
+    if (st >= 2) {                                  // Bodenplatte aus Beton
+      R('#7d838a', x0+8, y0+8, w-16, h-16); R('#a2a8ae', x0+9, y0+9, w-18, h-18);
+      for (let i = 0; i < 6; i++) R('#b8bec4', x0+14+((i*23)%(w-30)), y0+13+((i*11)%(h-28)), 4, 1);
+    }
+    if (st >= 3) {                                  // Mauern: Ring aus Steinen, Vorderseite mit Tür und Fenstern
+      const wx = x0+8, wy = y0+8, ww = w-16, wh = h-16;
+      R('#8e2a20', wx, wy, ww, 4); R('#8e2a20', wx, wy, 4, wh); R('#8e2a20', wx+ww-4, wy, 4, wh);
+      R('#e06a5a', wx, wy, ww, 1);
+      R('#8e2a20', wx, wy+wh-4, ww, 12); R('#c0392b', wx+1, wy+wh-3, ww-2, 10);
+      for (let y = wy+wh; y < wy+wh+8; y += 3) for (let x = wx + ((y/3)%2 ? 3 : 0); x < wx+ww; x += 6) R('#8e2a20', x, y, 1, 3);
+      R('#2e1f10', wx+ww/2-4, wy+wh-1, 8, 9);                                         // Türöffnung
+      R('#2e1f10', wx+10, wy+wh+1, 8, 4); R('#2e1f10', wx+ww-18, wy+wh+1, 8, 4);      // Fensteröffnungen
     }
     // Bauzaun
     for (let x = x0; x <= x0 + w; x += 9) { R('#d35400', x, y0-2, 2, 8); R('#d35400', x, y0+h-6, 2, 8); }
@@ -206,22 +239,25 @@ const Hub = (() => {
     ctx.drawImage(bg, 0, 0);
     drawSite(time);
     drawTipper((ox+1)*G + 4, (oy+5)*G + 4, 0, TIPPERS[2]);                 // geparkter Kipper
-    if (active !== 'digger') drawMover(ENT.digger.m, ENT.digger.spr, time);
+    for (const v of VEHICLES) if (active !== v) drawMover(ENT[v].m, ENT[v].spr, time);
     drawMover(ENT[active].m, ENT[active].spr, time);
     // Hilfe: Pfeil zum Bagger bzw. zum Bauplatz, solange die Grube fehlt
     const bounce = Math.abs(Math.sin(time/220)) * 4;
-    if (!entering && need() === 'digger') {
-      if (active === 'person') { const p = moverPos(ENT.digger.m); drawArrow(Math.round(p.x - 3), Math.round(p.y - 28 - bounce)); }
-      else drawArrow((ox+6)*G + 9, Math.round((oy+1)*G + 12 - bounce));
+    const n = need();
+    if (!entering && n) {
+      if (active === n) drawArrow((ox+6)*G + 9, Math.round((oy+1)*G + 12 - bounce));           // zum Bauplatz
+      else if (n !== 'person' && active === 'person') { const p = moverPos(ENT[n].m); drawArrow(Math.round(p.x - 3), Math.round(p.y - 28 - bounce)); }
     }
+    refreshVBtns();
     $('hubhud').classList.toggle('hidden', entering);
   }
   function onPointer(type, x, y) {
     if (entering) return true;
     idleT = 0;
-    if (type === 'down' && active !== 'digger') {           // Bagger antippen = einsteigen
-      const p = moverPos(ENT.digger.m);
-      if (Math.abs(x - p.x) < G*0.8 && Math.abs(y - p.y) < G*0.8) { setActive('digger'); return true; }
+    if (type === 'down') for (const v of VEHICLES) {        // Fahrzeug antippen = einsteigen
+      if (v === active) continue;
+      const p = moverPos(ENT[v].m);
+      if (Math.abs(x - p.x) < G*0.8 && Math.abs(y - p.y) < G*0.8) { setActive(v); return true; }
     }
     return false;
   }
@@ -234,6 +270,6 @@ addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 startLoop(Hub);
 </script>
 <script>window.START_URL = '../index.html';</script>
-<script src="../gemeinsam/startseite.js?v=20261117g"></script>
+<script src="../gemeinsam/startseite.js?v=20261117i"></script>
 </body>
 </html>

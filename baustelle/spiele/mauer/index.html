@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261117i">
+<title>Mauer</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="whud" class="hud gamehud hidden">
+  <div class="pill" data-say="wall" style="pointer-events:auto"><span class="word">MAUER</span> <span id="wcount">0/0</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261117i"></script>
+<script src="../../../gemeinsam/basis.js?v=20261117i"></script>
+<script src="../../../gemeinsam/bau.js?v=20261117i"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+let winTimer = null;
+// Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: WÄNDE MAUERN (Baustelle, Wohnhaus Schritt 3)
+   Steine von der Palette in die leuchtenden Lücken ziehen. Reihe für Reihe von unten nach oben,
+   Tür und Fenster bleiben frei. Nah genug = rastet ein, sonst fällt der Stein zurück (kein Scheitern).
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('mauer')));
+
+const Wall = (() => {
+  // Bühne: festes Raster, auf den Bildschirm vergrößert (wie Kühe/Angeln)
+  const DW = 200, DH = 140, GROUND = 112, BW = 22, BH = 12, X0 = 66, COLS = 5;
+  // 1 = hier kommt ein Stein hin, 0 = Öffnung (Tür in der Mitte, Fenster links/rechts in Reihe 2)
+  const PLAN = [[1,1,0,1,1],[1,1,0,1,1],[1,0,0,0,1],[1,1,1,1,1]];
+  let S = 1, OX = 0, OY = 0, state, placed, row, drag = null, falling = [], winT = null, glowT = 0;
+  const toStage = (x, y) => [(x - OX) / S, (y - OY) / S];
+  const sp = (x, y, vx, vy, life, col, grav = 0) => spawn(OX + x*S, OY + y*S, vx*S, vy*S, life, col, grav*S);
+  const slotXY = (r, c) => [X0 + c * BW, GROUND - (r + 1) * BH];
+  const PAL = { x: 8, y: GROUND - 26, w: 40, h: 26 };
+  function total() { return PLAN.flat().filter(Boolean).length; }
+  function rowDone(r) { return PLAN[r].every((v, c) => !v || placed[r][c]); }
+
+  function build() {
+    layout(true);
+    const m = Math.min(W / DW, H / DH);
+    S = m >= 2 ? Math.floor(m) : m;
+    OX = Math.round((W - DW*S) / 2); OY = Math.round((H - DH*S) * 0.7);
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    bctx.imageSmoothingEnabled = false;
+    bctx.setTransform(S, 0, 0, S, OX, OY);
+    const x0 = Math.floor(-OX/S) - 1, x1 = Math.ceil((W-OX)/S) + 1, y0 = Math.floor(-OY/S) - 1, y1 = Math.ceil((H-OY)/S) + 1;
+    B('#9fe3ff', x0, y0, x1-x0, GROUND - 20 - y0); B('#c8f0ff', x0, y0, x1-x0, 20 - y0);
+    B('#ffffff', 24, 14, 18, 3); B('#ffffff', 28, 12, 9, 2); B('#ffffff', 150, 20, 22, 3); B('#ffffff', 156, 18, 10, 2);
+    for (let x = x0 - (x0 % T) - T; x < x1; x += T) for (let y = GROUND - 20; y < y1; y += T) bctx.drawImage(pick(bauTiles.gravel), x, y);
+    // Bodenplatte (schräg von oben): Oberseite und Kante
+    B('#7d838a', X0 - 8, GROUND - 14, COLS*BW + 16, 18); B('#a2a8ae', X0 - 7, GROUND - 13, COLS*BW + 14, 12); B('#6a7076', X0 - 8, GROUND + 2, COLS*BW + 16, 3);
+    // Palette
+    B('#5a3b1c', PAL.x, GROUND - 2, PAL.w, 4); B('#7a4a22', PAL.x + 1, GROUND - 1, PAL.w - 2, 2);
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function enter() {
+    Hof.load();
+    if (house().step !== 2) { goHof('mauer'); return; }
+    build();
+    placed = PLAN.map(r => r.map(() => false)); row = 0; drag = null; falling = [];
+    state = 'play'; show('whud'); hud();
+    setTimeout(() => sayWord('wall'), 400);
+  }
+  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; drag = null; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
+  function hud() { $('wcount').textContent = placed.flat().filter(Boolean).length + '/' + total(); }
+
+  function freeSlots() { return PLAN[row] ? PLAN[row].map((v, c) => v && !placed[row][c] ? c : -1).filter(c => c >= 0) : []; }
+  function onPointer(type, x, y) {
+    if (state !== 'play') return true;
+    const [sx, sy] = toStage(x, y);
+    if (type === 'down') {
+      if (sx > PAL.x - 6 && sx < PAL.x + PAL.w + 6 && sy > PAL.y - 14 && sy < GROUND + 8) { drag = { x: sx, y: sy }; sfx.click(); }
+      else {                                            // Lücke direkt angetippt: Stein fliegt von der Palette hinein (Hilfe für Kleine)
+        const c = freeSlots().find(c => { const [bx, by] = slotXY(row, c); return sx > bx - 4 && sx < bx + BW + 4 && sy > by - 4 && sy < by + BH + 4; });
+        if (c !== undefined && c >= 0) falling.push({ fly: true, t: 0, fx: PAL.x + PAL.w/2 - BW/2, fy: PAL.y, r: row, c });
+      }
+    } else if (type === 'move' && drag) { drag.x = sx; drag.y = sy; }
+    else if (type === 'up' && drag) {
+      let best = -1, bd = 34;
+      for (const c of freeSlots()) { const [bx, by] = slotXY(row, c), d = Math.hypot(bx + BW/2 - drag.x, by + BH/2 - drag.y); if (d < bd) { bd = d; best = c; } }
+      if (best >= 0) place(row, best);
+      else { falling.push({ back: true, t: 0, fx: drag.x - BW/2, fy: drag.y - BH/2 }); sfx.bonk(); }
+      drag = null;
+    }
+    return true;
+  }
+  function place(r, c) {
+    placed[r][c] = true; sfx.clod(); hud();
+    const [bx, by] = slotXY(r, c);
+    for (let k = 0; k < 8; k++) sp(bx + rnd(0, BW), by + BH, rnd(-15, 15), rnd(-20, -5), .4, '#d8c8a8', 60);
+    if (rowDone(r)) {
+      row++; glowT = 0.6; sfx.load();
+      if (row >= PLAN.length) { state = 'won'; finishStep(3, 'wall', 'mauer'); }
+    }
+  }
+  function update(dt) {
+    glowT = Math.max(0, glowT - dt);
+    for (const f of falling) {
+      f.t += dt;
+      if (f.fly && f.t >= 0.45 && !f.done) { f.done = true; if (!placed[f.r][f.c] && f.r === row) place(f.r, f.c); }
+    }
+    falling = falling.filter(f => f.t < (f.fly ? 0.45 : 0.35));
+  }
+  function drawBrick(x, y, ghost) {
+    if (ghost) { R('rgba(255,255,255,.35)', x + 1, y + 1, BW - 2, BH - 2); return; }
+    R('#7a2218', x, y, BW, BH); R('#c0392b', x + 1, y + 1, BW - 2, BH - 3); R('#e06a5a', x + 2, y + 1, BW - 4, 1);
+    R('#8e2a20', x + BW/2, y + 1, 1, BH - 3); R('rgba(216,200,168,.8)', x, y + BH - 1, BW, 1);
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    ctx.setTransform(S, 0, 0, S, OX, OY);
+    // Mauer: gesetzte Steine, leuchtende Lücken der aktuellen Reihe, Umriss der fertigen Wand
+    for (let r = 0; r < PLAN.length; r++) for (let c = 0; c < COLS; c++) {
+      const [x, y] = slotXY(r, c);
+      if (!PLAN[r][c]) { if (r === 0 || placed[r-1] && (PLAN[r-1][c] === 0 || placed[r-1][c])) R('rgba(0,0,0,.08)', x, y, BW, BH); continue; }
+      if (placed[r][c]) drawBrick(x, y);
+      else if (r === row && state === 'play') {
+        const a = 0.35 + Math.abs(Math.sin(time / 260)) * 0.45;
+        R(`rgba(255,210,63,${a})`, x + 1, y + 1, BW - 2, BH - 2); ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, BW - 3, BH - 3);
+      } else R('rgba(255,255,255,.12)', x + 1, y + 1, BW - 2, BH - 2);
+    }
+    // Oberkante der Mauer (schräg von oben gesehen)
+    const top = GROUND - row * BH;
+    if (row > 0) { R('#e06a5a', X0, top - 1, COLS * BW, 1); }
+    // Palette mit Steinen
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) drawBrick(PAL.x - 2 + i * (BW - 2), GROUND - 2 - (j + 1) * BH + 1);
+    // Bauarbeiter neben der Palette
+    BUILDER_FRONT.px.forEach((ln, j) => [...ln].forEach((ch, i) => { if (ch !== '.') R(BUILDER_FRONT.pal[ch], 48 + i * 1.5, GROUND - 22 + j * 1.5, 1.5, 1.5); }));
+    // fliegende / zurückfallende Steine
+    for (const f of falling) {
+      if (f.fly) { const [tx, ty] = slotXY(f.r, f.c), k = Math.min(1, f.t / 0.45); drawBrick(f.fx + (tx - f.fx) * k, f.fy + (ty - f.fy) * k - Math.sin(k * Math.PI) * 24); }
+      else { const k = Math.min(1, f.t / 0.35); drawBrick(f.fx + (PAL.x - f.fx) * k, f.fy + (PAL.y - f.fy) * k); }
+    }
+    if (drag) drawBrick(drag.x - BW / 2, drag.y - BH / 2);
+    // Hinweis: Finger von der Palette zur Lücke
+    if (state === 'play' && !drag && !falling.length) {
+      const fs = freeSlots(); if (fs.length) {
+        const k = (time / 1400) % 1, [tx, ty] = slotXY(row, fs[0]);
+        const hx = PAL.x + PAL.w/2 + (tx + BW/2 - PAL.x - PAL.w/2) * k, hy = PAL.y + (ty + BH/2 - PAL.y) * k - Math.sin(k * Math.PI) * 16;
+        ctx.globalAlpha = 0.45; drawBrick(hx - BW/2, hy - BH/2); ctx.globalAlpha = 1;
+        drawArrow(Math.round(PAL.x + PAL.w/2 - 3), Math.round(PAL.y - 14 - Math.abs(Math.sin(time/220)) * 4));
+      }
+    }
+    if (glowT > 0) { ctx.globalAlpha = glowT; R('#ffffff', X0, GROUND - row * BH, COLS * BW, BH); ctx.globalAlpha = 1; }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function resize() { build(); }
+  function exit() { clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, placed, S, OX, OY, PAL, X0, GROUND, BW, BH }) };
+})();
+startLoop(Wall);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

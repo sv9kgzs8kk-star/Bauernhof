@@ -8,7 +8,7 @@ index.html                  ← Startseite: Kacheln je Welt (WELTEN-Liste, aktiv
                               nur eine aktive Welt → direkte Weiterleitung)
 hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
 baustelle/index.html        ← Welt BAUSTELLE: Bauhof als begehbare Karte (Bauarbeiter, Bagger, Bauplatz `S`)
-baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'), z. B. baggern/
+baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
 gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlesen, Steuerung, Layout, Laden, goHof()
@@ -43,7 +43,7 @@ spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 - **Stadt/Bauhof als Herzstück:** Man startet am Bauhof und baut nach und nach eine Stadt: Gebäude (Wohnhaus, Bahnhof, Feuerwache …), Straßen, Brücken, Bahnstrecken. Ein fertig gebautes Gebäude lässt sich gegen Sterne freischalten und wird dann zu einer eigenen spielbaren Welt.
 - **Erstes Gebäude: Wohnhaus.** Der Fortschritt liegt in `save.house.step` (0 = Grube fehlt, 1 = Grube fertig … 5 = Haus fertig). Gebaut wird in Etappen, alles im Stil des Hofs (schräg von oben, fahren/antippen statt nur zuschauen):
   1. Grube baggern wie Ernten, mit Kipper (fertig)
-  2. Beton mit der Betonpumpe malen (Finger ziehen) und Wände mit Steinen setzen (Steine in leuchtende Lücken ziehen)
+  2. Beton mit der Betonpumpe malen (Finger ziehen, ab 90 % läuft der Rest nach) und Wände mit Steinen setzen (Steine in leuchtende Lücken ziehen oder Lücke antippen) (fertig: `spiele/beton`, `spiele/mauer`; Bauplatz-Zugang je Schritt über `STEP_GAME` in `baustelle/index.html`)
   3. Dachteile mit dem Kran vom LKW aufs Haus heben, Richtfest, Dach durch Wischen decken, danach Fenster/Tür
 
   Danach kann man es einrichten (Möbel platzieren).
@@ -65,7 +65,7 @@ spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
   - **Testversion**: Link `https://raw.githack.com/sv9kgzs8kk-star/Bauernhof/<commit-sha>/<seite>` mit der **vollständigen Commit-SHA** des letzten Commits, nicht dem Zweignamen. Zweig-Links zwischenspeichert der Dienst und zeigt dann alte Stände. Nach jeder Nachbesserung den Link in der PR-Beschreibung aktualisieren und im Kommentar den neuen Link nennen.
   - **Bitte auf dem iPad testen** (nummerierte Schritte)
 
-  Dazu `Closes #<issue>`. Michael öffnet die Testversion in Safari, nicht in der Home-Bildschirm-App. Die Testversion hat einen eigenen Spielstand, dafür startet man dort mit 0 Sternen. Für Testschritte, die Sterne oder Heu brauchen, den Link mit `?sterne=50&heu=10` versehen. Das wirkt nur auf raw.githack.com, nicht in der echten App.
+  Dazu `Closes #<issue>`. Michael öffnet die Testversion in Safari, nicht in der Home-Bildschirm-App. Die Testversion hat einen eigenen Spielstand, dafür startet man dort mit 0 Sternen. Für Testschritte, die Sterne oder Heu brauchen, den Link mit `?sterne=50&heu=10` versehen; Baustellen-Links mit `?bau=0` (setzt den Hausbau zurück, sonst bleibt der Stand aus früheren Tests stehen). Das wirkt nur auf raw.githack.com, nicht in der echten App.
 - Vor dem PR mit Headless-Chrome testen (`/usr/bin/google-chrome` über Playwright, lokaler `python3 -m http.server`). Alle geänderten Seiten laden, es dürfen keine JS-Fehler auftreten, Screenshots ansehen.
 - GitHub nur über die REST-API (`gh api repos/sv9kgzs8kk-star/Bauernhof/...`). GraphQL ist gesperrt, `gh pr create` funktioniert also nicht.
 - Neue Vorschläge sind klein genug für eine Nacht und mindestens einer davon verbessert etwas Bestehendes, statt nur Neues hinzuzufügen.

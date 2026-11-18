@@ -21,7 +21,7 @@ window.addEventListener('error', function (e) {
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
 <link rel="stylesheet" href="../gemeinsam/basis.css?v=20261117l">
-<title>Baustelle</title>
+<title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
   #hubstats{position:absolute;top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 96px);
@@ -29,6 +29,7 @@ window.addEventListener('error', function (e) {
   #hubside{position:absolute;top:calc(env(safe-area-inset-top) + 100px);left:calc(env(safe-area-inset-left) + 10px);
     display:flex;flex-direction:column;gap:10px;pointer-events:auto}
   #hubside .vbtns{flex-direction:column}
+  #plotbubble{z-index:21;pointer-events:auto}
 </style>
 </head>
 <body>
@@ -48,15 +49,21 @@ window.addEventListener('error', function (e) {
   </div>
 </div>
 
+<!-- Sprechblase über einem Bauplatz der Stadt (Wort groß, wird vorgelesen) -->
+<div id="plotbubble" class="bubble hidden" data-say="city"><div class="word" id="plotword">STADT</div></div>
+
 <script src="../gemeinsam/sterne.js?v=20261117l"></script>
 <script src="../gemeinsam/basis.js?v=20261117l"></script>
 <script src="../gemeinsam/bau.js?v=20261117l"></script>
 <script>
 /* =====================================================================
-   WELT: BAUSTELLE – Bauhof als begehbare Karte (wie der Bauernhof)
+   WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
    Bauarbeiter läuft, Bagger fährt. Bauplatz betreten → Minispiel des nächsten Bauschritts: Bagger → baggern, Betonpumpe → beton, zu Fuß → mauer.
    Hausbau-Fortschritt: save.house.step (0 = Grube fehlt, 1 = Grube fertig, … 5 = Haus fertig)
+   Stadtplan: feste, umrandete Bauplätze. F = Bauernhof (fertig, zu Fuß 0,8 s stehen → hof.html),
+   P = Feuerwache, Q = Bahnhof (noch gesperrt: Schild mit Bild und Schloss, Stehenbleiben sagt das Wort)
    ===================================================================== */
+Object.assign(WORDS, { city: ['STADT', 'Stadt'], farm: ['BAUERNHOF', 'Bauernhof'], firestation: ['FEUERWACHE', 'Feuerwache'], station: ['BAHNHOF', 'Bahnhof'] });
 const save = Hof.save;
 // Bauplatz betreten → Minispiel je nach Bauschritt (und wer dafür gebraucht wird)
 const STEP_GAME = [ { who: 'digger', page: 'spiele/baggern/index.html' }, { who: 'pump', page: 'spiele/beton/index.html' }, { who: 'person', page: 'spiele/mauer/index.html' },
@@ -65,22 +72,28 @@ let backFrom = (location.hash || '').slice(1) || null;
 const HINT_AFTER = 10;
 const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
 
-// T Baum, c Baucontainer (Büro), S Bauplatz, = Straße, y Fahrzeughof (Schotter), k geparkter Kipper
+// T Baum, c Baucontainer (Büro), S Bauplatz, = Straße, y Fahrzeughof (Schotter), k geparkter Kipper, F Bauernhof
 const HUB_MAP = [
   'TT.T...T',
   '.cc.=SSS',
   '.cc.=SSS',
   '========',
-  '.yyy=.T.',
-  'Tkky=..T',
-  'TT..=TTT',
+  '.yyy=.FF',
+  'Tkky=.FF',
+  'TT..=..T',
 ];
+// Stadtplan mit weiteren Bauplätzen: rechts daneben (breiter Bildschirm) oder darunter (hoher Bildschirm)
+const CITY_RIGHT = ['....', '.PP.', '.PP.', '====', '.QQ.', '.QQ.', '..T.'];
+const CITY_BELOW = ['....=..T', '.PP.=QQ.', '.PP.=QQ.', 'T...=...'];
+const PLOTS = { F: { word: 'farm', page: '../hof.html' }, P: { word: 'firestation' }, Q: { word: 'station' } };
+const PLOT_WAIT = 0.8;                       // so lange stehen bleiben, bis etwas passiert (Darüberlaufen löst nichts aus)
 paintFront($('vb-person').querySelector('canvas'), BUILDER_FRONT);
 { const g = $('vb-digger').querySelector('canvas').getContext('2d'); g.drawImage(EXCAVATOR.frames[24], 0, 0); }
 { const g = $('vb-pump').querySelector('canvas').getContext('2d'); g.drawImage(PUMP.frames[24], 0, 0); }
 
 const Hub = (() => {
   let type, ox, oy, entering = false, active = 'person', posKey = '', boardT = 0, idleT = 0, siteT = 0;
+  let plotT = 0, plotDone = -1, plotShown = null, plotPos = {};
   const ENT = {
     person: { spr: BUILDER,   m: null, speed: 2.8 },
     digger: { spr: EXCAVATOR, m: null, speed: 1.9, pitch: 40 },
@@ -93,20 +106,25 @@ const Hub = (() => {
   const passableFor = name => (r, c) => {
     const t = cellType(r, c);
     if (t === 'S') return need() === name;                                  // Bauplatz: nur wer für den nächsten Bauschritt gebraucht wird
-    if (name === 'person') return ['.', '=', 'y'].includes(t);
+    if (name === 'person') return ['.', '=', 'y', 'F', 'P', 'Q'].includes(t);    // Stadt-Bauplätze nur zu Fuß
     if (VEHICLES.some(v => v !== name && ENT[v].m && ENT[v].m.r === r && ENT[v].m.c === c)) return false;   // Fahrzeuge fahren nicht ineinander
     return ['.', '=', 'y'].includes(t);
   };
 
   function build() {
     layout(true);
-    ox = Math.floor((gc - 8) / 2); oy = Math.floor((gr - HUB_MAP.length) / 2);
+    const ext = gc >= 12 ? 'right' : gr >= 11 ? 'below' : '';
+    const MAP = ext === 'right' ? HUB_MAP.map((row, i) => row + CITY_RIGHT[i]) : ext === 'below' ? HUB_MAP.concat(CITY_BELOW) : HUB_MAP;
+    const MW = MAP[0].length, MH = MAP.length;
+    ox = Math.floor((gc - MW) / 2); oy = Math.floor((gr - MH) / 2);
     const rr = seeded(4321 + gc*97 + gr), pickR = a => a[(rr()*a.length)|0];
     type = [];
     for (let r = 0; r < gr; r++) { type.push([]); for (let c = 0; c < gc; c++) {
       const mr = r - oy, mc = c - ox;
-      type[r].push((mr >= 0 && mr < HUB_MAP.length && mc >= 0 && mc < 8) ? HUB_MAP[mr][mc] : (rr() < .16 ? 'T' : '.'));
+      type[r].push((mr >= 0 && mr < MH && mc >= 0 && mc < MW) ? MAP[mr][mc] : (rr() < .16 ? 'T' : '.'));
     }}
+    plotPos = {};                                  // linke obere Zelle jedes Stadt-Bauplatzes
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) if (PLOTS[type[r][c]] && !plotPos[type[r][c]]) plotPos[type[r][c]] = { r, c };
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
     for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
       const t = type[r][c], set = t === '=' ? tiles.road : (t === 'y' || t === 'k') ? bauTiles.gravel : t === 'S' ? bauTiles.site : tiles.grass;
@@ -126,7 +144,46 @@ const Hub = (() => {
       const x = cx*G + 14, y = cy*G + 6;
       B('rgba(0,0,0,.2)', x-1, y+12, 10, 2); B('#e67e22', x+3, y, 2, 3); B('#ffffff', x+2, y+3, 4, 2); B('#e67e22', x+1, y+5, 6, 3); B('#ffffff', x, y+8, 8, 2); B('#e67e22', x-1, y+10, 10, 3);
     }
+    for (const k in plotPos) drawPlot(B, k, plotPos[k].c*G, plotPos[k].r*G);
     bctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  // Stadt-Bauplatz (2×2 Zellen) ins Hintergrundbild malen
+  function drawPlot(B, k, x, y) {
+    const w = 2*G, h = 2*G;
+    if (k === 'F') {                               // Bauernhof: fertig, mit Holzzaun, Scheune und Silo
+      B('#6fbf4f', x+1, y+1, w-2, h-2);
+      B('rgba(0,0,0,.25)', x+5, y+8, 30, 34);
+      B('#4a4a4a', x+3, y+3, 30, 14); B('#6b6b6b', x+4, y+4, 28, 11); B('#7f7f7f', x+4, y+4, 28, 2);   // Scheunendach
+      B('#8e1f1f', x+4, y+16, 28, 22); B('#b83227', x+5, y+17, 26, 20);
+      B('#f2f2f2', x+11, y+22, 14, 16); B('#b83227', x+13, y+24, 10, 14);
+      for (let i = 0; i < 10; i++) { B('#f2f2f2', x+13+i, y+24+(i*1.4|0), 2, 2); B('#f2f2f2', x+21-i, y+24+(i*1.4|0), 2, 2); }
+      B('rgba(0,0,0,.25)', x+38, y+10, 9, 30);   // Silo
+      B('#8a9aa6', x+36, y+10, 9, 28); B('#b8c6d0', x+37, y+10, 3, 28); B('#6f7d88', x+43, y+10, 2, 28);
+      B('#6f7d88', x+37, y+6, 7, 5); B('#9aa8b2', x+38, y+5, 5, 3);
+      const F1 = '#7a4a22', F2 = '#a0673a';      // Holzzaun als Umrandung
+      B(F2, x, y+h-4, w, 2); B(F2, x, y, 2, h-2); B(F2, x+w-2, y, 2, h-2);
+      for (let i = 0; i <= 4; i++) B(F1, x + Math.min(w-3, i*12), y+h-6, 3, 5);
+      return;
+    }
+    // gesperrter Bauplatz: Wiese, weiß-gestrichelte Umrandung, Schild mit Bild und Schloss
+    for (let i = 3; i < w-3; i += 6) { B('#ffffff', x+i, y+2, 3, 2); B('#ffffff', x+i, y+h-4, 3, 2); }
+    for (let j = 3; j < h-3; j += 6) { B('#ffffff', x+2, y+j, 2, 3); B('#ffffff', x+w-4, y+j, 2, 3); }
+    for (const [px, py] of [[x+1, y+1], [x+w-4, y+1], [x+1, y+h-4], [x+w-4, y+h-4]]) { B('#d35400', px, py, 3, 3); B('#fff', px, py, 3, 1); }
+    const sx = x + 7, sy = y + 8;
+    B('#5a3b1c', sx+16, sy+20, 2, 9); B('rgba(0,0,0,.25)', sx+1, sy+1, 34, 20); B('#5a3b1c', sx, sy, 34, 20); B('#fff8e0', sx+2, sy+2, 30, 16);
+    if (k === 'P') {                               // Feuerwache: rotes Haus, zwei Tore, Blaulicht
+      B('#8e1f1f', sx+5, sy+5, 18, 3); B('#c0392b', sx+5, sy+8, 18, 9); B('#3fa9f5', sx+13, sy+3, 2, 2);
+      B('#e9dcc0', sx+7, sy+11, 6, 6); B('#e9dcc0', sx+15, sy+11, 6, 6);
+      B('#b5b5b5', sx+7, sy+13, 6, 1); B('#b5b5b5', sx+15, sy+13, 6, 1); B('#b5b5b5', sx+7, sy+15, 6, 1); B('#b5b5b5', sx+15, sy+15, 6, 1);
+    } else {                                       // Bahnhof: kleine Lok auf Schienen
+      B('#7a4a22', sx+3, sy+15, 22, 1); for (let i = 4; i < 25; i += 3) B('#7a4a22', sx+i, sy+14, 1, 3);
+      B('#2a6fdb', sx+6, sy+8, 14, 6); B('#173f80', sx+16, sy+5, 5, 9); B('#9fe3ff', sx+17, sy+6, 3, 3);
+      B('#333', sx+8, sy+5, 3, 3); B('#cfcfcf', sx+8, sy+3, 3, 2);
+      B('#222', sx+7, sy+13, 3, 2); B('#222', sx+12, sy+13, 3, 2); B('#222', sx+17, sy+13, 3, 2);
+    }
+    // Schloss: noch nicht gebaut
+    B('#5a5a5a', sx+25, sy+6, 6, 1); B('#5a5a5a', sx+25, sy+6, 1, 4); B('#5a5a5a', sx+30, sy+6, 1, 4);
+    B('#f5b700', sx+24, sy+9, 8, 7); B('#c48a00', sx+24, sy+15, 8, 1); B('#3a2a10', sx+27, sy+11, 2, 3);
   }
 
   function placeAll(from) {
@@ -172,7 +229,8 @@ const Hub = (() => {
     placeAll(from); entering = false; idleT = 0; refreshVBtns();
     $('starcount').textContent = save.stars;
     show('ctrl'); show('hubhud');
-    if (!from) setTimeout(() => sayWord('site'), 400);
+    plotT = 0; plotDone = -1; plotShown = null;
+    if (!from) setTimeout(() => sayWord('city'), 400);
   }
 
   function update(dt) {
@@ -199,6 +257,19 @@ const Hub = (() => {
         siteT += dt;
         if (siteT > 0.6) { entering = true; sfx.enter(); setTimeout(() => { location.href = g.page; }, 300); }
       } else siteT = 0; }
+    // Zu Fuß auf einem Stadt-Bauplatz stehen bleiben: Bauernhof → hinein, gesperrter Platz → Wort zeigen und sagen
+    { const pm = ENT.person.m, t = (active === 'person' && !pm.moving && !held && !entering) ? cellType(pm.r, pm.c) : '';
+      const here = active === 'person' ? cellType(pm.r, pm.c) : '';
+      if (here !== plotDone) plotDone = -1;        // Bauplatz verlassen: wieder bereit
+      if (here !== plotShown) plotShown = null;
+      if (PLOTS[t] && t !== plotDone) {
+        plotT += dt;
+        if (plotT > PLOT_WAIT) {
+          plotT = 0; plotDone = t; sayWord(PLOTS[t].word);
+          if (PLOTS[t].page) { entering = true; sfx.enter(); setTimeout(() => { location.href = PLOTS[t].page; }, 900); }
+          else { sfx.click(); plotShown = t; }
+        }
+      } else plotT = 0; }
     if (active === 'person') setEngine(false, false); else setEngine(true, e.m.moving, e.pitch);
   }
 
@@ -245,6 +316,19 @@ const Hub = (() => {
       if (active === n) drawArrow((ox+6)*G + 9, Math.round((oy+1)*G + 12 - bounce));           // zum Bauplatz
       else if (n !== 'person' && active === 'person') { const p = moverPos(ENT[n].m); drawArrow(Math.round(p.x - 3), Math.round(p.y - 28 - bounce)); }
     }
+    if (plotT > 0.1 && active === 'person') {           // Ring füllt sich, solange man auf dem Bauplatz steht
+      const p = moverPos(ENT.person.m);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1, plotT / PLOT_WAIT)); ctx.stroke();
+    }
+    // Sprechblase über dem Bauplatz (als HTML, damit das Wort scharf ist)
+    const pb = $('plotbubble'), show = plotShown || (entering && plotDone === 'F' ? 'F' : null);
+    if (show && plotPos[show]) {
+      const r = cvs.getBoundingClientRect(), q = plotPos[show], w = WORDS[PLOTS[show].word];
+      pb.style.left = (r.left + (q.c + 1) * G / W * r.width) + 'px'; pb.style.top = (r.top + (q.r * G + 2) / H * r.height) + 'px';
+      if (pb.dataset.say !== PLOTS[show].word) { pb.dataset.say = PLOTS[show].word; $('plotword').textContent = w[0]; }
+      pb.classList.remove('hidden');
+    } else pb.classList.add('hidden');
     refreshVBtns();
     $('hubhud').classList.toggle('hidden', entering);
   }
@@ -260,7 +344,7 @@ const Hub = (() => {
   }
   function resize() { build(); placeAll(null); }
   function exit() { setEngine(false, false); }
-  return { enter, update, draw, exit, resize, onPointer, _dbg: () => ({ active, ox, oy, step: house().step }) };
+  return { enter, update, draw, exit, resize, onPointer, _dbg: () => ({ active, ox, oy, step: house().step, plotPos, plotShown, entering, person: ENT.person.m }) };
 })();
 
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

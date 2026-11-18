@@ -24,7 +24,8 @@
       woodParts: 0,             // Wald: gefällte Bäume zum nächsten Stern (0–4, 5 Bäume = 1 Stern)
       saw: false,               // Kettensäge gekauft
       trees: null,              // Wald: je Baum Zeitpunkt des Fällens (0 = steht)
-      house: { step: 0 }        // Baustelle Wohnhaus: erledigte Bauschritte (0–5)
+      house: { step: 0 },       // Baustelle Wohnhaus: erledigte Bauschritte (0–5)
+      home: { unlocked: false, items: {} }   // Wohnhaus innen: freigeschaltet? Möbel { bed: { x, y } … } (x/y = 0–1 im Zimmer)
     };
   }
 
@@ -42,6 +43,8 @@
       d.colors = Object.assign(standard().colors, s.colors || {});
       d.wide = Object.assign({}, s.wide || {});
       d.house = Object.assign(standard().house, s.house || {});
+      d.home = Object.assign(standard().home, s.home || {});
+      if (!d.home.items || typeof d.home.items !== 'object') d.home.items = {};
     }
     Object.keys(Hof.save).forEach(k => delete Hof.save[k]);
     Object.assign(Hof.save, d);
@@ -84,6 +87,19 @@
     Hof.save[key] = n; Hof.persist(); return false;
   };
 
+  // Wohnhaus freischalten (die Sterne dafür vorher mit Hof.spend abziehen)
+  Hof.unlockHome = function () {
+    Hof.load(); Hof.save.home.unlocked = true; Hof.persist();
+  };
+
+  // Möbelstück im Wohnhaus hinstellen (pos = { x, y }, je 0–1 im Zimmer) oder zurück in die Leiste (pos = null)
+  Hof.setFurniture = function (key, pos) {
+    Hof.load();
+    if (pos) Hof.save.home.items[key] = { x: Math.round(pos.x * 1000) / 1000, y: Math.round(pos.y * 1000) / 1000 };
+    else delete Hof.save.home.items[key];
+    Hof.persist();
+  };
+
   Hof.addHay = function (n) {
     Hof.load(); Hof.save.hay = Math.max(0, Hof.save.hay + n); Hof.persist();
     return Hof.save.hay;
@@ -91,12 +107,13 @@
 
   Hof.load();
 
-  // Nur in der Testversion (raw.githack.com): ?sterne=50 setzt Sterne, ?heu=10 setzt Heu, ?bau=0 setzt den Hausbau zurück – zum Ausprobieren.
+  // Nur in der Testversion (raw.githack.com): ?sterne=50 setzt Sterne, ?heu=10 setzt Heu, ?bau=0 setzt den Hausbau zurück, ?haus=0 das Wohnhaus – zum Ausprobieren.
   // In der echten App (github.io) hat das keine Wirkung.
   if (/githack\.com$/.test(location.hostname)) {
     const q = new URLSearchParams(location.search);
     if (q.has('sterne')) { Hof.save.stars = Math.max(0, parseInt(q.get('sterne'), 10) || 0); Hof.persist(); }
     if (q.has('heu')) { Hof.save.hay = Math.max(0, parseInt(q.get('heu'), 10) || 0); Hof.persist(); }
     if (q.has('bau')) { Hof.save.house = { step: Math.max(0, Math.min(5, parseInt(q.get('bau'), 10) || 0)) }; Hof.persist(); }   // Hausbau-Schritt setzen
+    if (q.has('haus')) { Hof.save.home = { unlocked: q.get('haus') === '1', items: {} }; Hof.persist(); }   // Wohnhaus: ?haus=0 zu und leer, ?haus=1 offen und leer
   }
 })();

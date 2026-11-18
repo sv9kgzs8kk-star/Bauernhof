@@ -11,6 +11,9 @@ baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `b
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
                               Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
 baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, kran/, dach/
+wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
+                              einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen
+                              (`save.home.items`, x/y 0–1 im Zimmer; `Hof.unlockHome`, `Hof.setFurniture`)
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
 gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlesen, Steuerung, Layout, Laden, goHof()
@@ -48,7 +51,7 @@ spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
   2. Beton mit der Betonpumpe malen (Finger ziehen, ab 90 % läuft der Rest nach) und Wände mit Steinen setzen (von schräg oben: Steine von der Palette in leuchtende Lücken der Fassade ziehen oder Lücke antippen; 3 Reihen × 7 Spalten, Tür/Fenster aus `facadeHoles()`; **nichts fliegt durch die Luft**, Adrian dachte sonst, er müsse Steine fangen) (fertig: `spiele/beton`, `spiele/mauer`; Bauplatz-Zugang je Schritt über `STEP_GAME` in `baustelle/index.html`)
   3. Dachbinder mit dem Kran vom Tieflader aufs Haus heben (Binder antippen, dann leuchtende Stelle), Richtfest (step 4), Dach durch Wischen decken, danach Fenster/Tür/Schornstein (step 5). Fertig: `spiele/kran`, `spiele/dach`. Alles im Hof-Raster (G-Zellen, scharfe Pixel, keine weichen Linien/Skalierung): Haus wie das Bauernhaus mit `drawHouseTop()`, Kran von oben mit `drawCraneTop()`, Balken mit `drawBeamTop()`/`pixLine()` (alle in `gemeinsam/bau.js`). Fertiges Haus (step 5) wird ohne Bauzaun/Schild als verputztes Wohnhaus mit Garten gezeigt.
 
-  Danach kann man es einrichten (Möbel platzieren).
+  Danach kann man es einrichten (Möbel platzieren): Teil 1 fertig (`wohnhaus/`, ein Zimmer, 5 Möbel). Testlinks: `?haus=0` (zu und leer) bzw. `?haus=1` (offen und leer).
 - **Bauaufträge** bestehen aus Schritten mit wiederverwendbaren Mechaniken: GRABEN (Bagger, Zellen abtragen), GIESSEN (Betonmischer, Schalung füllen), STAPELN (Steine nach Muster setzen), HEBEN (Kran, Teil an markierte Stelle), BELEGEN (Fläche reihenweise füllen: Ziegel, Schotter, Schienen), ZUORDNEN (Fenster/Türen in Öffnungen). Ein Auftrag ist eine Datenliste von Schritten, keine eigene Seite pro Schritt.
 - **Der Bauernhof bleibt einzeln spielbar**, so wie er ist, bis die Stadt so weit ist.
 - Später weitere Welten: Feuerwache, Rettungswache, Polizei, Krankenhaus, Bahnhof, Flughafen.

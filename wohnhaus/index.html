@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="../icon.png">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261118a">
+<title>Wohnhaus</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ihud" class="hud gamehud hidden">
+  <button class="pill btn" data-home aria-label="Zur Stadt"><i class="ico" data-ico="home"></i></button>
+  <div class="pill" id="iword" data-say="house" style="pointer-events:auto"><span class="word">HAUS</span></div>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../gemeinsam/sterne.js?v=20261118a"></script>
+<script src="../gemeinsam/basis.js?v=20261118a"></script>
+<script src="../gemeinsam/bau.js?v=20261118a"></script>
+<script>
+/* =====================================================================
+   WOHNHAUS EINRICHTEN – ein Zimmer von schräg oben (wie der Hof)
+   Möbel aus der Leiste unten ins Zimmer ziehen (oder antippen, dann auf den Boden tippen).
+   Hingestellte Möbel lassen sich verschieben; zurück in die Leiste ziehen räumt sie weg.
+   Es gibt kein Richtig oder Falsch. Alles bleibt gespeichert: save.home.items (x/y = 0–1 im Zimmer).
+   ===================================================================== */
+window.HOF_URL = '../baustelle/index.html';          // „Hof“ ist hier die Stadt
+Object.assign(WORDS, { bed: ['BETT', 'Bett'], table: ['TISCH', 'Tisch'], chair: ['STUHL', 'Stuhl'], sofa: ['SOFA', 'Sofa'], lamp: ['LAMPE', 'Lampe'] });
+const save = Hof.save;
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('wohnhaus')));
+
+// Möbel von schräg oben: Breite/Höhe in Logik-Pixeln, Zeichnen ab linker oberer Ecke
+const FURN = [
+  { key: 'bed', w: 28, h: 38, draw(F, x, y) {
+      F('#5a3b1c', x, y, 28, 38); F('#a0673a', x + 1, y + 1, 26, 5); F('#c9a067', x + 1, y + 1, 26, 1);          // Kopfteil
+      F('#ffffff', x + 3, y + 6, 22, 29); F('#e6eef2', x + 3, y + 6, 22, 1);                                  // Matratze
+      F('#f6f1e4', x + 5, y + 8, 18, 7); F('#d9d2c0', x + 5, y + 14, 18, 1);                                  // Kissen
+      F('#2a6fdb', x + 2, y + 17, 24, 19); F('#6aa0f0', x + 2, y + 17, 24, 3); F('#173f80', x + 2, y + 35, 24, 1);   // Decke
+      for (let i = 0; i < 4; i++) F('#ffd23f', x + 5 + i * 5, y + 24 + (i % 2) * 5, 2, 2);                    // Sterne auf der Decke
+    } },
+  { key: 'table', w: 32, h: 24, draw(F, x, y) {
+      F('#5a3b1c', x + 2, y + 18, 3, 6); F('#5a3b1c', x + 27, y + 18, 3, 6);                                    // Beine vorne
+      F('#7a4a22', x, y, 32, 19); F('#c98a4f', x + 1, y + 1, 30, 16); F('#e0a868', x + 1, y + 1, 30, 2);       // Platte
+      F('#a0673a', x + 1, y + 9, 30, 1);
+      F('#ffffff', x + 6, y + 5, 7, 6); F('#e03b3b', x + 8, y + 7, 3, 2);                                       // Teller mit Apfel
+      F('#3fa9f5', x + 21, y + 4, 4, 7); F('#9fe3ff', x + 22, y + 5, 1, 4);                                     // Glas
+    } },
+  { key: 'chair', w: 16, h: 20, draw(F, x, y) {
+      F('#5a3b1c', x + 1, y + 15, 2, 5); F('#5a3b1c', x + 13, y + 15, 2, 5);
+      F('#7a4a22', x, y, 16, 6); F('#a0673a', x + 1, y + 1, 14, 3);                                             // Lehne
+      F('#7a4a22', x, y + 6, 16, 10); F('#c98a4f', x + 1, y + 7, 14, 8); F('#e0a868', x + 1, y + 7, 14, 1);     // Sitz
+      F('#e03b3b', x + 3, y + 9, 10, 4);                                                                        // Kissen
+    } },
+  { key: 'sofa', w: 46, h: 24, draw(F, x, y) {
+      F('#7a1a12', x, y, 46, 24);
+      F('#c0392b', x + 1, y + 1, 44, 8); F('#e06a5a', x + 1, y + 1, 44, 2);                                     // Rückenlehne
+      F('#a93226', x + 1, y + 9, 6, 14); F('#a93226', x + 39, y + 9, 6, 14);                                     // Armlehnen
+      F('#d9534a', x + 7, y + 9, 15, 13); F('#d9534a', x + 24, y + 9, 15, 13); F('#ef8a80', x + 7, y + 9, 32, 1);   // Sitzkissen
+      F('#7a1a12', x + 22, y + 9, 2, 13);
+      F('#ffd23f', x + 9, y + 3, 7, 5); F('#3fa9f5', x + 30, y + 3, 7, 5);                                      // Zierkissen
+    } },
+  { key: 'lamp', w: 16, h: 24, draw(F, x, y, on) {
+      F('#555', x + 4, y + 21, 8, 3); F('#777', x + 7, y + 10, 2, 12);                                          // Fuß und Stange
+      F('#c48a00', x + 1, y + 1, 14, 11); F(on ? '#ffe066' : '#e0c060', x + 2, y + 2, 12, 9); F(on ? '#fff8c0' : '#f0dc90', x + 3, y + 3, 5, 3);   // Schirm
+    } },
+];
+const BY = Object.fromEntries(FURN.map(f => [f.key, f]));
+
+const Room = (() => {
+  let S = 1, WH = G, room, floor, bar, slots, drag = null, sel = null, wob = {}, lampOn = true, allCheered = false, idle = 0;
+  const items = () => save.home.items;
+  // Lage auf dem Bildschirm: x/y (0–1) gelten für den freien Bereich, so passt alles bei jeder Bildschirmgröße
+  const toScreen = (f, p) => ({ x: Math.round(floor.x + p.x * (floor.w - f.W)), y: Math.round(floor.y + p.y * (floor.h - f.H)) });
+  const toFrac = (f, cx, cy) => ({ x: clamp((cx - f.W / 2 - floor.x) / (floor.w - f.W), 0, 1), y: clamp((cy - f.H / 2 - floor.y) / (floor.h - f.H), 0, 1) });
+
+  function enter() {
+    Hof.load();
+    if (!save.house || save.house.step < 5 || !save.home.unlocked) { goHof('wohnhaus'); return; }
+    layout(true);
+    // Großer Bildschirm (iPad): Möbel und Wand doppelt so groß (ganzzahlig, damit die Pixel scharf bleiben)
+    const cols = Math.min(gc - 1, 14), fits2 = FURN.reduce((a, f) => a + f.w * 2 + 6, 0) <= cols * G - 8;
+    S = fits2 && gr >= 11 ? 2 : 1; WH = G * S;
+    FURN.forEach(f => { f.W = f.w * S; f.H = f.h * S; });
+    const barH = 44 * S + 14;
+    room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - barH - G - 4 };
+    floor = { x: room.x + 6, y: room.y + WH + 2, w: room.w - 12, h: room.h - WH - 8 };
+    bar = { x: room.x, y: H - barH + 2, w: room.w, h: barH - 6 };
+    // Fächer so breit wie das Möbel, übriger Platz gleichmäßig verteilt (Möbel bleiben in Originalgröße, scharfe Pixel)
+    const need = FURN.reduce((a, f) => a + f.W + 6, 0), extra = Math.max(0, Math.floor((bar.w - 8 - need) / FURN.length));
+    let sx = bar.x + 4 + Math.max(0, Math.floor((bar.w - 8 - need - extra * FURN.length) / 2));
+    slots = FURN.map(f => { const w = f.W + 6 + extra, s = { key: f.key, x: sx, y: bar.y + 4, w: w - 2, h: bar.h - 8 }; sx += w; return s; });
+    paint();
+    drag = null; sel = null; allCheered = FURN.every(f => items()[f.key]);
+    show('ihud');
+  }
+
+  // Hintergrund: Garten, Wände mit Tapete und Fenster, Holzboden, Leiste
+  function paint() {
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++)
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(tiles.grass), c*G+i*T, r*G+j*T);
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    const { x, y, w, h } = room;
+    B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
+    // Holzboden: Dielen quer, versetzte Fugen
+    for (let yy = y + WH, k = 0; yy < y + h; yy += 6, k++) {
+      B(k % 2 ? '#c58a4f' : '#b97f45', x, yy, w, 6); B('#8e5a2e', x, yy + 5, w, 1);
+      for (let xx = x + (k * 17) % 34; xx < x + w; xx += 34) B('#8e5a2e', xx, yy, 1, 5);
+    }
+    // Rückwand (von vorne zu sehen): Tapete mit Streifen, Fenster, Bild
+    B('#f3e3b8', x, y, w, WH + 2); for (let xx = x + 3; xx < x + w; xx += 8 * S) B('#e8d39c', xx, y, 3 * S, WH + 2);
+    B('#cdb27a', x, y + WH, w, 2); B('#7a4a22', x, y + WH + 1, w, 2);                                               // Fußleiste
+    const wx = x + Math.round(w * 0.25) - 10 * S, Q = (col, a, b, c, d) => B(col, wx + a * S, y + b * S, c * S, d * S);
+    Q('#5a3b1c', 0, 4, 22, 16); Q('#9fe3ff', 2, 6, 18, 12); Q('#e6f8ff', 2, 6, 4, 12);
+    Q('#5a3b1c', 10, 6, 2, 12); Q('#5a3b1c', 2, 11, 18, 2); Q('#ffffff', 13, 7, 5, 2);                                // Fenster mit Wolke
+    Q('#ff6b8a', -1, 20, 24, 2);                                                                                        // Blumenkasten
+    const px = x + Math.round(w * 0.7) - 7 * S, P = (col, a, b, c, d) => B(col, px + a * S, y + b * S, c * S, d * S); // Bild mit Sonne
+    P('#c48a00', 0, 5, 14, 11); P('#7cc0f0', 1, 6, 12, 9); P('#5cb64f', 1, 12, 12, 3); P('#ffd23f', 8, 7, 3, 3);
+    // Mauerkrone (Wände von oben), vorne mit offener Tür
+    const WC = '#e9dcc0', WD = '#b8a888';
+    B(WD, x - 4, y - 4, w + 8, 4); B(WC, x - 4, y - 4, w + 8, 2);
+    B(WD, x - 4, y - 4, 4, h + 8); B(WC, x - 4, y - 4, 2, h + 8);
+    B(WD, x + w, y - 4, 4, h + 8); B(WC, x + w + 2, y - 4, 2, h + 8);
+    const dw = 2 * G, dx = x + Math.round((w - dw) / 2);
+    B(WD, x - 4, y + h, dx - x + 4, 4); B(WD, dx + dw, y + h, x + w - dx - dw + 4, 4);
+    B(WC, x - 4, y + h, dx - x + 4, 2); B(WC, dx + dw, y + h, x + w - dx - dw + 4, 2);
+    B('#c9b48a', dx + 4, y + h, dw - 8, 4);                                                                            // Fußmatte
+    // Leiste: Holzregal mit Fächern
+    B('rgba(0,0,0,.25)', bar.x + 3, bar.y + 4, bar.w, bar.h);
+    B('#5a3b1c', bar.x, bar.y, bar.w, bar.h); B('#a0673a', bar.x + 2, bar.y + 2, bar.w - 4, bar.h - 4); B('#c9a067', bar.x + 2, bar.y + 2, bar.w - 4, 1);
+    for (const s of slots) { B('#7a4a22', s.x, s.y, s.w, s.h); B('#fff8e0', s.x + 1, s.y + 1, s.w - 2, s.h - 2); }
+  }
+
+  function setWord(key) { const el = $('iword'); el.dataset.say = key; el.querySelector('.word').textContent = WORDS[key][0]; }
+  const placed = () => FURN.filter(f => items()[f.key]);
+  const inFloor = (x, y) => x > floor.x - 6 && x < floor.x + floor.w + 6 && y > floor.y - 10 && y < floor.y + floor.h + 6;
+  const slotAt = (x, y) => slots.find(s => x >= s.x && x < s.x + s.w && y >= s.y - 4 && y < s.y + s.h + 4);
+  function itemAt(x, y) {                    // oberstes Möbelstück unter dem Finger (vorne = weiter unten)
+    const list = order().reverse();
+    for (const f of list) { const p = toScreen(f, items()[f.key]); if (x >= p.x - 3 && x < p.x + f.W + 3 && y >= p.y - 3 && y < p.y + f.H + 3) return { f, p }; }
+    return null;
+  }
+  const order = () => placed().sort((a, b) => (toScreen(a, items()[a.key]).y + a.h) - (toScreen(b, items()[b.key]).y + b.h));
+
+  function put(f, cx, cy) {
+    Hof.setFurniture(f.key, toFrac(f, cx, cy)); sfx.clod(); wob[f.key] = 0;
+    const p = toScreen(f, items()[f.key]);
+    for (let i = 0; i < 8; i++) spawn(p.x + rnd(0, f.W), p.y + f.H, rnd(-15, 15), rnd(-12, -4), .35, '#e9d8b0', 30);
+    if (!allCheered && FURN.every(g => items()[g.key])) { allCheered = true; setTimeout(() => { sfx.win(); confetti(); }, 300); }
+  }
+  function onPointer(type, x, y) {
+    idle = 0;
+    if (!room) return true;
+    if (type === 'down') {
+      const hit = itemAt(x, y);
+      if (hit) {                             // hingestelltes Möbel greifen (oder antippen)
+        drag = { f: hit.f, x, y, dx: hit.p.x + hit.f.W / 2 - x, dy: hit.p.y + hit.f.H / 2 - y, sx: x, sy: y, from: 'room' };
+        sel = null; setWord(hit.f.key); sayWord(hit.f.key); sfx.click(); return true;
+      }
+      const s = slotAt(x, y);
+      if (s && !items()[s.key]) {            // aus der Leiste nehmen
+        drag = { f: BY[s.key], x, y, dx: 0, dy: 0, sx: x, sy: y, from: 'bar' };
+        setWord(s.key); sayWord(s.key); sfx.click(); return true;
+      }
+      if (sel && inFloor(x, y)) { put(BY[sel], x, y); sel = null; return true; }   // ausgewähltes Möbel: auf den Boden tippen
+      return true;
+    }
+    if (type === 'move' && drag) { drag.x = x; drag.y = y; return true; }
+    if (type === 'up' && drag) {
+      const d = drag; drag = null;
+      const tap = Math.hypot(d.x - d.sx, d.y - d.sy) < 8;
+      if (tap && d.from === 'bar') { sel = sel === d.f.key ? null : d.f.key; return true; }   // antippen = auswählen
+      if (tap && d.from === 'room') { wob[d.f.key] = 0; if (d.f.key === 'lamp') { lampOn = !lampOn; sfx.click(); } return true; }
+      const cx = d.x + d.dx, cy = d.y + d.dy;
+      if (inFloor(cx, cy) && !slotAt(d.x, d.y)) put(d.f, cx, cy);
+      else { if (d.from === 'room') Hof.setFurniture(d.f.key, null); sfx.load(); }   // zurück in die Leiste
+      return true;
+    }
+    return true;
+  }
+  function update(dt) { idle += dt; for (const k in wob) { wob[k] += dt; if (wob[k] > 0.35) delete wob[k]; } }
+  // Möbel in Größe S zeichnen (jeder Pixel wird ein S×S-Block)
+  function drawAt(f, X, Y, on) { f.draw((col, x, y, w, h) => R(col, X + x * S, Y + y * S, w * S, h * S), 0, 0, on); }
+  function drawF(f, x, y, lift) {
+    if (lift) R('rgba(0,0,0,.25)', x + 4, y + 6, f.W, f.H);
+    else R('rgba(0,0,0,.22)', x + 2, y + 3, f.W, f.H);
+    drawAt(f, x, y - (lift ? 3 : 0), f.key !== 'lamp' || lampOn);
+  }
+  function draw(time) {
+    if (!room) return;
+    ctx.drawImage(bg, 0, 0);
+    // Licht der Lampe (unter den Möbeln)
+    if (items().lamp && lampOn && !(drag && drag.f.key === 'lamp')) {
+      const p = toScreen(BY.lamp, items().lamp), cx = p.x + 8 * S, cy = p.y + 7 * S;
+      for (const [r, a] of [[30 * S, .08], [22 * S, .1], [14 * S, .12]]) { ctx.fillStyle = `rgba(255,230,120,${a})`; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); }
+    }
+    for (const f of order()) {
+      if (drag && drag.f === f) continue;
+      const p = toScreen(f, items()[f.key]), wb = wob[f.key] !== undefined ? Math.round(Math.sin(wob[f.key] * 30) * 2 * (1 - wob[f.key] / 0.35)) : 0;
+      drawF(f, p.x + wb, p.y, false);
+    }
+    // Leiste: Möbel, die noch nicht im Zimmer stehen
+    for (const s of slots) {
+      const f = BY[s.key];
+      if (items()[s.key] || (drag && drag.f === f)) { R('rgba(122,74,34,.25)', s.x + 4, s.y + 4, s.w - 8, s.h - 8); continue; }
+      if (sel === s.key) { const on = Math.abs(Math.sin(time / 200)) > .5; R(on ? '#ffd23f' : '#ffe98a', s.x + 1, s.y + 1, s.w - 2, s.h - 2); }
+      drawAt(f, Math.round(s.x + (s.w - f.W) / 2), Math.round(s.y + (s.h - f.H) / 2), true);
+    }
+    // Ausgewähltes Möbel: Boden leuchtet
+    if (sel || drag) {
+      const on = Math.abs(Math.sin(time / 260)) > .5;
+      ctx.strokeStyle = on ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.5)'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+      ctx.strokeRect(floor.x + 1, floor.y + 1, floor.w - 2, floor.h - 2); ctx.setLineDash([]);
+    }
+    if (drag) drawF(drag.f, Math.round(drag.x + drag.dx - drag.f.W / 2), Math.round(drag.y + drag.dy - drag.f.H / 2), true);
+    // Hinweis, solange das Zimmer leer ist: Pfeil auf das erste Möbel, gepunkteter Weg ins Zimmer
+    if (!drag && !sel && !placed().length && idle > 1.5) {
+      const s = slots[0], sx = s.x + s.w / 2, sy = s.y + s.h / 2, ex = floor.x + floor.w / 2, ey = floor.y + floor.h / 2;
+      const n = Math.ceil(Math.hypot(ex - sx, ey - sy) / 7), blink = Math.floor(time / 180) % 3;
+      for (let i = 1; i < n; i++) if (i % 3 === blink) R('rgba(255,255,255,.9)', Math.round(sx + (ex - sx) * i / n) - 1, Math.round(sy + (ey - sy) * i / n) - 1, 3, 3);
+      drawArrow(Math.round(sx - 3), Math.round(s.y - 14 - Math.abs(Math.sin(time / 220)) * 4));
+    }
+  }
+  function resize() { enter(); }
+  return { enter, setWord, update, draw, resize, onPointer, _dbg: () => ({ floor, slots, items: items(), sel, drag }) };
+})();
+startLoop(Room);
+Room.setWord('house'); setTimeout(() => sayWord('house'), 400);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

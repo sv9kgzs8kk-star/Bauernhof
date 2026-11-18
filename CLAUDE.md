@@ -7,7 +7,9 @@ Pixel-Spiele für Kinder ab 4 Jahren, gehostet auf GitHub Pages und auf dem iPad
 index.html                  ← Startseite: Kacheln je Welt (WELTEN-Liste, aktiv:false = versteckt;
                               nur eine aktive Welt → direkte Weiterleitung)
 hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
-baustelle/index.html        ← Welt BAUSTELLE: Bauhof als begehbare Karte (Bauarbeiter, Bagger, Bauplatz `S`)
+baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte (Bauarbeiter, Bagger, Bauplatz `S`)
+                              mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
+                              Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
 baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, kran/, dach/
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)

@@ -170,7 +170,7 @@ const Room = (() => {
     buildGrid();
     paint();
     if (!kid) kid = { x: floor.x + floor.w * 0.3, y: floor.y + floor.h - 2, path: [], t: 0, flip: false, still: 0 };
-    else { kid.x = clamp(kid.x, floor.x + 6, floor.x + floor.w - 6); kid.y = clamp(kid.y, floor.y + 14, floor.y + floor.h); kid.path = []; }
+    else { kid.x = clamp(kid.x, floor.x + 6, floor.x + floor.w - 6); kid.y = clamp(kid.y, floor.y + 14 * S, floor.y + floor.h); kid.path = []; }
     const fixed = list().map(it => { const f = BY[it.k]; if (!f) return it; const p = toScreen(f, it); return { k: it.k, ...fit(f, p.x, p.y) }; });
     if (fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed);   // Möbel nicht in Innenwänden
     drag = null; sel = null;
@@ -222,7 +222,7 @@ const Room = (() => {
   function buildGrid() {
     const c = 4 * S, cols = Math.floor(floor.w / c), rows = Math.floor(floor.h / c), ok = [];
     for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
-      const cell = { x: floor.x + q * c - 3 * S, y: floor.y + r * c - 2 * S, w: c + 6 * S, h: c + 4 * S };
+      const cell = { x: floor.x + q * c - 8 * S, y: floor.y + r * c - 2 * S, w: c + 16 * S, h: c + 4 * S };   // Kind ist 20 Pixel breit
       ok.push(!walls.some(wl => hit(cell, wl)));
     }
     grid = { c, cols, rows, ok };
@@ -331,7 +331,7 @@ const Room = (() => {
       return;
     }
     if (kid.path.length) {
-      const tgt = kid.path[0], dx = tgt.x - kid.x, dy = tgt.y - kid.y, d = Math.hypot(dx, dy), sp = 55 * S * dt;
+      const tgt = kid.path[0], dx = tgt.x - kid.x, dy = tgt.y - kid.y, d = Math.hypot(dx, dy), sp = 70 * S * dt;
       if (Math.abs(dx) > 0.5) kid.flip = dx < 0;
       if (d <= sp) { kid.x = tgt.x; kid.y = tgt.y; kid.path.shift(); } else { kid.x += dx / d * sp; kid.y += dy / d * sp; }
       kid.t += dt; kid.still = 0;
@@ -347,9 +347,9 @@ const Room = (() => {
   function drawAt(f, X, Y, on, t) { f.draw((col, x, y, w, h) => R(col, X + x * S, Y + y * S, w * S, h * S), 0, 0, on, t || 0); }
   function drawSmall(f, X, Y, t) { f.draw((col, x, y, w, h) => R(col, X + x * BS, Y + y * BS, w * BS, h * BS), 0, 0, true, t); }
   function drawKid(time, x, y) {
-    const fr = kid.path.length && Math.floor(kid.t * 8) % 2 ? KID.b : KID.a, w = 10 * S, h = 13 * S;
-    R('rgba(0,0,0,.25)', Math.round(x - w / 2) + S, Math.round(y) - 2 * S, w, 2 * S);
-    fr.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(KID.pal[ch], Math.round(x - w / 2) + (kid.flip ? 9 - i : i) * S, Math.round(y - h) + j * S, S, S); }));
+    const K = 2 * S, fr = kid.path.length && Math.floor(kid.t * 8) % 2 ? KID.b : KID.a, w = 10 * K, h = 13 * K;   // Kind doppelt so groß: passt zu Bett und Sofa
+    R('rgba(0,0,0,.25)', Math.round(x - w / 2) + K, Math.round(y) - 2 * K, w, 2 * K);
+    fr.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(KID.pal[ch], Math.round(x - w / 2) + (kid.flip ? 9 - i : i) * K, Math.round(y - h) + j * K, K, K); }));
   }
   function draw(time) {
     if (!room) return;
@@ -368,8 +368,8 @@ const Room = (() => {
       R('rgba(0,0,0,.22)', p.x + 2 + wb, p.y + 3, e.f.W, e.f.H);
       drawAt(e.f, p.x + wb, p.y, e.f.key !== 'lamp' || lampOn, time);
       if (night && night.bed.i === e.i) {              // Kind liegt im Bett: Kopf auf dem Kissen
-        const hx = p.x + 9 * S, hy = p.y + 7 * S;
-        R('#6b3e1e', hx, hy, 10 * S, 4 * S); R('#f1c27d', hx + S, hy + 3 * S, 8 * S, 4 * S); R('#222', hx + 3 * S, hy + 5 * S, 2 * S, S); R('#222', hx + 6 * S, hy + 5 * S, 2 * S, S);
+        const hx = p.x + 6 * S, hy = p.y + 5 * S;
+        R('#6b3e1e', hx, hy, 16 * S, 6 * S); R('#f1c27d', hx + 2 * S, hy + 4 * S, 12 * S, 7 * S); R('#222', hx + 4 * S, hy + 8 * S, 3 * S, S); R('#222', hx + 9 * S, hy + 8 * S, 3 * S, S);
       }
     }
     // Leiste: Seite mit Möbeln (jedes beliebig oft), Pfeile zum Blättern

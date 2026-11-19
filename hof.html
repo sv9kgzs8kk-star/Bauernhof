@@ -179,7 +179,7 @@ const Hub = (() => {
   const passableFor = name => (r, c) => {
     if (occupied(name, r, c)) return false;
     const t = cellType(r, c);
-    if (name === 'person') return ['.', '=', 'f', 'g', 'B', 'K', 'a', 'W'].includes(t);   // zu Fuß: nicht aufs Feld
+    if (name === 'person') return t !== 'T' && t !== 'o' && t !== 'X';   // zu Fuß überall hin, nur nicht in Bäume und den Teich (passieren tut nur etwas an Tor, Scheunentor, Melkstand, Steg, Waldweg)
     if (t === 'w') return need() === name;                                  // Fahrzeug: nur wenn es dran ist
     if (t === 'm') return name === 'tractor' && ['tall','mown','baled'].includes(save.meadow.stage);   // Wiese: nur Traktor
     return ['.', '=', 'f'].includes(t);

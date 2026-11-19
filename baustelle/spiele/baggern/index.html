@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119g">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119h">
 <title>Baggern</title>
 <style>.pill canvas.veh{width:clamp(30px,6vmin,46px);height:clamp(30px,6vmin,46px);image-rendering:pixelated}</style>
 </head>
@@ -46,9 +46,9 @@ window.addEventListener('error', function (e) {
   </div>
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
-<script src="../../../gemeinsam/sterne.js?v=20261119g"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119g"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119g"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261119h"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119h"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119h"></script>
 <script>
 /* =====================================================================
    MINISPIEL: GRUBE AUSHEBEN (Baustelle, Wohnhaus Schritt 1)
@@ -93,10 +93,13 @@ const DigGame = (() => {
     layout(true);
     pit = makePit();
     ground = [];
-    for (let r = 0; r < gr; r++) { ground.push([]); for (let c = 0; c < gc; c++) ground[r].push(r === gr-1 ? 'road' : inPit(r, c) ? 'site' : 'gravel'); }
+    const holes = houseType().shape === 'L' ? woodHoles(pit) : null;   // Holzhaus: nur Löcher für das Punktfundament
+    const isSite = (r, c) => holes ? holes.some(hh => hh.r === r && hh.c === c) : inPit(r, c);
+    for (let r = 0; r < gr; r++) { ground.push([]); for (let c = 0; c < gc; c++) ground[r].push(r === gr-1 ? 'road' : isSite(r, c) ? 'site' : 'gravel'); }
     for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) drawCell(r, c);
+    if (holes) drawLOutline((col, x, y, w, h) => { bctx.fillStyle = col; bctx.fillRect(x, y, w, h); }, pit, G);
     // Pflöcke an den Ecken der Grube
-    for (const [r, c, dx, dy] of [[pit.r0, pit.c0, 1, 1], [pit.r0, pit.c0+pit.w-1, G-4, 1], [pit.r0+pit.h-1, pit.c0, 1, G-4], [pit.r0+pit.h-1, pit.c0+pit.w-1, G-4, G-4]]) {
+    if (!holes) for (const [r, c, dx, dy] of [[pit.r0, pit.c0, 1, 1], [pit.r0, pit.c0+pit.w-1, G-4, 1], [pit.r0+pit.h-1, pit.c0, 1, G-4], [pit.r0+pit.h-1, pit.c0+pit.w-1, G-4, G-4]]) {
       bctx.fillStyle = '#d35400'; bctx.fillRect(c*G+dx, r*G+dy, 3, 3);
     }
     total = 0; for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) if (isWork(r, c)) total++;

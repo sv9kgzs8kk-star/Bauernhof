@@ -118,7 +118,7 @@
   // Möbel im Wohnhaus speichern: Liste [{ k, x, y }] (x/y je 0–1 im Zimmer), gleiche Möbel dürfen mehrfach vorkommen
   Hof.setHome = function (list, where) {          // where = 'farm' für das Bauernhaus, sonst Wohnhaus
     Hof.load();
-    Hof.save[where === 'farm' ? 'farm' : 'home'].items = list.slice(0, 60).map(i => ({ k: i.k, x: Math.round(i.x * 1000) / 1000, y: Math.round(i.y * 1000) / 1000 }));
+    Hof.save[where === 'farm' ? 'farm' : 'home'].items = list.slice(0, 60).map(i => Object.assign({ k: i.k, x: Math.round(i.x * 1000) / 1000, y: Math.round(i.y * 1000) / 1000 }, i.f ? { f: i.f } : {}));   // f = Etage (fehlt = unten)
     Hof.persist();
   };
 

@@ -19,11 +19,11 @@ const houseType = () => { const h = typeof Hof !== 'undefined' && Hof.save && Ho
 const houseFloors = () => houseType().floors;
 // Putzfarben (beim Mauern gewählt, save.house.color): Grund, hell, dunkel (Kanten/Sockel), Rand
 const HOUSE_COLORS = [
-  { key: 'creme', word: ['WEISS', 'Weiß'],     base: '#e9dcc0', light: '#f6ecd4', dark: '#cdbf9f', edge: '#b8a888', dots: ['#ddd0b0', '#f3e8cc'] },
-  { key: 'gelb',  word: ['GELB', 'Gelb'],      base: '#f2d46b', light: '#fbe8a0', dark: '#d4b44a', edge: '#b0922e', dots: ['#e6c55a', '#f8e08a'] },
-  { key: 'blau',  word: ['BLAU', 'Blau'],      base: '#9cc8ec', light: '#c4e0f6', dark: '#7aa8d0', edge: '#5d8ab4', dots: ['#8ab9e0', '#b4d6f2'] },
-  { key: 'rosa',  word: ['ROSA', 'Rosa'],      base: '#f2b8c6', light: '#fad6df', dark: '#d896a8', edge: '#b8788a', dots: ['#e8a8b8', '#f6c8d4'] },
-  { key: 'gruen', word: ['GRÜN', 'Grün'],      base: '#b6dc96', light: '#d4ecbe', dark: '#94bc74', edge: '#76985a', dots: ['#a6d084', '#c6e4aa'] },
+  { key: 'creme', word: ['WEISS', 'Weiß'],     base: '#e9dcc0', light: '#f6ecd4', dark: '#cdbf9f', edge: '#b8a888', dots: ['#ddd0b0', '#f3e8cc'], brick: ['#8f8270', '#d6cbb4', '#ece4d2'] },
+  { key: 'gelb',  word: ['GELB', 'Gelb'],      base: '#f2d46b', light: '#fbe8a0', dark: '#d4b44a', edge: '#b0922e', dots: ['#e6c55a', '#f8e08a'], brick: ['#8a6a10', '#e0b030', '#f2cc5a'] },
+  { key: 'blau',  word: ['BLAU', 'Blau'],      base: '#9cc8ec', light: '#c4e0f6', dark: '#7aa8d0', edge: '#5d8ab4', dots: ['#8ab9e0', '#b4d6f2'], brick: ['#2a4f80', '#4f86c6', '#7aa8e0'] },
+  { key: 'rosa',  word: ['ROSA', 'Rosa'],      base: '#f2b8c6', light: '#fad6df', dark: '#d896a8', edge: '#b8788a', dots: ['#e8a8b8', '#f6c8d4'], brick: ['#8a3a52', '#d6708e', '#eb98ae'] },
+  { key: 'gruen', word: ['GRÜN', 'Grün'],      base: '#b6dc96', light: '#d4ecbe', dark: '#94bc74', edge: '#76985a', dots: ['#a6d084', '#c6e4aa'], brick: ['#2e5a1e', '#5ca040', '#84c262'] },
 ];
 HOUSE_COLORS.forEach(c => { WORDS['col_' + c.key] = c.word; });
 const houseColor = key => HOUSE_COLORS.find(c => c.key === (key || (typeof Hof !== 'undefined' && Hof.save && Hof.save.house && Hof.save.house.color))) || HOUSE_COLORS[0];
@@ -150,13 +150,14 @@ function drawHouseTop(F, x, y, w, h, o = {}) {
       F('#e6f8ff', wx + 2, winY + 2, 2, 2); F('#ffffff', wx + Math.floor(winW / 2), winY + 1, 1, winH - 2); F('#ffffff', wx + 1, winY + Math.floor(winH / 2), winW - 2, 1);
       F(pc.dark, wx - 2, winY + winH + 1, winW + 4, 2); F('#2e7a2a', wx, winY + winH + 3, winW, 2); F('#ff6b8a', wx + 1, winY + winH + 2, 2, 1); F('#ffd23f', wx + Math.round(winW / 2), winY + winH + 2, 2, 1); F('#ff6b8a', wx + winW - 3, winY + winH + 2, 2, 1); }
   } else {
-    F('#7a2218', x, y + rz, w, fz);
-    for (let yy = y + rz, r = 0; yy < y + h; yy += 6, r++) for (let xx = x + (r % 2 ? -5 : 0); xx < x + w; xx += 10) { const x0 = Math.max(x, xx); F('#c0392b', x0, yy, Math.min(xx + 8, x + w) - x0, 4); F('#d9533f', x0, yy, Math.min(xx + 8, x + w) - x0, 2); }   // Ziegel groß genug für grobe Pixel
+    const bc = houseColor(o.color).brick;             // Steine in der gewählten Hausfarbe
+    F(bc[0], x, y + rz, w, fz);
+    for (let yy = y + rz, r = 0; yy < y + h; yy += 6, r++) for (let xx = x + (r % 2 ? -5 : 0); xx < x + w; xx += 10) { const x0 = Math.max(x, xx); F(bc[1], x0, yy, Math.min(xx + 8, x + w) - x0, 4); F(bc[2], x0, yy, Math.min(xx + 8, x + w) - x0, 2); }   // Ziegel groß genug für grobe Pixel
     F('#2e1f10', doorX, y + h - doorH, doorW, doorH);
     for (const [wx, winY] of winList) F('#2e1f10', wx, winY, winW, winH);
     // Mauerkrone von oben (Ring um den Innenraum)
-    F('#8e2a20', x, y, w, 3); F('#8e2a20', x, y, 3, rz); F('#8e2a20', x + w - 3, y, 3, rz); F('#8e2a20', x, y + rz - 2, w, 2);
-    F('#e06a5a', x, y, w, 1);
+    F(bc[0], x, y, w, 3); F(bc[0], x, y, 3, rz); F(bc[0], x + w - 3, y, 3, rz); F(bc[0], x, y + rz - 2, w, 2);
+    F(bc[2], x, y, w, 1);
   }
   // Dachstuhl: Binder quer, Firstbalken längs
   const tr = st >= 4 ? g.nT : (o.trusses || 0);

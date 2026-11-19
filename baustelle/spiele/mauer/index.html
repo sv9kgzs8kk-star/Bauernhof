@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119e">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119f">
 <title>Mauer</title>
 </head>
 <body>
@@ -50,9 +50,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261119e"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119e"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119e"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261119f"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119f"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119f"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -174,14 +174,14 @@ const Wall = (() => {
     return true;
   }
   function update(dt) { for (const p of plops) p.t += dt; plops = plops.filter(p => p.t < 0.25); }
-  function brick(x, y, w, h) { R('#7a2218', x, y, w, h); R('#c0392b', x + 1, y + 1, w - 2, h - 3); R('#e06a5a', x + 1, y + 1, w - 2, 1); R('#d8c8a8', x, y + h - 1, w, 1); }
+  function brick(x, y, w, h) { const bc = houseColor().brick; R(bc[0], x, y, w, h); R(bc[1], x + 1, y + 1, w - 2, h - 3); R(bc[2], x + 1, y + 1, w - 2, 1); R('#d8c8a8', x, y + h - 1, w, 1); }   // Steine in der gewählten Hausfarbe
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
     const done = state === 'won';
     drawHouseTop(snapF(R, 2), g.hx, g.hy, g.hw, g.hh, { step: done ? 3 : 2, time });
     if (!done) {
       // Mauerkrone von oben: wird mit jeder fertigen Reihe kräftiger
-      if (row > 0) { const th = Math.min(3, row); R('#8e2a20', g.hx, g.hy, g.hw, th); R('#8e2a20', g.hx, g.hy, th, geo.rz); R('#8e2a20', g.hx + g.hw - th, g.hy, th, geo.rz); }
+      if (row > 0) { const th = Math.min(3, row); const bd = houseColor().brick[0]; R(bd, g.hx, g.hy, g.hw, th); R(bd, g.hx, g.hy, th, geo.rz); R(bd, g.hx + g.hw - th, g.hy, th, geo.rz); }
       // Fassade: gesetzte Steine, leuchtende Lücken der aktuellen Reihe
       const on = Math.abs(Math.sin(time / 260)) > .5;
       for (const k of cells) {

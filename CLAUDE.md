@@ -16,7 +16,7 @@ baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): b
                               Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen
-                              (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden (großes Haus `TWO`: unten Wohnzimmer, Schlafzimmer, Flur mit Treppe; oben Kinderzimmer, Bad, Flur mit Treppe; Kind kurz auf der Treppe = Etage wechseln, Möbel mit `f: 1` stehen oben), Kind läuft per Antippen und ist immer vor den Möbeln, 0,8 s auf dem Bett = schlafen; Möbel und Kind in einfacher Größe (S = 1)
+                              (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden (großes Haus `TWO`: unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe; Kind kurz auf der Treppe = Etage wechseln, Möbel mit `f: 1` stehen oben), Kind läuft per Antippen und ist immer vor den Möbeln, 0,8 s auf dem Bett = schlafen; Möbel und Kind in einfacher Größe (S = 1)
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
 gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlesen, Steuerung, Layout, Laden, goHof()

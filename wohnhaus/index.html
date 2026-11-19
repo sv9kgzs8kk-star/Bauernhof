@@ -50,7 +50,7 @@ const save = Hof.save;
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof(BACK_TAG)));
 
 Object.assign(WORDS, { up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'], stairs: ['TREPPE', 'Treppe'] });
-// Großes Haus (2 Stockwerke): unten Wohnzimmer, Schlafzimmer, Flur mit Treppe; oben Kinderzimmer, Bad, Flur mit Treppe
+// Großes Haus (2 Stockwerke): unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe
 const TWO = !FARM && ((save.house && save.house.type) | 0) >= 1;
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
@@ -89,6 +89,10 @@ const Room = (() => {
       { x: vx + t, y: hy, w: Math.round((floor.x + floor.w - vx - t) * 0.25), h: t },          // waagrecht rechts, Durchgang in der Mitte
       { x: vx + t + Math.round((floor.x + floor.w - vx - t) * 0.25) + gap, y: hy, w: floor.x + floor.w - (vx + t + Math.round((floor.x + floor.w - vx - t) * 0.25) + gap), h: t },
     ];
+    if (TWO && level === 1) {                          // oben links geteilt: Kinderzimmer (hinten) und Schlafzimmer (vorne), Durchgang in der Mitte
+      const gx = Math.round(floor.x + (vx - floor.x) / 2 - gap / 2);
+      walls.push({ x: floor.x - 4, y: hy, w: gx - floor.x + 4, h: t }, { x: gx + gap, y: hy, w: vx - gx - gap, h: t });
+    }
     room.vx = vx; room.hy = hy;
     stairs = TWO ? { x: floor.x + floor.w - 30, y: floor.y + floor.h - 44, w: 28, h: 42 } : null;   // Treppe unten rechts im Flur
     buildGrid();
@@ -127,8 +131,11 @@ const Room = (() => {
     const carpet = (x1, y1, x2, y2, c1, c2) => { B(c1, x1, y1, x2 - x1, y2 - y1); for (let i = 0; i < 40; i++) B(c2, x1 + ((i * 37) % Math.max(1, x2 - x1 - 2)), y1 + ((i * 23) % Math.max(1, y2 - y1 - 1)), 2, 1); };
     const tileF = (x1, y1, x2, y2, c1, c2, n) => { for (let yy = y1, k = 0; yy < y2; yy += n, k++) for (let xx = x1, j = 0; xx < x2; xx += n, j++) B((k + j) % 2 ? c1 : c2, xx, yy, Math.min(n, x2 - xx), Math.min(n, y2 - yy)); };
     const left = [x, y + WH, vx, y + h], rt = [vx, y + WH, x + w, hy], rb = [vx, hy, x + w, y + h];
-    if (level === 0) { wood(...left); carpet(...rt, '#a9c8e8', '#bcd6f0'); }
-    else { carpet(...left, '#9fd68a', '#c6e9b6'); for (let i = 0; i < 6; i++) { B(['#ffd23f', '#ff6b8a', '#3fa9f5'][i % 3], Math.round(x + 14 + i * (vx - x - 34) / 5), Math.round(y + h - 30 - (i % 2) * 40), 6, 6); }   // Kinderzimmer: grüner Teppich mit Punkten
+    if (!TWO) { wood(...left); carpet(...rt, '#a9c8e8', '#bcd6f0'); }                     // kleines Haus: Wohnzimmer, Schlafzimmer, Bad
+    else if (level === 0) { wood(...left); tileF(...rt, '#fff8e8', '#d9534f', 8); }          // unten: Wohnzimmer, Küche (rot-weiße Fliesen)
+    else { carpet(x, y + WH, vx, hy, '#9fd68a', '#c6e9b6');                                   // oben: Kinderzimmer (grün mit Punkten), Schlafzimmer (blau), Bad
+      for (let i = 0; i < 5; i++) B(['#ffd23f', '#ff6b8a', '#3fa9f5'][i % 3], Math.round(x + 14 + i * (vx - x - 34) / 4), Math.round(y + WH + 14 + (i % 2) * Math.max(10, hy - y - WH - 34)), 6, 6);
+      carpet(x, hy, vx, y + h, '#a9c8e8', '#bcd6f0');
       tileF(...rt, '#e8f2f8', '#cfe0ec', 6 * S); }
     if (TWO) tileF(...rb, '#e6dcc8', '#d4c8ae', 10); else tileF(...rb, '#e8f2f8', '#cfe0ec', 6 * S);
     if (stairs) {                                    // Treppe: unten nach oben (helle Stufen), oben nach unten (dunkle Öffnung)

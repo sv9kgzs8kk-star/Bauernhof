@@ -4,8 +4,8 @@ Pixel-Spiele für Kinder ab 4 Jahren, gehostet auf GitHub Pages und auf dem iPad
 
 ## Ordnerstruktur
 ```
-index.html                  ← Startseite: Kacheln je Welt (WELTEN-Liste, aktiv:false = versteckt;
-                              nur eine aktive Welt → direkte Weiterleitung)
+index.html                  ← Startseite: leitet sofort in die STADT weiter (`START_WELT`, Michael: keine Kachel-Auswahl).
+                              Kacheln je Welt (WELTEN-Liste) nur noch bei START_WELT = null
 hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
 baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte (Bauarbeiter, Bagger, Bauplatz `S`)
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
@@ -28,6 +28,7 @@ gemeinsam/bau.js            ← Baustelle: Bauarbeiter, Bagger, Kipper, Boden-Ka
 gemeinsam/moebel.js         ← Möbel (FURN, BY, KID) für Einrichten und Umzug
 spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 ```
+- Die App startet in der Stadt (ohne Startseiten-Knopf). `hof.html#stadt` (Bauernhof-Platz in der Stadt) und `hof.html#start` überspringen den ▶-Bildschirm. Der Knopf oben links im Hof führt zurück in die Stadt (`baustelle/index.html#hof`, Bauarbeiter steht neben dem Bauernhof-Platz). Vorlesen vor dem ersten Antippen wird gemerkt und danach nachgeholt (Ton braucht auf dem iPad ein Antippen).
 - Vom Hof ins Spiel über `PAGES` in `hof.html`. Zurück mit `goHof('<name>')`, die Seiten setzen `window.HOF_URL = '../../hof.html'`.
 - Neue Welten bekommen einen eigenen Ordner (z. B. `stadt/index.html`, Minispiele in `stadt/spiele/<name>/`). Auf der Startseite werden sie in `WELTEN` eingetragen.
 - Neue Minispiele binden `sterne.js`, `basis.js` und `basis.css` mit `?v=JJJJMMTTx` ein. Bei jeder Änderung an `gemeinsam/` die Versionsnummer in **allen** Seiten erhöhen.

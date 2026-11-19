@@ -111,8 +111,24 @@ const WOOL_STARS = 2;                        // Sterne pro abgelieferter Wolle
 const MILK_STARS = 3;                        // Sterne pro abgelieferter Milch
 const WIDE_PRICE = { harvest: 30, cultivate: 20, sow: 20, mow: 20 };   // breite Geräte im Scheunen-Laden
 const HINT_AFTER = 12;                       // Sekunden ohne Eingabe, bis ein Hinweis erscheint
-// Zurück aus einem Spiel? (#feld, #wiese, #schafe) – dann Startbildschirm überspringen
+// Zurück aus einem Spiel? (#feld, #wiese, #schafe) – dann Startbildschirm überspringen.
+// #start = von der Kachel auf der Startseite, #stadt = vom Bauernhof-Platz in der Stadt: ebenfalls ohne ▶.
 let backFrom = (location.hash || '').slice(1) || null;
+const FROM_OUTSIDE = ['start', 'stadt'];
+
+/* Ohne ▶ gab es auf dieser Seite noch kein Antippen: Das iPad spielt Ton und Vorlesen erst danach.
+   Bis dahin wird das letzte Vorlesen gemerkt und beim ersten Antippen (oder Taste) nachgeholt. */
+let touched = false, pendingSay = null;
+const sayNow = say;
+say = function (text) { if (touched) sayNow(text); else pendingSay = text; };
+function firstTouch() {
+  initAudio();
+  if (touched) return;
+  touched = true;
+  if (pendingSay) { const t = pendingSay; pendingSay = null; sayNow(t); }
+}
+['pointerup', 'touchend', 'keydown', 'click'].forEach(ev => addEventListener(ev, firstTouch, true));
+addEventListener('pointerdown', () => initAudio(), true);
 
 /* ---------- Fahrzeuge & Figuren ---------- */
 // Bauer von oben (mit Strohhut), schaut nach rechts
@@ -327,12 +343,12 @@ const Hub = (() => {
       from = backFrom; backFrom = null; started = true;
       try { ret = sessionStorage.getItem('bauernhof.fahrzeug'); } catch (e) {}
     }
-    placeAll(['schafe', 'kuehe', 'angeln', 'wald', 'bauernhaus'].includes(from) ? null : ret, from);
+    placeAll(['schafe', 'kuehe', 'angeln', 'wald', 'bauernhaus', ...FROM_OUTSIDE].includes(from) ? null : ret, from);
     doorDone = ENT.person.m.r * 1000 + ENT.person.m.c;      // wer auf einem Eingang abgesetzt wird, löst ihn nicht gleich aus
     entering = false; uiOpen = false; idleT = 0; refreshVBtns(); hudCounts();
     restoreVisit();
     if (!started) { show('appstart'); hide('ctrl'); hide('hubhud'); }
-    else { hide('appstart'); show('ctrl'); show('hubhud'); }
+    else { hide('appstart'); show('ctrl'); show('hubhud'); if (FROM_OUTSIDE.includes(from)) showPadHint(); }
   }
   /* --- Scheunen-Laden: breite Geräte (Sterne) und Farben (kostenlos) --- */
   const WIDE_ITEMS = [
@@ -645,7 +661,7 @@ const Hub = (() => {
 addEventListener('pageshow', e => { if (e.persisted && scene === Hub) Hub.enter(); });
 startLoop(Hub);
 </script>
-<script>window.START_URL = 'index.html';</script>
+<script>window.START_URL = 'baustelle/index.html#hof';</script>   <!-- Knopf oben links: zurück in die Stadt -->
 <script src="gemeinsam/startseite.js?v=20261119c"></script>
 </body>
 </html>

@@ -14,10 +14,11 @@
    url:   relativer Pfad zur Welt
    bild:  Name der Zeichenfunktion unten in BILDER
    anker: Rücksprung-Anker (#feld usw.), die zu dieser Welt gehören
-   aktiv: false = Kachel wird NICHT gezeigt (keine leeren Kacheln)      */
+   aktiv: false = Kachel wird NICHT gezeigt (keine leeren Kacheln)
+   direkt: Anker beim Antippen der Kachel (#start = Bauernhof ohne ▶-Bildschirm) */
 var WELTEN = [
   { id: 'bauernhof', wort: 'BAUERNHOF', sprich: 'Bauernhof', url: 'hof.html',
-    bild: 'hof', farbe: '#7ec850', anker: ['feld', 'wiese', 'schafe', 'kuehe'], aktiv: true },
+    bild: 'hof', farbe: '#7ec850', anker: ['feld', 'wiese', 'schafe', 'kuehe'], aktiv: true, direkt: 'start' },
   { id: 'baustelle', wort: 'STADT', sprich: 'Stadt', url: 'baustelle/index.html',
     bild: 'stadt', farbe: '#f5b700', anker: [], aktiv: true }
 ];
@@ -33,10 +34,16 @@ var WELTEN = [
   }
   location.replace(ziel.url + '#' + h);
 })();
-/* Nur eine Welt aktiv? Dann ohne Umweg direkt dorthin (kein Extra-Tipp). */
+/* Die App startet immer in der STADT (Michael, PR #29): keine Kachel-Auswahl,
+   der Bauernhof ist von der Stadt aus zu erreichen (Bauernhof-Platz).
+   START_WELT = null schaltet die Kachel-Seite wieder ein. */
+var START_WELT = 'baustelle';
 (function () {
+  if (location.hash) return;
   var aktiv = WELTEN.filter(function (w) { return w.aktiv; });
-  if (aktiv.length === 1 && !location.hash) location.replace(aktiv[0].url);
+  var ziel = WELTEN.filter(function (w) { return w.id === START_WELT; })[0];
+  if (ziel) location.replace(ziel.url);
+  else if (aktiv.length === 1) location.replace(aktiv[0].url);
 })();
 </script>
 <style>
@@ -157,7 +164,7 @@ WELTEN.filter(function (w) { return w.aktiv; }).forEach(function (w) {
   b.addEventListener('click', function () {
     if (unterwegs) return; unterwegs = true; b.classList.add('gewaehlt');
     try { sessionStorage.setItem('start.welt', w.id); } catch (e) {}
-    sag(w.sprich, function () { location.href = w.url; });
+    sag(w.sprich, function () { location.href = w.url + (w.direkt ? '#' + w.direkt : ''); });
   });
   main.appendChild(b);
 });

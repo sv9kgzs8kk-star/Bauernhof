@@ -25,6 +25,9 @@ gemeinsam/feldspiel.js      ← Feld- und Wiesen-Spiele
 gemeinsam/startseite.js     ← Knopf „zur Startseite“ (1 s halten) für die Hauptseite jeder Welt
 gemeinsam/bau.js            ← Baustelle: Bauarbeiter, Bagger, Kipper, Boden-Kacheln, Bau-Wörter, HOUSE_TYPES (klein 1 Stockwerk / groß 2 Stockwerke:
                               mehr Mauerreihen, eine Kipperladung mehr), Umzugskiste, Transporter, Abrissbirne, Schutt
+                              Jeder Haustyp hat eigene Bauschritte (`HOUSE_TYPES[].steps`, Seitennamen je `house.step`; die Stadt startet daraus das Spiel).
+                              Haustyp 3 HOLZHAUS (`shape: 'L'`, `ready: false` bis Bohlen/Dach/Veranda fertig sind = in der Hauswahl gesperrt):
+                              Punktfundament (`woodHoles()`, `drawLOutline()`), baggern/beton füllen nur die Löcher. Testlink `?haustyp=2`.
 gemeinsam/moebel.js         ← Möbel (FURN, BY, KID) für Einrichten und Umzug
 spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 ```

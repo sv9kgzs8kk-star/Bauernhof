@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119g">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119h">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261119g"></script>
-<script src="../gemeinsam/basis.js?v=20261119g"></script>
-<script src="../gemeinsam/bau.js?v=20261119g"></script>
+<script src="../gemeinsam/sterne.js?v=20261119h"></script>
+<script src="../gemeinsam/basis.js?v=20261119h"></script>
+<script src="../gemeinsam/bau.js?v=20261119h"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -109,7 +109,7 @@ const Hub = (() => {
   };
   const VEHICLES = [];                               // keine Fahrzeuge zum Fahren mehr in der Stadt
   const cellType = (r, c) => (r < 0 || c < 0 || r >= gr || c >= gc) ? 'X' : type[r][c];
-  const game = () => house().pick ? null : (STEP_GAME[house().step] || null);   // nach dem Abriss erst ein Haus auswählen
+  const game = () => { if (house().pick) return null; const pg = houseType().steps[house().step]; return pg ? { who: 'person', page: 'spiele/' + pg + '/index.html' } : null; };   // Bauschritte je Haustyp (HOUSE_TYPES[].steps); nach dem Abriss erst ein Haus auswählen
   const need = () => game() ? game().who : null;
   const passableFor = name => (r, c) => {
     const t = cellType(r, c);
@@ -304,7 +304,7 @@ const Hub = (() => {
     F('#5a3b1c', 54, 30, 8, 3); F('#5a3b1c', 60, 28, 2, 7); F('#5a3b1c', 62, 30, 2, 3);                  // Pfeil
     pixLine(F, 96, 4, 88, 28, 1, '#333'); drawBall(F, 88, 32, 2); drawRubble(F, 72, 48, 40, 12, 3);      // Abrissbirne und Schutt
     F('#5a3b1c', 118, 30, 8, 3); F('#5a3b1c', 124, 28, 2, 7); F('#5a3b1c', 126, 30, 2, 3);               // Pfeil
-    drawHouseTop(F, 140, 60 - hs(nx), 44, hs(nx) - 4, { step: 5, floors: nx.floors });                  // neues Haus
+    if (nx.shape === 'L') drawWoodHouseIcon(F, 138, 26, 50, 34); else drawHouseTop(F, 140, 60 - hs(nx), 44, hs(nx) - 4, { step: 5, floors: nx.floors });   // neues Haus
     show('demo'); say('Neues Haus bauen?');
   }
   $('demogo').addEventListener('click', () => { hide('demo'); entering = true; sfx.enter(); setTimeout(() => { location.href = 'spiele/abriss/index.html'; }, 300); });
@@ -314,7 +314,8 @@ const Hub = (() => {
     b.className = 'card' + (locked ? ' off' : ''); b.dataset.say = t.word;
     b.innerHTML = '<canvas width="64" height="64"></canvas><div class="word">' + (locked ? '?' : WORDS[t.word][0]) + '</div>';
     const g = b.querySelector('canvas').getContext('2d'), F = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
-    const hh = t.floors > 1 ? 48 : 34; drawHouseTop(F, 10, 60 - hh, 44, hh - 4, { step: 5, floors: t.floors });
+    const hh = t.floors > 1 ? 48 : 34;
+    if (t.shape === 'L') drawWoodHouseIcon(F, 8, 22, 48, 36); else drawHouseTop(F, 10, 60 - hh, 44, hh - 4, { step: 5, floors: t.floors });
     if (locked) { F('rgba(255,255,255,.55)', 0, 0, 64, 64); F('#5a5a5a', 26, 20, 12, 2); F('#5a5a5a', 26, 20, 2, 8); F('#5a5a5a', 36, 20, 2, 8); F('#f5b700', 23, 27, 18, 14); F('#3a2a10', 31, 31, 3, 6); }
     b.addEventListener('click', () => {
       if (locked) { sfx.bonk(); return; }
@@ -327,7 +328,7 @@ const Hub = (() => {
     shopOpen = true; clearTapGoal(); clearHeld(); hide('hubhud'); setEngine(false, false);
     const row = $('pickrow'); row.innerHTML = '';
     const mx = Math.min(HOUSE_TYPES.length - 1, house().maxType | 0);
-    for (let i = 0; i <= mx; i++) row.appendChild(houseCard(i, false));
+    for (let i = 0; i <= mx; i++) row.appendChild(houseCard(i, HOUSE_TYPES[i].ready === false && !location.search.includes('haustyp')));   // noch nicht fertig gebaute Haustypen: gesperrt (Testlink darf)
     if (mx + 1 < HOUSE_TYPES.length) row.appendChild(houseCard(mx + 1, true));   // nächstes Haus: kommt nach dem nächsten Abriss
     show('pick'); sayWord('house');
   }
@@ -351,6 +352,11 @@ const Hub = (() => {
   }
   function drawSite(time) {
     const x0 = (ox+5)*G, y0 = (oy+1)*G, w = 3*G, h = 2*G, st = house().step;
+    if (houseType().shape === 'L' && !house().pick && st < 5) {   // Holzhaus: L-Umriss, Löcher fürs Punktfundament (gebaggert, dann Beton)
+      const pit = { r0: 0, c0: 0, w: 6, h: 4 }, s2 = (col, x, y, ww, hh) => R(col, x0 + 8 + x, y0 + 7 + y, ww, hh);
+      drawLOutline(s2, pit, 9);
+      for (const hh of woodHoles(pit)) { const hx = hh.c * 9 + 2, hy = hh.r * 9 + 2; s2('#3e2a18', hx, hy, 6, 6); if (st >= 1) s2('#4f3520', hx + 1, hy + 1, 4, 4); if (st >= 2) s2('#a2a8ae', hx, hy, 6, 6); }
+    } else {
     // Grube: abgesteckt (Schritt 0) oder ausgehoben (ab Schritt 1)
     if (st === 0) {
       ctx.setLineDash([3, 3]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(x0+8.5, y0+8.5, w-17, h-17); ctx.setLineDash([]);
@@ -360,6 +366,7 @@ const Hub = (() => {
       R('#3e2a18', x0+8, y0+8, w-16, 2); R('#3e2a18', x0+8, y0+8, 2, h-16);
     }
     if (st >= 2) drawHouseTop(R, x0 + 9, y0 + 7, w - 18, h - 12, { step: st, time });   // Haus im Stil des Bauernhauses
+    }
     if (st >= 5) {                                  // fertig: Gartenweg zur Straße, Briefkasten, Blumen
       const dx = x0 + Math.round(w / 2) - 3;
       for (let y = y0 + h - 5; y < y0 + h + 4; y += 3) R('#c9b48a', dx, y, 6, 2);
@@ -372,7 +379,7 @@ const Hub = (() => {
       R('#5a3b1c', sx+9, sy+19, 2, 5); R('#5a3b1c', sx+29, sy+19, 2, 5);
       R('rgba(0,0,0,.25)', sx+1, sy+1, 40, 20); R('#5a3b1c', sx, sy, 40, 20); R('#fff8e0', sx+2, sy+2, 36, 16);
       const S2 = (c, x, y, w, h) => R(c, sx + x, sy + y, w, h);
-      drawHouseTop(S2, 6, nx.floors > 1 ? 4 : 6, 17, nx.floors > 1 ? 14 : 11, { step: 5, floors: nx.floors });
+      if (nx.shape === 'L') drawWoodHouseIcon(S2, 4, 4, 20, 13); else drawHouseTop(S2, 6, nx.floors > 1 ? 4 : 6, 17, nx.floors > 1 ? 14 : 11, { step: 5, floors: nx.floors });
       S2('#2a6fdb', 27, 4, 7, 2); S2('#2a6fdb', 32, 5, 2, 4); S2('#2a6fdb', 29, 8, 4, 2); S2('#2a6fdb', 29, 10, 2, 2); S2('#2a6fdb', 29, 14, 2, 2);   // ?
       if (intro || Math.abs(Math.sin(time / 600)) > 0.97) R('rgba(255,210,63,.6)', sx - 1, sy - 1, 42, 1);
     }

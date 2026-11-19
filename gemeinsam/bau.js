@@ -12,9 +12,42 @@ Object.assign(WORDS, {
 });
 // Haustypen: nach jedem Bau mit Abriss kommt der nächste dazu (save.house.maxType). floors = Stockwerke (mehr Mauerreihen, Fenster)
 const HOUSE_TYPES = [
-  { key: 'small', word: 'house',    floors: 1, loads: 3, trusses: 3 },
-  { key: 'big',   word: 'bighouse', floors: 2, loads: 4, trusses: 6 },
+  { key: 'small', word: 'house',    floors: 1, loads: 3, trusses: 3, steps: ['baggern', 'beton', 'mauer', 'kran', 'dach'] },
+  { key: 'big',   word: 'bighouse', floors: 2, loads: 4, trusses: 6, steps: ['baggern', 'beton', 'mauer', 'kran', 'dach'] },
+  // Holzhaus (Blockhaus in L-Form): Punktfundament statt Grube; Bohlen, Dach und Veranda folgen (#40, #41) – bis dahin nicht wählbar (ready: false)
+  { key: 'wood',  word: 'woodhouse', floors: 1, loads: 2, trusses: 3, shape: 'L', ready: false, steps: ['baggern', 'beton', null, null, null] },
 ];
+Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'] });
+// L-Form im Grube-Rechteck (pit = { r0, c0, w, h }): links ganz, rechts nur die untere Hälfte
+const lShape = pit => { const cs = Math.ceil(pit.w / 2), hs = Math.floor(pit.h / 2); return { cs, hs, has: (r, c) => c < cs || r >= hs }; };
+// Punktfundament: Löcher an den Ecken der L-Form (relativ zur Grube)
+function woodHoles(pit) {
+  const { cs, hs } = lShape(pit), w = pit.w, h = pit.h, seen = new Set(), out = [];
+  for (const [r, c] of [[0, 0], [0, cs - 1], [hs, cs - 1], [hs, w - 1], [h - 1, w - 1], [h - 1, 0], [h - 1, cs - 1]]) {
+    const k = r + ',' + c; if (seen.has(k)) continue; seen.add(k); out.push({ r: pit.r0 + r, c: pit.c0 + c });
+  }
+  return out;
+}
+// L-Umriss mit Schnur und Pflöcken (für Baggern, Beton und die Stadt)
+function drawLOutline(F, pit, G2) {
+  const { cs, hs } = lShape(pit), x0 = pit.c0 * G2 + 4, y0 = pit.r0 * G2 + 4, X = (c) => pit.c0 * G2 + c * G2, Y = (r) => pit.r0 * G2 + r * G2;
+  const pts = [[x0, y0], [X(cs) - 4, y0], [X(cs) - 4, Y(hs) + 4], [X(pit.w) - 4, Y(hs) + 4], [X(pit.w) - 4, Y(pit.h) - 4], [x0, Y(pit.h) - 4]];
+  for (let i = 0; i < pts.length; i++) { const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % pts.length];
+    if (ax === bx) for (let y = Math.min(ay, by); y < Math.max(ay, by); y += 6) F('rgba(255,255,255,.8)', ax, y, 1, 3);
+    else for (let x = Math.min(ax, bx); x < Math.max(ax, bx); x += 6) F('rgba(255,255,255,.8)', x, ay, 3, 1); }
+  for (const [px, py] of pts) { F('#d35400', px - 1, py - 1, 3, 3); F('#fff', px - 1, py - 1, 3, 1); }
+}
+// Kleines Holzhaus-Bild (Karten, Schild): Blockhaus mit Bohlen, Satteldach und Veranda
+function drawWoodHouseIcon(F, x, y, w, h) {
+  const rz = Math.round(h * 0.45), lw = Math.round(w * 0.62);
+  F('rgba(0,0,0,.25)', x + 2, y + 3, w, h);
+  F('#5a3b1c', x, y + rz, lw, h - rz);
+  for (let yy = y + rz + 1, i = 0; yy < y + h - 1; yy += 3, i++) { F(i % 2 ? '#a0673a' : '#b97f45', x + 1, yy, lw - 2, 2); F('#7a4a22', x - 2, yy, 3, 2); F('#7a4a22', x + lw - 1, yy, 3, 2); }
+  F('#5a3b1c', x + Math.round(lw / 2) - 3, y + h - 9, 6, 8); F('#9fe3ff', x + 4, y + rz + 4, 6, 5); F('#5a3b1c', x + 4, y + rz + 4, 6, 1);
+  F('#7a2218', x - 2, y, lw + 4, rz); for (let yy = y + 1; yy < y + rz; yy += 3) F('#a8301f', x - 1, yy, lw + 2, 2);
+  F('#c98a4f', x + lw, y + rz + 2, w - lw, h - rz - 2); for (let xx = x + lw + 2; xx < x + w; xx += 4) F('#7a4a22', xx, y + rz + 2, 1, h - rz - 2);   // Veranda
+  F('#5a3b1c', x + lw, y + rz - 2, w - lw, 3); F('#5a3b1c', x + w - 2, y + rz, 2, h - rz);
+}
 const houseType = () => { const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
 const houseFloors = () => houseType().floors;
 // Putzfarben (beim Mauern gewählt, save.house.color): Grund, hell, dunkel (Kanten/Sockel), Rand

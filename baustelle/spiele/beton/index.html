@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119g">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119h">
 <title>Beton</title>
 <style>.pill canvas.veh{width:clamp(30px,6vmin,46px);height:clamp(30px,6vmin,46px);image-rendering:pixelated}</style>
 </head>
@@ -46,9 +46,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261119g"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119g"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119g"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261119h"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119h"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119h"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -78,7 +78,7 @@ document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click'
 { const g = $('bveh').getContext('2d'); g.drawImage(PUMP.frames[24], 0, 0); }
 
 const Pour = (() => {
-  let pit, cells, nx, ny, state, tip, target, holding = false, truck, filled = 0;
+  let pit, cells, nx, ny, state, tip, target, holding = false, truck, filled = 0, mask = null, total = 0;
   const RADIUS = 18, RATE = 2.4, SPREAD = 0.9;   // ab 90 % läuft der Rest von selbst nach (keine fummeligen Ecken)
   function makePit() {                               // gleiche Grube wie beim Baggern
     const w = Math.min(7, gc - 4), h = Math.min(4, gr - 5);
@@ -90,17 +90,23 @@ const Pour = (() => {
     layout(true);
     pit = makePit(); nx = pit.w * 2; ny = pit.h * 2;
     cells = new Array(nx * ny).fill(0); filled = 0;
+    const holes = houseType().shape === 'L' ? woodHoles(pit) : null;   // Holzhaus: nur die Löcher des Punktfundaments füllen
+    mask = cells.map((_, i) => !holes || holes.some(hh => hh.r === pit.r0 + (((i / nx) | 0) >> 1) && hh.c === pit.c0 + ((i % nx) >> 1)));
+    total = mask.filter(Boolean).length;
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
     for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
-      const isPit = r >= pit.r0 && r < pit.r0 + pit.h && c >= pit.c0 && c < pit.c0 + pit.w;
+      const isPit = holes ? holes.some(hh => hh.r === r && hh.c === c) : r >= pit.r0 && r < pit.r0 + pit.h && c >= pit.c0 && c < pit.c0 + pit.w;
       const set = r === gr-1 ? tiles.road : isPit ? bauTiles.dug : bauTiles.gravel;
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
     }
-    // Schalung aus Holzbrettern rund um die Grube
+    // Schalung aus Holzbrettern rund um die Grube (Holzhaus: um jedes Loch)
+    if (holes) { drawLOutline(B, pit, G); for (const hh of holes) { const hx = hh.c*G, hy = hh.r*G; B('#5a3b1c', hx-3, hy-3, G+6, 3); B('#5a3b1c', hx-3, hy+G, G+6, 3); B('#5a3b1c', hx-3, hy-3, 3, G+6); B('#5a3b1c', hx+G, hy-3, 3, G+6); B('#c9a067', hx-2, hy-2, G+4, 1); } }
     const x0 = pit.c0*G, y0 = pit.r0*G, w = pit.w*G, h = pit.h*G;
+    if (!holes) {
     B('#5a3b1c', x0-4, y0-4, w+8, 4); B('#5a3b1c', x0-4, y0+h, w+8, 4); B('#5a3b1c', x0-4, y0-4, 4, h+8); B('#5a3b1c', x0+w, y0-4, 4, h+8);
     B('#c9a067', x0-3, y0-3, w+6, 2); B('#c9a067', x0-3, y0+h+1, w+6, 2); B('#c9a067', x0-3, y0-3, 2, h+6); B('#c9a067', x0+w+1, y0-3, 2, h+6);
     for (let x = x0; x < x0 + w; x += 18) { B('#3e2a18', x, y0-4, 1, 4); B('#3e2a18', x, y0+h, 1, 4); }
+    }
     truck = { x: 2*G, y: (gr-1)*G + G/2 };                       // Pumpe steht unten links auf der Straße
     tip = { x: truck.x + 8, y: truck.y - 20 }; target = null;
     state = 'play'; show('bhud'); hud();
@@ -108,7 +114,7 @@ const Pour = (() => {
   }
   $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; holding = false; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
-  function hud() { $('bfill').style.width = (100 * filled / cells.length) + '%'; }
+  function hud() { $('bfill').style.width = (100 * filled / total) + '%'; }
   function cellCenter(i) { const cx = i % nx, cy = (i / nx) | 0; return [pit.c0*G + cx*T + T/2, pit.r0*G + cy*T + T/2]; }
   function onPointer(type, x, y) {
     if (state !== 'play') return true;
@@ -120,14 +126,14 @@ const Pour = (() => {
     if (state !== 'play') { setEngine(false, false); return; }
     if (target) { tip.x = approach(tip.x, target.x, 160*dt); tip.y = approach(tip.y, target.y, 160*dt); }
     setEngine(true, holding, 30);
-    if (filled >= cells.length * SPREAD) {           // Beton verläuft in die letzten Lücken
-      for (let i = 0; i < cells.length; i++) if (cells[i] < 1) { cells[i] = Math.min(1, cells[i] + dt * 1.2); if (cells[i] >= 1) { filled++; hud(); } }
+    if (filled >= total * SPREAD) {           // Beton verläuft in die letzten Lücken
+      for (let i = 0; i < cells.length; i++) if (mask[i] && cells[i] < 1) { cells[i] = Math.min(1, cells[i] + dt * 1.2); if (cells[i] >= 1) { filled++; hud(); } }
     }
-    if (filled >= cells.length && state === 'play') { state = 'won'; holding = false; sfx.load(); finishStep(2, 'concrete', 'beton'); return; }
+    if (filled >= total && state === 'play') { state = 'won'; holding = false; sfx.load(); finishStep(2, 'concrete', 'beton'); return; }
     if (!holding) return;
     let any = false;
     for (let i = 0; i < cells.length; i++) {
-      if (cells[i] >= 1) continue;
+      if (cells[i] >= 1 || !mask[i]) continue;
       const [cx, cy] = cellCenter(i);
       if (Math.hypot(cx - tip.x, cy - tip.y) < RADIUS) { cells[i] = Math.min(1, cells[i] + RATE*dt); any = true; if (cells[i] >= 1) { filled++; hud(); } }
     }
@@ -148,7 +154,7 @@ const Pour = (() => {
     drawTipperLikePump(time);
     // Hinweis: zum ersten leeren Feld ziehen
     if (state === 'play' && !holding) {
-      const i = cells.findIndex(f => f < 1);
+      const i = cells.findIndex((f, j) => mask[j] && f < 1);
       if (i >= 0) { const [cx, cy] = cellCenter(i), b = Math.abs(Math.sin(time/220))*4; drawArrow(Math.round(cx - 3), Math.round(cy - 16 - b)); }
     }
   }

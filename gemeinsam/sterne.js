@@ -25,6 +25,7 @@
       saw: false,               // Kettensäge gekauft
       trees: null,              // Wald: je Baum Zeitpunkt des Fällens (0 = steht)
       house: { step: 0 },       // Baustelle Wohnhaus: erledigte Bauschritte (0–5)
+      farm: { items: [] },                   // Bauernhaus innen: Möbel wie beim Wohnhaus [{ k, x, y }]
       home: { unlocked: false, items: [] }   // Wohnhaus innen: freigeschaltet? Möbel [{ k: 'bed', x, y } …] (x/y = 0–1 im Zimmer, mehrfach möglich)
     };
   }
@@ -47,6 +48,7 @@
       if (d.home.items && !Array.isArray(d.home.items) && typeof d.home.items === 'object')   // alte Form { bed: {x,y} } → Liste
         d.home.items = Object.entries(d.home.items).map(([k, p]) => ({ k, x: p.x, y: p.y }));
       if (!Array.isArray(d.home.items)) d.home.items = [];
+      d.farm = Object.assign(standard().farm, s.farm || {}); if (!Array.isArray(d.farm.items)) d.farm.items = [];
     }
     Object.keys(Hof.save).forEach(k => delete Hof.save[k]);
     Object.assign(Hof.save, d);
@@ -95,9 +97,9 @@
   };
 
   // Möbel im Wohnhaus speichern: Liste [{ k, x, y }] (x/y je 0–1 im Zimmer), gleiche Möbel dürfen mehrfach vorkommen
-  Hof.setHome = function (list) {
+  Hof.setHome = function (list, where) {          // where = 'farm' für das Bauernhaus, sonst Wohnhaus
     Hof.load();
-    Hof.save.home.items = list.slice(0, 60).map(i => ({ k: i.k, x: Math.round(i.x * 1000) / 1000, y: Math.round(i.y * 1000) / 1000 }));
+    Hof.save[where === 'farm' ? 'farm' : 'home'].items = list.slice(0, 60).map(i => ({ k: i.k, x: Math.round(i.x * 1000) / 1000, y: Math.round(i.y * 1000) / 1000 }));
     Hof.persist();
   };
 

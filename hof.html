@@ -21,7 +21,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="gemeinsam/basis.css?v=20261118b">
+<link rel="stylesheet" href="gemeinsam/basis.css?v=20261119a">
 <title>Unser Bauernhof</title>
 </head>
 <body>
@@ -90,13 +90,13 @@ window.addEventListener('error', function (e) {
   </div>
 </div>
 
-<script src="gemeinsam/sterne.js?v=20261118b"></script>
-<script src="gemeinsam/basis.js?v=20261118b"></script>
+<script src="gemeinsam/sterne.js?v=20261119a"></script>
+<script src="gemeinsam/basis.js?v=20261119a"></script>
 <script>
 // Spiele, die als eigene Seite laufen (Feld, Wiese, Weide)
 const PAGES = { w: 'spiele/feld/index.html', m: 'spiele/wiese/index.html', g: 'spiele/schafe/index.html', K: 'spiele/kuehe/index.html',
-                a: 'spiele/angeln/index.html', W: 'spiele/wald/index.html' };
-const FOOT_ONLY = ['g', 'K', 'B', 'a', 'W'];   // nur zu Fuß: Weidetor, Melkstand, Scheunentor, Angelsteg, Waldweg
+                a: 'spiele/angeln/index.html', W: 'spiele/wald/index.html', H: 'wohnhaus/index.html?bauernhaus' };
+const FOOT_ONLY = ['g', 'K', 'B', 'a', 'W', 'H'];   // H = Haustür Bauernhaus (→ einrichten)   // nur zu Fuß: Weidetor, Melkstand, Scheunentor, Angelsteg, Waldweg
 </script>
 <script>
 /* =====================================================================
@@ -142,11 +142,11 @@ drawVehicleButtons();
    ===================================================================== */
 // T Baum, h Haus, b Scheune, s Silo, = Weg, w Feld, p Schafstall, o Teich,
 // g Tor zur Schafweide (→ Schafe hüten), q Kuhweide, a Angelsteg am Teich (→ Angeln), W Waldweg (→ Bäume fällen), m Wiese (→ Heu machen), w Feld (→ Ernten/Grubbern/Säen),
-// B Scheunentor (→ Laden), K Melkstand-Tür (→ Kühe melken), k Melkstand
+// B Scheunentor (→ Laden), K Melkstand-Tür (→ Kühe melken), k Melkstand, H Haustür Bauernhaus (→ einrichten)
 const HUB_MAP = [
   'TT.T...T',
   'Thh.bbsW',
-  '.hh.Bbs.',
+  '.hH.Bbs.',
   '========',
   'ww=.gppp',
   'ww=..ppp',
@@ -291,7 +291,7 @@ const Hub = (() => {
       ENT.combine.m = newMover(oy+3, ox+6, Math.PI);
       posKey = key; active = 'person';
     }
-    const BACK = { schafe: [5, 4], kuehe: [6, 3], angeln: [6, 3], wald: [2, 7] };   // neben dem Eingang abstellen
+    const BACK = { bauernhaus: [3, 3], schafe: [5, 4], kuehe: [6, 3], angeln: [6, 3], wald: [2, 7] };   // neben dem Eingang abstellen
     if (BACK[from]) {
       Object.assign(ENT.person.m, { r: oy + BACK[from][0], c: ox + BACK[from][1], a: -Math.PI/2 }); active = 'person';
     } else if (returning && ENT[returning]) {
@@ -327,7 +327,7 @@ const Hub = (() => {
       from = backFrom; backFrom = null; started = true;
       try { ret = sessionStorage.getItem('bauernhof.fahrzeug'); } catch (e) {}
     }
-    placeAll(['schafe', 'kuehe', 'angeln', 'wald'].includes(from) ? null : ret, from);
+    placeAll(['schafe', 'kuehe', 'angeln', 'wald', 'bauernhaus'].includes(from) ? null : ret, from);
     doorDone = ENT.person.m.r * 1000 + ENT.person.m.c;      // wer auf einem Eingang abgesetzt wird, löst ihn nicht gleich aus
     entering = false; uiOpen = false; idleT = 0; refreshVBtns(); hudCounts();
     restoreVisit();
@@ -632,6 +632,7 @@ const Hub = (() => {
     const t = cellType(r, c);
     if (active === 'person' && ctlMode === 'tippen' && (t === 'b' || t === 'B')) { setTapGoal(oy+2, ox+4); return true; }
     if (active === 'person' && ctlMode === 'tippen' && (t === 'k' || t === 'K')) { setTapGoal(oy+7, ox+4); return true; }
+    if (active === 'person' && ctlMode === 'tippen' && (t === 'h' || t === 'H')) { setTapGoal(oy+2, ox+2); return true; }
     return false;
   }
   function resize() { build(); placeAll(null); }
@@ -645,6 +646,6 @@ addEventListener('pageshow', e => { if (e.persisted && scene === Hub) Hub.enter(
 startLoop(Hub);
 </script>
 <script>window.START_URL = 'index.html';</script>
-<script src="gemeinsam/startseite.js?v=20261118b"></script>
+<script src="gemeinsam/startseite.js?v=20261119a"></script>
 </body>
 </html>

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261118b">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119a">
 <title>Wohnhaus</title>
 </head>
 <body>
@@ -30,9 +30,9 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="house" style="pointer-events:auto"><span class="word">HAUS</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261118b"></script>
-<script src="../gemeinsam/basis.js?v=20261118b"></script>
-<script src="../gemeinsam/bau.js?v=20261118b"></script>
+<script src="../gemeinsam/sterne.js?v=20261119a"></script>
+<script src="../gemeinsam/basis.js?v=20261119a"></script>
+<script src="../gemeinsam/bau.js?v=20261119a"></script>
 <script>
 /* =====================================================================
    WOHNHAUS EINRICHTEN – drei Zimmer von schräg oben (wie der Hof)
@@ -41,7 +41,9 @@ window.addEventListener('error', function (e) {
    Auf den Boden tippen: das Kind läuft hin. Kurz auf einem Bett stehen bleiben = schlafen (es wird Nacht und wieder Tag).
    Gespeichert: save.home.items = [{ k, x, y }] (x/y = 0–1 im Zimmer).
    ===================================================================== */
-window.HOF_URL = '../baustelle/index.html';          // „Hof“ ist hier die Stadt
+const FARM = new URLSearchParams(location.search).has('bauernhaus');   // ?bauernhaus = Bauernhaus auf dem Hof einrichten (gratis, eigener Spielstand save.farm)
+window.HOF_URL = FARM ? '../hof.html' : '../baustelle/index.html';          // „Hof“ ist hier die Stadt bzw. der Bauernhof
+const BACK_TAG = FARM ? 'bauernhaus' : 'wohnhaus', WHERE = FARM ? 'farm' : 'home';
 Object.assign(WORDS, {
   bed: ['BETT', 'Bett'], table: ['TISCH', 'Tisch'], chair: ['STUHL', 'Stuhl'], sofa: ['SOFA', 'Sofa'], lamp: ['LAMPE', 'Lampe'],
   fridge: ['KÜHLSCHRANK', 'Kühlschrank'], stove: ['HERD', 'Herd'], tub: ['BADEWANNE', 'Badewanne'], toilet: ['KLO', 'Klo'],
@@ -49,7 +51,7 @@ Object.assign(WORDS, {
   train: ['EISENBAHN', 'Eisenbahn'], sleep: ['SCHLAFEN', 'Schlafen']
 });
 const save = Hof.save;
-document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('wohnhaus')));
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof(BACK_TAG)));
 
 // Möbel von schräg oben: Breite/Höhe in Pixeln (vor der Vergrößerung S), Zeichnen ab linker oberer Ecke. flat = liegt am Boden (wird zuerst gezeichnet)
 const FURN = [
@@ -133,17 +135,17 @@ const KID = { pal: { h: '#6b3e1e', s: '#f1c27d', k: '#222', r: '#e03b3b', w: '#f
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
   let kid = null, night = null, grid = null;
-  const list = () => save.home.items;
+  const list = () => save[WHERE].items;
   const toScreen = (f, p) => ({ x: Math.round(floor.x + p.x * (floor.w - f.W)), y: Math.round(floor.y + p.y * (floor.h - f.H)) });
   const toFrac = (f, x, y) => ({ x: clamp((x - floor.x) / (floor.w - f.W), 0, 1), y: clamp((y - floor.y) / (floor.h - f.H), 0, 1) });
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
   function enter() {
     Hof.load();
-    if (!save.house || save.house.step < 5 || !save.home.unlocked) { goHof('wohnhaus'); return; }
+    if (!FARM && (!save.house || save.house.step < 5 || !save.home.unlocked)) { goHof(BACK_TAG); return; }
     layout(true);
     const cols = Math.min(gc - 1, 15);
-    S = (gc >= 10 && gr >= 10) ? 2 : 1; BS = Math.max(1, S - 1); WH = G * S / 2 + G / 2;
+    S = 1; BS = 1;                                   // Möbel und Kind klein genug, damit die Zimmer groß wirken WH = G * S / 2 + G / 2;
     FURN.forEach(f => { f.W = f.w * S; f.H = f.h * S; });
     const barH = 38 * Math.max(1, S - 1) + 18;
     room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - barH - G - 6 };
@@ -172,7 +174,7 @@ const Room = (() => {
     if (!kid) kid = { x: floor.x + floor.w * 0.3, y: floor.y + floor.h - 2, path: [], t: 0, flip: false, still: 0 };
     else { kid.x = clamp(kid.x, floor.x + 6, floor.x + floor.w - 6); kid.y = clamp(kid.y, floor.y + 14 * S, floor.y + floor.h); kid.path = []; }
     const fixed = list().map(it => { const f = BY[it.k]; if (!f) return it; const p = toScreen(f, it); return { k: it.k, ...fit(f, p.x, p.y) }; });
-    if (fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed);   // Möbel nicht in Innenwänden
+    if (fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed, WHERE);   // Möbel nicht in Innenwänden
     drag = null; sel = null;
     show('ihud');
   }
@@ -195,7 +197,8 @@ const Room = (() => {
     B('#a9c8e8', vx, y + WH, x + w - vx, hy - y - WH); for (let i = 0; i < 40; i++) B('#bcd6f0', vx + ((i * 37) % (x + w - vx)), y + WH + ((i * 23) % Math.max(1, hy - y - WH)), 2, 1);
     for (let yy = hy, k = 0; yy < y + h; yy += 6 * S, k++) for (let xx = vx, j = 0; xx < x + w; xx += 6 * S, j++) B((k + j) % 2 ? '#e8f2f8' : '#cfe0ec', xx, yy, Math.min(6 * S, x + w - xx), Math.min(6 * S, y + h - yy));
     // Rückwand mit Tapete, Fenster, Bild
-    B('#f3e3b8', x, y, w, WH + 2); for (let xx = x + 3; xx < x + w; xx += 8 * S) B('#e8d39c', xx, y, 3 * S, WH + 2);
+    if (FARM) { B('#a0673a', x, y, w, WH + 2); for (let xx = x; xx < x + w; xx += 10) B('#7a4a22', xx, y, 1, WH + 2); B('#c98a4f', x, y, w, 1); }   // Bauernhaus: Holzwand
+    else { B('#f3e3b8', x, y, w, WH + 2); for (let xx = x + 3; xx < x + w; xx += 8 * S) B('#e8d39c', xx, y, 3 * S, WH + 2); }
     B('#cdb27a', x, y + WH, w, 2); B('#7a4a22', x, y + WH + 1, w, 2);
     const win = (wx) => { const Q = (col, a, b, c, d) => B(col, wx + a * S, y + b * S + 2, c * S, d * S);
       Q('#5a3b1c', 0, 2, 22, 14); Q('#9fe3ff', 2, 4, 18, 10); Q('#e6f8ff', 2, 4, 4, 10); Q('#5a3b1c', 10, 4, 2, 10); Q('#5a3b1c', 2, 8, 18, 2); Q('#ffffff', 13, 5, 5, 2); };
@@ -276,11 +279,11 @@ const Room = (() => {
   function put(f, cx, cy, i) {
     const pos = fit(f, cx - f.W / 2, cy - f.H / 2), l = list().slice();
     if (i == null) l.push({ k: f.key, ...pos }); else l[i] = { k: f.key, ...pos };
-    Hof.setHome(l); sfx.clod(); wob.set(i == null ? l.length - 1 : i, 0);
+    Hof.setHome(l, WHERE); sfx.clod(); wob.set(i == null ? l.length - 1 : i, 0);
     const p = toScreen(f, pos);
     for (let n = 0; n < 8; n++) spawn(p.x + rnd(0, f.W), p.y + f.H, rnd(-15, 15), rnd(-12, -4), .35, '#e9d8b0', 30);
   }
-  function remove(i) { const l = list().slice(); l.splice(i, 1); Hof.setHome(l); sfx.load(); }
+  function remove(i) { const l = list().slice(); l.splice(i, 1); Hof.setHome(l, WHERE); sfx.load(); }
   function walkTo(x, y) { kid.path = findPath(x, y); kid.still = 0; }
 
   function onPointer(type, x, y) {
@@ -360,8 +363,8 @@ const Room = (() => {
     }
     // Möbel und Kind nach unten sortiert (wer weiter unten steht, ist vorne)
     const things = order().filter(e => !(drag && drag.from === 'room' && drag.i === e.i)).map(e => ({ y: e.f.flat ? -1e9 : toScreen(e.f, e.it).y + e.f.H, e }));
-    if (!night) things.push({ y: kid.y, kid: true });
     things.sort((a, b) => a.y - b.y);
+    if (!night) things.push({ kid: true });          // Kind immer vor den Möbeln
     for (const th of things) {
       if (th.kid) { drawKid(time, kid.x, kid.y); continue; }
       const e = th.e, p = toScreen(e.f, e.it), wv = wob.get(e.i), wb = wv !== undefined ? Math.round(Math.sin(wv * 30) * 2 * (1 - wv / 0.35)) : 0;

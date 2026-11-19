@@ -24,7 +24,7 @@
       woodParts: 0,             // Wald: gefällte Bäume zum nächsten Stern (0–4, 5 Bäume = 1 Stern)
       saw: false,               // Kettensäge gekauft
       trees: null,              // Wald: je Baum Zeitpunkt des Fällens (0 = steht)
-      house: { step: 0, type: 0, maxType: 0, pick: false, built: 0 },   // Baustelle Wohnhaus: erledigte Bauschritte (0–5), Haustyp, größter wählbarer Typ, Auswahl offen (nach Abriss), Anzahl Abrisse
+      house: { step: 0, type: 0, maxType: 0, pick: false, built: 0, seenInside: false, signIntro: false },   // seenInside: fertiges Haus schon betreten (dann steht das Schild „Neues Haus“), signIntro: Schild schon einmal vorgestellt   // Baustelle Wohnhaus: erledigte Bauschritte (0–5), Haustyp, größter wählbarer Typ, Auswahl offen (nach Abriss), Anzahl Abrisse
       farm: { items: [] },                   // Bauernhaus innen: Möbel wie beim Wohnhaus [{ k, x, y }]
       home: { unlocked: false, items: [] }   // Wohnhaus innen: freigeschaltet? Möbel [{ k: 'bed', x, y } …] (x/y = 0–1 im Zimmer, mehrfach möglich)
     };
@@ -95,9 +95,12 @@
   Hof.demolishHouse = function (stars, maxTypes) {
     Hof.load(); const h = Hof.save.house;
     h.maxType = Math.min(maxTypes - 1, Math.max(h.maxType | 0, (h.type | 0) + 1));
-    h.step = 0; h.pick = true; h.built = (h.built | 0) + 1;
+    h.step = 0; h.pick = true; h.built = (h.built | 0) + 1; h.seenInside = false;
     Hof.save.stars += stars; Hof.persist();
   };
+  // Fertiges Haus betreten (danach steht das Schild „Neues Haus“) bzw. Schild vorgestellt
+  Hof.markHouse = function (key) { Hof.load(); if (!Hof.save.house[key]) { Hof.save.house[key] = true; Hof.persist(); } };
+
   // Neues Haus auf dem leeren Bauplatz auswählen (Bauen beginnt wieder mit der Grube)
   Hof.pickHouse = function (type) {
     Hof.load(); const h = Hof.save.house;

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119c">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119d">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -48,7 +48,7 @@ window.addEventListener('error', function (e) {
 <!-- Abriss: Bagger steht auf dem fertigen Haus → große Karte mit Abrissbirne antippen -->
 <div id="demo" class="overlay hidden">
   <div class="row">
-    <button class="card" id="demogo"><canvas id="democv" width="64" height="64"></canvas><div class="word">ABRISS</div></button>
+    <button class="card" id="demogo" style="width:min(86vw,520px)"><canvas id="democv" width="192" height="64" style="width:min(78vw,480px);height:auto"></canvas><div class="word">NEUES HAUS</div></button>
   </div>
   <button class="home" id="demohome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
@@ -58,15 +58,15 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261119c"></script>
-<script src="../gemeinsam/basis.js?v=20261119c"></script>
-<script src="../gemeinsam/bau.js?v=20261119c"></script>
+<script src="../gemeinsam/sterne.js?v=20261119d"></script>
+<script src="../gemeinsam/basis.js?v=20261119d"></script>
+<script src="../gemeinsam/bau.js?v=20261119d"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
    Nur zu Fuß (Vater, #31): Bauarbeiter auf den Bauplatz → Minispiel des nächsten Bauschritts (baggern, beton, mauer, kran, dach).
-   Bagger und Kipper stehen geparkt auf dem Bauhof (Deko). Fertiges Haus: Tür → hinein; kurz am geparkten Bagger stehen → Abriss-Karte
-   (vorläufig, bis das Schild „Neues Haus“ kommt, #32).
+   Bagger und Kipper stehen geparkt auf dem Bauhof (Deko). Fertiges Haus: Tür → hinein. Nach dem ersten Besuch im Haus steht über dem
+   Bauplatz das Schild „Neues Haus“ (Bild vom nächsten Haus + ?): 0,8 s davor stehen → Karte Haus → Abrissbirne → neues Haus (#32).
    Hausbau-Fortschritt: save.house.step (0 = Grube fehlt, 1 = Grube fertig, … 5 = Haus fertig)
    Stadtplan: feste, umrandete Bauplätze. F = Bauernhof (fertig, zu Fuß 0,8 s stehen → hof.html),
    P = Feuerwache, Q = Bahnhof (noch gesperrt: Schild mit Bild und Schloss, Stehenbleiben sagt das Wort)
@@ -96,10 +96,12 @@ const CITY_BELOW = ['....=..T', '.PP.=QQ.', '.PP.=QQ.', 'T...=...'];
 const PLOTS = { F: { word: 'farm', page: '../hof.html#stadt' }, P: { word: 'firestation' }, Q: { word: 'station' } };
 const HOME_PAGE = '../wohnhaus/index.html', HOME_PRICE = 10;   // fertiges Wohnhaus: einmal mit Sternen freischalten, dann hineingehen
 const homeOpen = () => !!(save.home && save.home.unlocked);
-const PLOT_WAIT = 0.8;                       // so lange stehen bleiben, bis etwas passiert (Darüberlaufen löst nichts aus)
+const PLOT_WAIT = 0.8;
+const signOn = () => save.house && save.house.step >= 5 && !save.house.pick && save.house.seenInside;   // Schild „Neues Haus“ steht                       // so lange stehen bleiben, bis etwas passiert (Darüberlaufen löst nichts aus)
 
 const Hub = (() => {
   let type, ox, oy, entering = false, active = 'person', posKey = '', boardT = 0, idleT = 0, siteT = 0;
+  let signWob = 0, signSaid = false;
   let plotT = 0, plotDone = -1, plotShown = null, plotPos = {}, shopOpen = false, demoT = 0, demoDone = false;
   const ENT = {
     person: { spr: BUILDER,   m: null, speed: 2.8 },
@@ -250,10 +252,12 @@ const Hub = (() => {
   function update(dt) {
     const e = ENT[active];
     idleT = held ? 0 : idleT + dt;
-    { const dm = ENT.digger.m, onDig = !e.m.moving && !held && !entering && !shopOpen && e.m.r === dm.r && e.m.c === dm.c;   // am geparkten Bagger stehen bleiben
-      if (!onDig) { boardT = 0; demoDone = false; }
-      else if (!demoDone) { boardT += dt; if (boardT > PLOT_WAIT) { boardT = 0; demoDone = true;
-        if (house().step >= 5 && !house().pick) openDemolish(); else sayWord('digger'); } } }
+    { const onSign = signOn() && !e.m.moving && !held && !entering && !shopOpen && e.m.r === oy && e.m.c === ox + 5;   // vor dem Schild „Neues Haus“ stehen bleiben
+      if (!onSign) { boardT = 0; if (!(e.m.r === oy && e.m.c === ox + 5)) demoDone = false; }
+      else if (!demoDone) { boardT += dt; if (boardT > PLOT_WAIT) { boardT = 0; demoDone = true; openDemolish(); } } }
+    if (signOn() && !house().signIntro && !entering && !shopOpen) { signWob = (signWob || 0) + dt;    // Schild einmal vorstellen
+      if (signWob > 1.2 && !signSaid) { signSaid = true; say('Schau mal, ein neues Haus! Geh zum Schild.'); }
+      if (signWob > 5) { Hof.markHouse('signIntro'); } }
     if (!entering) moverUpdate(e.m, dt, {
       passable: passableFor(active), speed: e.speed,
       onArrive: m => {
@@ -294,8 +298,14 @@ const Hub = (() => {
   function openDemolish() {
     shopOpen = true; clearTapGoal(); clearHeld(); hide('hubhud'); setEngine(false, false);
     const g = $('democv').getContext('2d'); g.clearRect(0, 0, 64, 64); const F = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
-    drawHouseTop(F, 8, 22, 40, 34, { step: 5 }); pixLine(F, 52, 2, 40, 18, 1, '#333'); drawBall(F, 38, 22, 2);
-    show('demo'); sayWord('demolish');
+    const cur = HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, house().type | 0)], nx = HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, (house().maxType | 0) + 1, (house().type | 0) + 1)];
+    const hs = t => t.floors > 1 ? 46 : 34;
+    drawHouseTop(F, 6, 60 - hs(cur), 44, hs(cur) - 4, { step: 5, floors: cur.floors });                 // jetziges Haus
+    F('#5a3b1c', 54, 30, 8, 3); F('#5a3b1c', 60, 28, 2, 7); F('#5a3b1c', 62, 30, 2, 3);                  // Pfeil
+    pixLine(F, 96, 4, 88, 28, 1, '#333'); drawBall(F, 88, 32, 2); drawRubble(F, 72, 48, 40, 12, 3);      // Abrissbirne und Schutt
+    F('#5a3b1c', 118, 30, 8, 3); F('#5a3b1c', 124, 28, 2, 7); F('#5a3b1c', 126, 30, 2, 3);               // Pfeil
+    drawHouseTop(F, 140, 60 - hs(nx), 44, hs(nx) - 4, { step: 5, floors: nx.floors });                  // neues Haus
+    show('demo'); say('Neues Haus bauen?');
   }
   $('demogo').addEventListener('click', () => { hide('demo'); entering = true; sfx.enter(); setTimeout(() => { location.href = 'spiele/abriss/index.html'; }, 300); });
   $('demohome').addEventListener('click', () => { closeUi(); sfx.click(); });
@@ -324,7 +334,7 @@ const Hub = (() => {
   $('pickhome').addEventListener('click', () => { closeUi(); sfx.click(); });
 
   // Fertiges Wohnhaus betreten: offen → hinein, sonst Laden mit dem Haus (freischalten gegen Sterne)
-  function goHome() { entering = true; sfx.enter(); setTimeout(() => { location.href = HOME_PAGE; }, 900); }
+  function goHome() { Hof.markHouse('seenInside'); entering = true; sfx.enter(); setTimeout(() => { location.href = HOME_PAGE; }, 900); }
   function enterHome() {
     if (homeOpen()) { goHome(); return; }
     shopOpen = true; clearTapGoal(); clearHeld(); hide('hubhud');
@@ -357,6 +367,16 @@ const Hub = (() => {
       R('#5a3b1c', x0 + w - 12, y0 + h - 12, 2, 8); R('#2a6fdb', x0 + w - 15, y0 + h - 16, 8, 5); R('#ffd23f', x0 + w - 14, y0 + h - 15, 2, 1);
       for (const [fx, fy, c] of [[x0 + 4, y0 + h - 6, '#ff6b8a'], [x0 + 8, y0 + h - 4, '#ffd23f'], [x0 + w - 24, y0 + h - 5, '#ff6b8a']]) { R('#3f8f37', fx, fy + 1, 2, 2); R(c, fx, fy, 2, 1); }
     }
+    if (signOn()) {                                 // Schild „Neues Haus“: Bild vom nächsten (größeren) Haus und ein Fragezeichen
+      const intro = !house().signIntro, wob = intro ? Math.round(Math.sin(time / 90) * 2) : 0;
+      const sx = (ox+5)*G + 2 + wob, sy = oy*G + 1, nx = HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, (house().type | 0) + 1)];
+      R('#5a3b1c', sx+9, sy+19, 2, 5); R('#5a3b1c', sx+29, sy+19, 2, 5);
+      R('rgba(0,0,0,.25)', sx+1, sy+1, 40, 20); R('#5a3b1c', sx, sy, 40, 20); R('#fff8e0', sx+2, sy+2, 36, 16);
+      const S2 = (c, x, y, w, h) => R(c, sx + x, sy + y, w, h);
+      drawHouseTop(S2, 6, nx.floors > 1 ? 4 : 6, 17, nx.floors > 1 ? 14 : 11, { step: 5, floors: nx.floors });
+      S2('#2a6fdb', 27, 4, 7, 2); S2('#2a6fdb', 32, 5, 2, 4); S2('#2a6fdb', 29, 8, 4, 2); S2('#2a6fdb', 29, 10, 2, 2); S2('#2a6fdb', 29, 14, 2, 2);   // ?
+      if (intro || Math.abs(Math.sin(time / 600)) > 0.97) R('rgba(255,210,63,.6)', sx - 1, sy - 1, 42, 1);
+    }
     if (st >= 5) return;                            // fertiges Haus: kein Bauzaun, kein Bauschild mehr
     // Bauzaun
     for (let x = x0; x <= x0 + w; x += 9) { R('#d35400', x, y0-2, 2, 8); R('#d35400', x, y0+h-6, 2, 8); }
@@ -374,7 +394,7 @@ const Hub = (() => {
     drawSite(time);
     drawTipper((ox+1)*G + 4, (oy+5)*G + 4, 0, TIPPERS[2]);                 // geparkter Kipper
     drawMover(ENT.digger.m, ENT.digger.spr, time);                          // geparkter Bagger
-    if (boardT > 0.1) { const p = moverPos(ENT.person.m);                  // Ring am Bagger (Abriss)
+    if (boardT > 0.1) { const p = moverPos(ENT.person.m);                  // Ring vor dem Schild „Neues Haus“
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, 0, Math.PI*2); ctx.stroke();
       ctx.strokeStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1, boardT / PLOT_WAIT)); ctx.stroke(); }
     drawMover(ENT.person.m, ENT.person.spr, time);

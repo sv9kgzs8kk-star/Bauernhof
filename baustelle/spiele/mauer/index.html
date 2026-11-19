@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119d">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119e">
 <title>Mauer</title>
 </head>
 <body>
@@ -28,6 +28,11 @@ window.addEventListener('error', function (e) {
 <div id="whud" class="hud gamehud hidden">
   <div class="pill" data-say="wall" style="pointer-events:auto"><span class="word">MAUER</span> <span id="wcount">0/0</span></div>
   <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<!-- Zu Beginn: Farbe des Hauses wählen (große Karten mit kleinem Haus) -->
+<div id="colpick" class="overlay hidden">
+  <div class="row" id="colrow" style="flex-wrap:wrap;gap:12px;justify-content:center"></div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <div id="gpause" class="overlay hidden">
   <div class="row">
@@ -45,9 +50,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261119d"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119d"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119d"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261119e"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119e"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119e"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -116,9 +121,27 @@ const Wall = (() => {
       cells.push({ r, c, x, y, w, h, open, done: false });
     }
     row = 0; while (row < ROWS && !free().length) row++;
-    drag = null; plops = []; state = 'play';
-    show('whud'); hud();
-    setTimeout(() => sayWord('wall'), 400);
+    drag = null; plops = [];
+    pickColor();
+  }
+  // Farbe wählen: jede Karte zeigt das fertige Haus in dieser Farbe; danach geht das Mauern los
+  function pickColor() {
+    state = 'color'; hide('whud');
+    const row = $('colrow'); row.innerHTML = '';
+    for (const col of HOUSE_COLORS) {
+      const b = document.createElement('button');
+      b.className = 'card small'; b.dataset.say = 'col_' + col.key;
+      b.innerHTML = '<canvas width="64" height="48"></canvas><div class="word">' + col.word[0] + '</div>';
+      const c2 = b.querySelector('canvas').getContext('2d'), F = (cc, x, y, w, h) => { c2.fillStyle = cc; c2.fillRect(x, y, w, h); };
+      const fl = houseFloors(); drawHouseTop(F, 8, fl > 1 ? 4 : 12, 48, fl > 1 ? 42 : 34, { step: 5, color: col.key, floors: fl });
+      b.addEventListener('click', () => {
+        Hof.setHouseColor(col.key); sayWord('col_' + col.key); sfx.unlock();
+        for (const o of row.children) o.classList.toggle('off', o !== b);
+        setTimeout(() => { hide('colpick'); state = 'play'; show('whud'); hud(); setTimeout(() => sayWord('wall'), 300); }, 700);
+      });
+      row.appendChild(b);
+    }
+    show('colpick'); setTimeout(() => say('Welche Farbe soll dein Haus haben?'), 400);
   }
   $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; paused = true; drag = null; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });

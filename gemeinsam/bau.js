@@ -17,6 +17,16 @@ const HOUSE_TYPES = [
 ];
 const houseType = () => { const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
 const houseFloors = () => houseType().floors;
+// Putzfarben (beim Mauern gewählt, save.house.color): Grund, hell, dunkel (Kanten/Sockel), Rand
+const HOUSE_COLORS = [
+  { key: 'creme', word: ['WEISS', 'Weiß'],     base: '#e9dcc0', light: '#f6ecd4', dark: '#cdbf9f', edge: '#b8a888', dots: ['#ddd0b0', '#f3e8cc'] },
+  { key: 'gelb',  word: ['GELB', 'Gelb'],      base: '#f2d46b', light: '#fbe8a0', dark: '#d4b44a', edge: '#b0922e', dots: ['#e6c55a', '#f8e08a'] },
+  { key: 'blau',  word: ['BLAU', 'Blau'],      base: '#9cc8ec', light: '#c4e0f6', dark: '#7aa8d0', edge: '#5d8ab4', dots: ['#8ab9e0', '#b4d6f2'] },
+  { key: 'rosa',  word: ['ROSA', 'Rosa'],      base: '#f2b8c6', light: '#fad6df', dark: '#d896a8', edge: '#b8788a', dots: ['#e8a8b8', '#f6c8d4'] },
+  { key: 'gruen', word: ['GRÜN', 'Grün'],      base: '#b6dc96', light: '#d4ecbe', dark: '#94bc74', edge: '#76985a', dots: ['#a6d084', '#c6e4aa'] },
+];
+HOUSE_COLORS.forEach(c => { WORDS['col_' + c.key] = c.word; });
+const houseColor = key => HOUSE_COLORS.find(c => c.key === (key || (typeof Hof !== 'undefined' && Hof.save && Hof.save.house && Hof.save.house.color))) || HOUSE_COLORS[0];
 // Grobe Pixel: zeichnet über F, rastet aber alles auf ein P×P-Raster ein (Haus, Kran, Transporter wirken wie Hof-Pixelgrafik)
 function snapF(F, P = 2) {
   return (col, x, y, w, h) => { const x0 = Math.floor(x / P) * P, y0 = Math.floor(y / P) * P, x1 = Math.ceil((x + w) / P) * P, y1 = Math.ceil((y + h) / P) * P; F(col, x0, y0, Math.max(P, x1 - x0), Math.max(P, y1 - y0)); };
@@ -129,15 +139,16 @@ function drawHouseTop(F, x, y, w, h, o = {}) {
   // Fassade (vorne): Steine im Rohbau, fertig verputzt wie das Bauernhaus
   const { doorW, doorX, doorH, winW, winH, winList } = facadeHoles(g);
   if (done) {
-    F('#b8a888', x - 1, y + rz, w + 2, fz + 1); F('#e9dcc0', x, y + rz, w, fz); F('#f6ecd4', x, y + rz, w, 1); F('#cdbf9f', x, y + h - 2, w, 2);
-    for (let i = 0, k = Math.round(x * 7 + y * 3); i < w * fz / 26; i++) { k = (k * 9301 + 49297) % 233280; F(k % 3 ? '#ddd0b0' : '#f3e8cc', x + 1 + k % (w - 3), y + rz + 2 + (k >> 4) % Math.max(1, fz - 5), 2, 1); }   // Putz
-    for (let f = 1; f < g.floors; f++) F('#cdbf9f', x, y + h - Math.round(fz * f / g.floors) - 1, w, 2);   // Stockwerk-Kante
+    const pc = houseColor(o.color);                    // Putzfarbe
+    F(pc.edge, x - 1, y + rz, w + 2, fz + 1); F(pc.base, x, y + rz, w, fz); F(pc.light, x, y + rz, w, 1); F(pc.dark, x, y + h - 2, w, 2);
+    for (let i = 0, k = Math.round(x * 7 + y * 3); i < w * fz / 26; i++) { k = (k * 9301 + 49297) % 233280; F(k % 3 ? pc.dots[0] : pc.dots[1], x + 1 + k % (w - 3), y + rz + 2 + (k >> 4) % Math.max(1, fz - 5), 2, 1); }   // Putz
+    for (let f = 1; f < g.floors; f++) F(pc.dark, x, y + h - Math.round(fz * f / g.floors) - 1, w, 2);   // Stockwerk-Kante
     F('#5a3b1c', doorX - 1, y + h - doorH - 1, doorW + 2, doorH + 1); F('#7a4a22', doorX, y + h - doorH, doorW, doorH);
     F('#a0673a', doorX + 1, y + h - doorH + 1, doorW - 2, Math.max(1, Math.round(doorH * 0.4) - 1)); F('#a0673a', doorX + 1, y + h - Math.round(doorH * 0.55), doorW - 2, Math.round(doorH * 0.45) - 1);
     F('#ffcc00', doorX + doorW - 3, y + h - Math.round(doorH / 2), 2, 2); F('#8f9aa3', doorX - 2, y + h, doorW + 4, 2);
     for (const [wx, winY] of winList) { F('#5a3b1c', wx - 1, winY - 1, winW + 2, winH + 2); F('#ffffff', wx, winY, winW, winH); F('#6cc4f0', wx + 1, winY + 1, winW - 2, winH - 2); F('#9fe3ff', wx + 1, winY + 1, winW - 2, Math.round(winH / 2) - 1);
       F('#e6f8ff', wx + 2, winY + 2, 2, 2); F('#ffffff', wx + Math.floor(winW / 2), winY + 1, 1, winH - 2); F('#ffffff', wx + 1, winY + Math.floor(winH / 2), winW - 2, 1);
-      F('#cdbf9f', wx - 2, winY + winH + 1, winW + 4, 2); F('#2e7a2a', wx, winY + winH + 3, winW, 2); F('#ff6b8a', wx + 1, winY + winH + 2, 2, 1); F('#ffd23f', wx + Math.round(winW / 2), winY + winH + 2, 2, 1); F('#ff6b8a', wx + winW - 3, winY + winH + 2, 2, 1); }
+      F(pc.dark, wx - 2, winY + winH + 1, winW + 4, 2); F('#2e7a2a', wx, winY + winH + 3, winW, 2); F('#ff6b8a', wx + 1, winY + winH + 2, 2, 1); F('#ffd23f', wx + Math.round(winW / 2), winY + winH + 2, 2, 1); F('#ff6b8a', wx + winW - 3, winY + winH + 2, 2, 1); }
   } else {
     F('#7a2218', x, y + rz, w, fz);
     for (let yy = y + rz, r = 0; yy < y + h; yy += 6, r++) for (let xx = x + (r % 2 ? -5 : 0); xx < x + w; xx += 10) { const x0 = Math.max(x, xx); F('#c0392b', x0, yy, Math.min(xx + 8, x + w) - x0, 4); F('#d9533f', x0, yy, Math.min(xx + 8, x + w) - x0, 2); }   // Ziegel groß genug für grobe Pixel

@@ -28,6 +28,7 @@ gemeinsam/bau.js            ← Baustelle: Bauarbeiter, Bagger, Kipper, Boden-Ka
 gemeinsam/moebel.js         ← Möbel (FURN, BY, KID) für Einrichten und Umzug
 spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 ```
+- `hof.html#start` (Kachel auf der Startseite) und `hof.html#stadt` (Bauernhof-Platz in der Stadt) überspringen den ▶-Bildschirm. Vorlesen vor dem ersten Antippen wird gemerkt und danach nachgeholt (Ton braucht auf dem iPad ein Antippen).
 - Vom Hof ins Spiel über `PAGES` in `hof.html`. Zurück mit `goHof('<name>')`, die Seiten setzen `window.HOF_URL = '../../hof.html'`.
 - Neue Welten bekommen einen eigenen Ordner (z. B. `stadt/index.html`, Minispiele in `stadt/spiele/<name>/`). Auf der Startseite werden sie in `WELTEN` eingetragen.
 - Neue Minispiele binden `sterne.js`, `basis.js` und `basis.css` mit `?v=JJJJMMTTx` ein. Bei jeder Änderung an `gemeinsam/` die Versionsnummer in **allen** Seiten erhöhen.

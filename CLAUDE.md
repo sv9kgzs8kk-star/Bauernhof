@@ -7,11 +7,11 @@ Pixel-Spiele für Kinder ab 4 Jahren, gehostet auf GitHub Pages und auf dem iPad
 index.html                  ← Startseite: leitet sofort in die STADT weiter (`START_WELT`, Michael: keine Kachel-Auswahl).
                               Kacheln je Welt (WELTEN-Liste) nur noch bei START_WELT = null
 hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
-baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte (Bauarbeiter, Bagger, Bauplatz `S`)
+baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte, **nur zu Fuß** (Bauarbeiter; Bagger und Kipper stehen geparkt als Deko; Bauplatz `S` → Bau-Spiel des aktuellen Schritts)
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
                               Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
 baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, kran/, dach/, abriss/
-                              (Abriss: Bagger 0,8 s auf dem fertigen Haus → Karte ABRISS → Umzug (Möbel antippen → Kiste → Transporter),
+                              (Abriss: vorläufig 0,8 s am geparkten Bagger stehen, wenn das Haus fertig ist → Karte ABRISS (später Schild „Neues Haus“, #32) → Umzug (Möbel antippen → Kiste → Transporter),
                               Abrissbirne am Autokran (Kugel zur Seite ziehen und loslassen, Antippen geht auch), Schutt wegbaggern wie beim Graben (über Schuttfelder fahren, Schaufel voll → zum Kipper); danach `Hof.demolishHouse`: house.pick = true, maxType +1.
                               Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,

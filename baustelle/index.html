@@ -35,17 +35,10 @@ window.addEventListener('error', function (e) {
 <body>
 <canvas id="game"></canvas>
 
-<!-- Anzeigen: Sterne oben, Bauarbeiter + Bagger links -->
+<!-- Anzeigen: Sterne oben (in der Stadt läuft man nur zu Fuß, keine Fahrzeugknöpfe) -->
 <div id="hubhud">
   <div id="hubstats">
     <div class="pill" id="starpill" data-say="star" style="pointer-events:auto"><i class="ico" data-ico="star"></i> <span id="starcount">0</span></div>
-  </div>
-  <div id="hubside">
-    <div class="vbtns">
-      <button class="vbtn act" id="vb-person" aria-label="Bauarbeiter"><canvas width="34" height="34"></canvas></button>
-      <button class="vbtn" id="vb-digger" aria-label="Bagger" data-say="digger"><canvas width="34" height="34"></canvas></button>
-      <button class="vbtn" id="vb-pump" aria-label="Betonpumpe" data-say="pump"><canvas width="34" height="34"></canvas></button>
-    </div>
   </div>
 </div>
 
@@ -71,7 +64,9 @@ window.addEventListener('error', function (e) {
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
-   Bauarbeiter läuft, Bagger fährt. Bauplatz betreten → Minispiel des nächsten Bauschritts: Bagger → baggern, Betonpumpe → beton, zu Fuß → mauer.
+   Nur zu Fuß (Vater, #31): Bauarbeiter auf den Bauplatz → Minispiel des nächsten Bauschritts (baggern, beton, mauer, kran, dach).
+   Bagger und Kipper stehen geparkt auf dem Bauhof (Deko). Fertiges Haus: Tür → hinein; kurz am geparkten Bagger stehen → Abriss-Karte
+   (vorläufig, bis das Schild „Neues Haus“ kommt, #32).
    Hausbau-Fortschritt: save.house.step (0 = Grube fehlt, 1 = Grube fertig, … 5 = Haus fertig)
    Stadtplan: feste, umrandete Bauplätze. F = Bauernhof (fertig, zu Fuß 0,8 s stehen → hof.html),
    P = Feuerwache, Q = Bahnhof (noch gesperrt: Schild mit Bild und Schloss, Stehenbleiben sagt das Wort)
@@ -79,7 +74,7 @@ window.addEventListener('error', function (e) {
 Object.assign(WORDS, { city: ['STADT', 'Stadt'], farm: ['BAUERNHOF', 'Bauernhof'], firestation: ['FEUERWACHE', 'Feuerwache'], station: ['BAHNHOF', 'Bahnhof'] });
 const save = Hof.save;
 // Bauplatz betreten → Minispiel je nach Bauschritt (und wer dafür gebraucht wird)
-const STEP_GAME = [ { who: 'digger', page: 'spiele/baggern/index.html' }, { who: 'pump', page: 'spiele/beton/index.html' }, { who: 'person', page: 'spiele/mauer/index.html' },
+const STEP_GAME = [ { who: 'person', page: 'spiele/baggern/index.html' }, { who: 'person', page: 'spiele/beton/index.html' }, { who: 'person', page: 'spiele/mauer/index.html' },
                      { who: 'person', page: 'spiele/kran/index.html' }, { who: 'person', page: 'spiele/dach/index.html' } ];
 let backFrom = (location.hash || '').slice(1) || null;
 const HINT_AFTER = 10;
@@ -102,25 +97,21 @@ const PLOTS = { F: { word: 'farm', page: '../hof.html#stadt' }, P: { word: 'fire
 const HOME_PAGE = '../wohnhaus/index.html', HOME_PRICE = 10;   // fertiges Wohnhaus: einmal mit Sternen freischalten, dann hineingehen
 const homeOpen = () => !!(save.home && save.home.unlocked);
 const PLOT_WAIT = 0.8;                       // so lange stehen bleiben, bis etwas passiert (Darüberlaufen löst nichts aus)
-paintFront($('vb-person').querySelector('canvas'), BUILDER_FRONT);
-{ const g = $('vb-digger').querySelector('canvas').getContext('2d'); g.drawImage(EXCAVATOR.frames[24], 0, 0); }
-{ const g = $('vb-pump').querySelector('canvas').getContext('2d'); g.drawImage(PUMP.frames[24], 0, 0); }
 
 const Hub = (() => {
   let type, ox, oy, entering = false, active = 'person', posKey = '', boardT = 0, idleT = 0, siteT = 0;
   let plotT = 0, plotDone = -1, plotShown = null, plotPos = {}, shopOpen = false, demoT = 0, demoDone = false;
   const ENT = {
     person: { spr: BUILDER,   m: null, speed: 2.8 },
-    digger: { spr: EXCAVATOR, m: null, speed: 1.9, pitch: 40 },
-    pump:   { spr: PUMP,      m: null, speed: 2.1, pitch: 36 },
+    digger: { spr: EXCAVATOR, m: null, speed: 1.9, pitch: 40 },   // geparkt (Deko, Abriss-Start)
   };
-  const VEHICLES = ['digger', 'pump'];
+  const VEHICLES = [];                               // keine Fahrzeuge zum Fahren mehr in der Stadt
   const cellType = (r, c) => (r < 0 || c < 0 || r >= gr || c >= gc) ? 'X' : type[r][c];
   const game = () => house().pick ? null : (STEP_GAME[house().step] || null);   // nach dem Abriss erst ein Haus auswählen
   const need = () => game() ? game().who : null;
   const passableFor = name => (r, c) => {
     const t = cellType(r, c);
-    if (t === 'S') return need() === name || (name === 'person' && (house().step >= 5 || house().pick)) || (name === 'digger' && house().step >= 5 && !house().pick);   // Bauplatz: wer für den nächsten Bauschritt gebraucht wird; fertiges Haus: zu Fuß (hinein) oder Bagger (Abriss); leer: zu Fuß (Haus wählen)
+    if (t === 'S') return name === 'person';     // Bauplatz: zu Fuß (Bauschritt, fertiges Haus betreten, leer: Haus wählen)
     if (name === 'person') return ['.', '=', 'y', 'F', 'P', 'Q'].includes(t);    // Stadt-Bauplätze nur zu Fuß
     if (VEHICLES.some(v => v !== name && ENT[v].m && ENT[v].m.r === r && ENT[v].m.c === c)) return false;   // Fahrzeuge fahren nicht ineinander
     return ['.', '=', 'y'].includes(t);
@@ -205,18 +196,11 @@ const Hub = (() => {
     const key = gc + 'x' + gr;
     if (key !== posKey || !ENT.person.m) {
       ENT.person.m = newMover(oy+3, ox+1, 0);
-      ENT.digger.m = newMover(oy+4, ox+2, -Math.PI/2);
-      ENT.pump.m   = newMover(oy+4, ox+1, -Math.PI/2);
+      ENT.digger.m = newMover(oy+4, ox+2, -Math.PI/2);   // geparkt auf dem Fahrzeughof
       posKey = key; active = 'person';
     }
-    const BACK = { baggern: 'digger', beton: 'pump', mauer: 'person', kran: 'person', dach: 'person', wohnhaus: 'person', abriss: 'digger' };   // zurück: wer gearbeitet hat, steht unten am Bauplatz
-    if (BACK[from]) {
-      const who = BACK[from];
-      Object.assign(ENT[who].m, { r: oy+3, c: ox+6, a: Math.PI/2 });
-      if (who !== 'person') Object.assign(ENT.person.m, { r: oy+3, c: ox+5 });
-      for (const v of VEHICLES) if (v !== who && ENT[v].m.r === oy+3 && ENT[v].m.c === ox+6) Object.assign(ENT[v].m, { r: oy+4, c: ox + (v === 'pump' ? 1 : 2) });
-      active = who;
-    }
+    const BACK = ['baggern', 'beton', 'mauer', 'kran', 'dach', 'wohnhaus', 'abriss'];   // zurück: Bauarbeiter steht unten am Bauplatz
+    if (BACK.includes(from)) { Object.assign(ENT.person.m, { r: oy+3, c: ox+6, a: Math.PI/2 }); active = 'person'; }
     if (from === 'hof' && plotPos.F) {           // zurück vom Bauernhof: neben dem Bauernhof-Platz
       const [r, c] = besidePlot(plotPos.F);
       Object.assign(ENT.person.m, { r, c }); active = 'person';
@@ -249,11 +233,7 @@ const Hub = (() => {
     else { active = name; sayWord(name); }
     sfx.click(); refreshVBtns();
   }
-  function refreshVBtns() {
-    ['person', ...VEHICLES].forEach(n => $('vb-' + n).classList.toggle('act', active === n));
-    $('vb-person').classList.toggle('need', need() === 'person' && active !== 'person');
-  }
-  ['person', ...VEHICLES].forEach(n => $('vb-' + n).addEventListener('click', () => setActive(n)));
+  function refreshVBtns() {}                         // keine Fahrzeugknöpfe mehr
 
   function enter() {
     Hof.load(); build();
@@ -270,11 +250,10 @@ const Hub = (() => {
   function update(dt) {
     const e = ENT[active];
     idleT = held ? 0 : idleT + dt;
-    if (active === 'person' && !e.m.moving && !held && !entering) {      // auf dem Bagger stehen bleiben = einsteigen
-      const on = VEHICLES.find(v => ENT[v].m.r === e.m.r && ENT[v].m.c === e.m.c);
-      boardT = on ? boardT + dt : 0;
-      if (on && boardT > 0.9) { boardT = 0; setActive(on); sfx.enter(); }
-    } else boardT = 0;
+    { const dm = ENT.digger.m, onDig = !e.m.moving && !held && !entering && !shopOpen && e.m.r === dm.r && e.m.c === dm.c;   // am geparkten Bagger stehen bleiben
+      if (!onDig) { boardT = 0; demoDone = false; }
+      else if (!demoDone) { boardT += dt; if (boardT > PLOT_WAIT) { boardT = 0; demoDone = true;
+        if (house().step >= 5 && !house().pick) openDemolish(); else sayWord('digger'); } } }
     if (!entering) moverUpdate(e.m, dt, {
       passable: passableFor(active), speed: e.speed,
       onArrive: m => {
@@ -309,9 +288,6 @@ const Hub = (() => {
         }
       } else plotT = 0; }
     // Bagger steht still auf dem fertigen Haus → Abriss-Karte
-    { const dm = ENT.digger.m, on = active === 'digger' && !dm.moving && !held && !entering && !shopOpen && cellType(dm.r, dm.c) === 'S' && house().step >= 5 && !house().pick;
-      if (!on || cellType(dm.r, dm.c) !== 'S') demoDone = demoDone && cellType(dm.r, dm.c) === 'S';
-      if (on && !demoDone) { demoT += dt; if (demoT > PLOT_WAIT) { demoT = 0; demoDone = true; openDemolish(); } } else demoT = 0; }
     if (active === 'person') setEngine(false, false); else setEngine(true, e.m.moving, e.pitch);
   }
   function closeUi() { hide('demo'); hide('pick'); shopOpen = false; show('ctrl'); show('hubhud'); }
@@ -397,8 +373,11 @@ const Hub = (() => {
     ctx.drawImage(bg, 0, 0);
     drawSite(time);
     drawTipper((ox+1)*G + 4, (oy+5)*G + 4, 0, TIPPERS[2]);                 // geparkter Kipper
-    for (const v of VEHICLES) if (active !== v) drawMover(ENT[v].m, ENT[v].spr, time);
-    drawMover(ENT[active].m, ENT[active].spr, time);
+    drawMover(ENT.digger.m, ENT.digger.spr, time);                          // geparkter Bagger
+    if (boardT > 0.1) { const p = moverPos(ENT.person.m);                  // Ring am Bagger (Abriss)
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(p.x, p.y - 16, 6, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1, boardT / PLOT_WAIT)); ctx.stroke(); }
+    drawMover(ENT.person.m, ENT.person.spr, time);
     // Hilfe: Pfeil zum Bagger bzw. zum Bauplatz, solange die Grube fehlt
     const bounce = Math.abs(Math.sin(time/220)) * 4;
     const n = need();
@@ -427,11 +406,6 @@ const Hub = (() => {
   function onPointer(type, x, y) {
     if (entering || shopOpen) return true;
     idleT = 0;
-    if (type === 'down') for (const v of VEHICLES) {        // Fahrzeug antippen = einsteigen
-      if (v === active) continue;
-      const p = moverPos(ENT[v].m);
-      if (Math.abs(x - p.x) < G*0.8 && Math.abs(y - p.y) < G*0.8) { setActive(v); return true; }
-    }
     return false;
   }
   function resize() { build(); placeAll(null); }

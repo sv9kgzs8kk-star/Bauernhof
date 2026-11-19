@@ -217,7 +217,24 @@ const Hub = (() => {
       for (const v of VEHICLES) if (v !== who && ENT[v].m.r === oy+3 && ENT[v].m.c === ox+6) Object.assign(ENT[v].m, { r: oy+4, c: ox + (v === 'pump' ? 1 : 2) });
       active = who;
     }
+    if (from === 'hof' && plotPos.F) {           // zurück vom Bauernhof: neben dem Bauernhof-Platz
+      const [r, c] = besidePlot(plotPos.F);
+      Object.assign(ENT.person.m, { r, c }); active = 'person';
+    }
     for (const e of Object.values(ENT)) e.m.moving = false;
+  }
+  // Nächste freie Zelle neben einem Stadt-Bauplatz (nicht auf einem Platz, damit nichts gleich wieder auslöst)
+  function besidePlot(p) {
+    const seen = new Set([p.r + ',' + p.c]), q = [[p.r, p.c]];
+    while (q.length) {
+      const [r, c] = q.shift(), t = cellType(r, c);
+      if (!PLOTS[t] && t !== 'S' && passableFor('person')(r, c)) return [r, c];
+      for (const [dr, dc] of [[0,-1],[1,0],[0,1],[-1,0]]) {
+        const k = (r+dr) + ',' + (c+dc);
+        if (!seen.has(k) && r+dr >= 0 && c+dc >= 0 && r+dr < gr && c+dc < gc) { seen.add(k); q.push([r+dr, c+dc]); }
+      }
+    }
+    return [p.r, p.c];
   }
   function freeNear(r, c) {
     for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]]) if (cellType(r+dy, c+dx) !== 'S' && passableFor('person')(r+dy, c+dx)) return [r+dy, c+dx];
@@ -247,7 +264,7 @@ const Hub = (() => {
     plotT = 0; plotDone = -1; plotShown = null; shopOpen = false;
     demoT = 0; demoDone = false; hide('demo'); hide('pick');
     if (from === 'abriss' && house().pick) setTimeout(openPick, 600);   // nach dem Abriss gleich das neue Haus wählen
-    else if (!from) setTimeout(() => sayWord('city'), 400);
+    else if (!from || from === 'hof') setTimeout(() => sayWord('city'), 400);
   }
 
   function update(dt) {
@@ -425,7 +442,6 @@ const Hub = (() => {
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 startLoop(Hub);
 </script>
-<script>window.START_URL = '../index.html';</script>
-<script src="../gemeinsam/startseite.js?v=20261119c"></script>
+<!-- Kein Startseiten-Knopf: Die Stadt ist die Startseite der App. -->
 </body>
 </html>

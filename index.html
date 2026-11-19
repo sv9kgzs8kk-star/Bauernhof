@@ -34,10 +34,16 @@ var WELTEN = [
   }
   location.replace(ziel.url + '#' + h);
 })();
-/* Nur eine Welt aktiv? Dann ohne Umweg direkt dorthin (kein Extra-Tipp). */
+/* Die App startet immer in der STADT (Michael, PR #29): keine Kachel-Auswahl,
+   der Bauernhof ist von der Stadt aus zu erreichen (Bauernhof-Platz).
+   START_WELT = null schaltet die Kachel-Seite wieder ein. */
+var START_WELT = 'baustelle';
 (function () {
+  if (location.hash) return;
   var aktiv = WELTEN.filter(function (w) { return w.aktiv; });
-  if (aktiv.length === 1 && !location.hash) location.replace(aktiv[0].url);
+  var ziel = WELTEN.filter(function (w) { return w.id === START_WELT; })[0];
+  if (ziel) location.replace(ziel.url);
+  else if (aktiv.length === 1) location.replace(aktiv[0].url);
 })();
 </script>
 <style>

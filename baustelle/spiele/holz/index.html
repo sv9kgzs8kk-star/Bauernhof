@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119i">
+<title>Holzhaus</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="whud" class="hud gamehud hidden">
+  <div class="pill" id="hword" data-say="saw" style="pointer-events:auto"><span class="word">SÄGE</span> <span id="wcount">0/0</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<!-- Zu Beginn: Holzton wählen -->
+<div id="colpick" class="overlay hidden">
+  <div class="row" id="colrow" style="flex-wrap:wrap;gap:12px;justify-content:center"></div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gewischt, gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261119i"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119i"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119i"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+let winTimer = null;
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('holz')));
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+/* =====================================================================
+   MINISPIEL: HOLZHAUS – STÄMME SÄGEN UND BLOCKBOHLEN LEGEN (Holzhaus, Schritt 3, house.step 2 → 3) – schräg von oben
+   1. Holzton wählen (4 Karten). 2. Rechts liegen 3 Baumstämme mit gestrichelten Linien: über die Linie wischen
+      (oder antippen) → die Kettensäge sägt, die Bohlen kommen auf den Stapel.
+   3. L-förmiger Grundriss: Bohle vom Stapel auf eine leuchtende Wandkante ziehen (oder Kante antippen).
+      Reihe für Reihe wächst das Blockhaus, an den Ecken überkreuzen sich die Bohlen. Nichts fliegt: die Bohle wird gezogen.
+   ===================================================================== */
+const Q = snapF(R, 2);
+const Holz = (() => {
+  let g, geo, logs, cuts, pile, placed, row, state, drag = null, saw = null, paused = false, idle = 0;
+  const RH = 8, LT = 10;                              // Reihenhöhe und Bohlendicke im Spiel
+  function siteGeo() {
+    const hw = Math.min(6, gc - 6) * G, hh = Math.min(4, gr - 4) * G;
+    const hx = Math.round((gc * G - hw) / 2) - G, hy = Math.max(G + 8, Math.round(((gr - 1) * G - hh) / 2) + 8);
+    return { hx, hy, hw, hh };
+  }
+  function setWord(k, n) { const el = $('hword'); el.dataset.say = k; el.querySelector('.word').textContent = WORDS[k][0]; $('wcount').textContent = n || ''; }
+  function enter() {
+    Hof.load();
+    if (house().step !== 2 || houseType().shape !== 'L') { goHof('holz'); return; }
+    layout(true);
+    g = siteGeo(); geo = logGeo(g.hx, g.hy, g.hw, g.hh, 26);
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+    }
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    const fx = g.hx - 18, fy = g.hy - 22, fw = g.hw + 32 + 3 * G, fh = g.hh + 32;   // Bauzaun
+    for (let x = fx; x <= fx + fw; x += 9) B('#d35400', x, fy - 2, 2, 7);
+    for (let y = fy; y <= fy + fh; y += 9) { B('#d35400', fx, y, 2, 6); B('#d35400', fx + fw, y, 2, 6); }
+    B('#ffffff', fx, fy, fw + 2, 2); B('#ffffff', fx, fy, 2, fh); B('#ffffff', fx + fw, fy, 2, fh);
+    // Punktfundament unter dem Haus
+    for (const [px, py] of [[geo.x, geo.y], [geo.x + geo.cw, geo.y], [geo.x + geo.cw, geo.ym], [geo.x1, geo.ym], [geo.x1, geo.y1], [geo.x, geo.y1], [geo.x + geo.cw, geo.y1]]) B('#a2a8ae', px - 6, py - 6, 12, 12);
+    // Holzplatz rechts: 3 Stämme mit je 2 Schnittlinien
+    const lx = g.hx + g.hw + Math.round(0.8 * G), lw = Math.round(2.2 * G);
+    logs = [0, 1, 2].map(i => ({ x: lx, y: g.hy + 6 + i * 22, w: lw, cut: [false, false] }));
+    pile = { x: lx + 4, y: g.hy + g.hh - 26, w: lw - 8, n: 0 };
+    placed = new Set(); row = 0; drag = null; saw = null; idle = 0;
+    pickWood();
+  }
+  $('pausebtn').addEventListener('click', () => { if (state === 'won') return; paused = true; drag = null; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+  const total = () => geo.edges.length * LOG_ROWS;
+  const cutsDone = () => logs.reduce((a, l) => a + l.cut.filter(Boolean).length, 0);
+  // Holzton wählen
+  function pickWood() {
+    state = 'color'; hide('whud');
+    const row2 = $('colrow'); row2.innerHTML = '';
+    for (const wc of WOOD_COLORS) {
+      const b = document.createElement('button');
+      b.className = 'card small'; b.dataset.say = wc.key;
+      b.innerHTML = '<canvas width="64" height="48"></canvas><div class="word">' + WORDS[wc.key][0] + '</div>';
+      const c2 = b.querySelector('canvas').getContext('2d'), F = (cc, x, y, w, h) => { c2.fillStyle = cc; c2.fillRect(x, y, w, h); };
+      const gg = logGeo(10, 10, 44, 30, 8); drawLogWalls(F, gg, () => true, wc.key, LOG_ROWS, 3, 4);
+      b.addEventListener('click', () => {
+        Hof.setHouseColor(wc.key); sayWord(wc.key); sfx.unlock();
+        for (const o of row2.children) o.classList.toggle('off', o !== b);
+        setTimeout(() => { hide('colpick'); state = 'saw'; show('whud'); setWord('saw', '0/6'); setTimeout(() => sayWord('saw'), 300); }, 700);
+      });
+      row2.appendChild(b);
+    }
+    show('colpick'); setTimeout(() => say('Welches Holz soll dein Haus haben?'), 400);
+  }
+  // Sägen: Linie bei x = Stamm.x + Stamm.w * (k+1)/3
+  const cutX = (l, k) => Math.round(l.x + l.w * (k + 1) / 3);
+  function cutAt(x, y) {
+    for (const l of logs) for (let k = 0; k < 2; k++) if (!l.cut[k] && Math.abs(x - cutX(l, k)) < 12 && y > l.y - 10 && y < l.y + 22) return { l, k };
+    return null;
+  }
+  function startCut(c) { saw = { ...c, t: 0 }; sfx.saw(); }
+  // Bohlen legen
+  const edgeFree = ei => !placed.has(ei + ',' + row);
+  function edgeAt(x, y) {
+    let best = null, bd = 18;
+    geo.edges.forEach((e, ei) => {
+      if (!edgeFree(ei)) return;
+      const off = row * RH, d = e.k === 'h' ? (x >= e.a - 6 && x <= e.b + 6 ? Math.abs(y - (e.at - off)) : 99) : (y >= e.a - off - 6 && y <= e.b - off + 6 ? Math.abs(x - e.at) : 99);
+      if (d < bd) { bd = d; best = ei; }
+    });
+    return best;
+  }
+  function lay(ei) {
+    placed.add(ei + ',' + row); sfx.clod();
+    const e = geo.edges[ei], off = row * RH;
+    for (let i = 0; i < 8; i++) { const t = Math.random(); spawn(e.k === 'h' ? e.a + (e.b - e.a) * t : e.at, e.k === 'h' ? e.at - off : e.a + (e.b - e.a) * t - off, rnd(-12, 12), rnd(-14, -4), .35, '#e8c27a', 30); }
+    if (geo.edges.every((_, i) => !edgeFree(i))) { row++; if (row < LOG_ROWS) { sfx.load(); } }
+    setWord('plank', placed.size + '/' + total());
+    if (placed.size >= total()) { state = 'won'; finishStep(3, 'woodhouse', 'holz'); }
+  }
+  function onPointer(type, x, y) {
+    if (paused) return true;
+    idle = 0;
+    if (state === 'saw') {
+      if (saw) return true;
+      if (type === 'down' || type === 'move') { const c = cutAt(x, y); if (c) startCut(c); }
+      return true;
+    }
+    if (state !== 'lay') return true;
+    if (type === 'down') {
+      if (x > pile.x - 8 && x < pile.x + pile.w + 8 && y > pile.y - 20 && y < pile.y + 30) { drag = { x, y }; sfx.click(); return true; }
+      const ei = edgeAt(x, y); if (ei !== null) lay(ei);       // Hilfe: Kante antippen
+    } else if (type === 'move' && drag) { drag.x = x; drag.y = y; }
+    else if (type === 'up' && drag) {
+      const ei = edgeAt(drag.x, drag.y); drag = null;
+      if (ei !== null) lay(ei); else sfx.bonk();            // daneben: Bohle liegt wieder auf dem Stapel
+    }
+    return true;
+  }
+  function update(dt) {
+    if (paused) return;
+    idle += dt;
+    if (saw) {
+      saw.t += dt;
+      if (Math.random() < 0.6) spawn(cutX(saw.l, saw.k) + rnd(-2, 2), saw.l.y + 6 + rnd(0, 8), rnd(-25, 25), rnd(-25, 0), .4, pick(['#e8c27a', '#c9a067', '#f2dca0']), 30);
+      if (saw.t > 0.8) {
+        saw.l.cut[saw.k] = true; sfx.timber && sfx.clod(); pile.n += 2; saw = null;
+        const n = cutsDone(); setWord('saw', n + '/6');
+        if (n >= 6) setTimeout(() => { state = 'lay'; idle = 0; setWord('plank', '0/' + total()); sayWord('plank'); }, 700);
+      }
+    }
+  }
+  function drawLog(l, time) {
+    const segs = [[l.x, cutX(l, 0)], [cutX(l, 0), cutX(l, 1)], [cutX(l, 1), l.x + l.w]], c = ['#5a3418', '#8a5a2e', '#a8703a', '#e8c27a'];
+    segs.forEach(([a, b], i) => {
+      const gapL = i > 0 && l.cut[i - 1] ? 2 : 0, gapR = i < 2 && l.cut[i] ? 2 : 0;
+      Q('rgba(0,0,0,.2)', a + gapL + 2, l.y + 14, b - a - gapL - gapR, 3);
+      Q(c[0], a + gapL, l.y, b - a - gapL - gapR, 14); Q(c[1], a + gapL, l.y + 2, b - a - gapL - gapR, 10); Q(c[2], a + gapL, l.y + 2, b - a - gapL - gapR, 3);
+      for (let x = a + 6; x < b - 4; x += 10) Q(c[0], x, l.y + 7, 4, 2);
+      if (gapL) Q(c[3], a + gapL, l.y + 2, 2, 10);
+      if (gapR) Q(c[3], b - gapR - 2, l.y + 2, 2, 10);
+    });
+    Q(c[3], l.x, l.y + 2, 3, 10); Q('#c9a067', l.x + 1, l.y + 5, 1, 4); Q(c[3], l.x + l.w - 3, l.y + 2, 3, 10);
+    if (state === 'saw') for (let k = 0; k < 2; k++) if (!l.cut[k]) {
+      const x = cutX(l, k), on = Math.abs(Math.sin(time / 260)) > .5;
+      for (let y = l.y - 6; y < l.y + 20; y += 4) R(on ? '#ffd23f' : '#ffffff', x - 1, y, 2, 2);
+    }
+  }
+  function drawPile(n) {
+    const c = woodColor().c;
+    for (let i = 0; i < Math.min(n, 12); i++) { const y = pile.y + 18 - i * 3, x = pile.x + (i % 2) * 3;
+      Q(c[0], x, y, pile.w - 3, 5); Q(c[1], x, y + 1, pile.w - 3, 3); Q(c[2], x, y + 1, pile.w - 3, 1); Q(c[3], x, y + 1, 2, 3); }
+  }
+  function drawChainsaw(x, y, time) {
+    const j = Math.sin(time / 25) > 0 ? 1 : 0;
+    Q('#222', x - 6, y - 16 + j, 14, 12); Q('#f08c00', x - 5, y - 15 + j, 12, 10); Q('#9a5a00', x - 3, y - 12 + j, 4, 3);
+    Q('#6f7d88', x - 2, y - 4 + j, 4, 20); Q('#b8c6d0', x - 1, y - 4 + j, 1, 20);
+  }
+  function draw(time) {
+    ctx.drawImage(bg, 0, 0);
+    drawLogWalls(Q, geo, (ei, r) => placed.has(ei + ',' + r), null, LOG_ROWS, RH, LT);
+    // Holzplatz
+    for (const l of logs) if (l.cut.some(c => !c) || state === 'saw' || state === 'color') drawLog(l, time);
+    drawPile(state === 'lay' ? Math.max(1, Math.ceil((total() - placed.size) / 2)) : pile.n);
+    if (saw) { const x = cutX(saw.l, saw.k), y = saw.l.y + Math.round(saw.t / 0.8 * 14); drawChainsaw(x, y, time); }
+    // leuchtende Kanten der aktuellen Reihe
+    if (state === 'lay') {
+      const on = Math.abs(Math.sin(time / 260)) > .5, off = row * RH, col = on ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.45)';
+      geo.edges.forEach((e, ei) => { if (!edgeFree(ei)) return;
+        if (e.k === 'h') R(col, e.a, e.at - off - 2, e.b - e.a, 4); else R(col, e.at - 2, e.a - off, 4, e.b - e.a); });
+      if (drag) { const c = woodColor().c, w = 40; Q('rgba(0,0,0,.25)', drag.x - w / 2 + 3, drag.y + 4, w, 6); Q(c[0], drag.x - w / 2, drag.y - 4, w, 8); Q(c[1], drag.x - w / 2, drag.y - 3, w, 6); Q(c[2], drag.x - w / 2, drag.y - 3, w, 2); }
+      if (!drag && idle > 2.5) {                       // Hinweis: gepunktete Spur vom Stapel zur ersten freien Kante
+        const ei = geo.edges.findIndex((_, i) => edgeFree(i)), e = geo.edges[ei];
+        if (e) { const tx = e.k === 'h' ? (e.a + e.b) / 2 : e.at, ty = (e.k === 'h' ? e.at : (e.a + e.b) / 2) - off, sx = pile.x + pile.w / 2, sy = pile.y, k = (time / 1200) % 1;
+          for (let i = 0; i < 8; i++) { const u = i / 8; if (Math.abs(u - k) < 0.1) R('rgba(255,210,63,.95)', Math.round(sx + (tx - sx) * u) - 2, Math.round(sy + (ty - sy) * u) - 2, 4, 4); }
+          drawArrow(Math.round(sx - 3), Math.round(sy - 16 - Math.abs(Math.sin(time / 220)) * 4)); }
+      }
+    }
+    if (state === 'saw' && !saw && idle > 2) {
+      const l = logs.find(l => l.cut.some(c => !c)); if (l) { const k = l.cut[0] ? 1 : 0; drawArrow(cutX(l, k) - 3, Math.round(l.y - 16 - Math.abs(Math.sin(time / 220)) * 4)); }
+    }
+  }
+  function resize() { layout(false); }
+  function exit() { clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, placed: placed && placed.size, total: geo && total(), logs: logs && logs.map(l => ({ x1: cutX(l, 0), x2: cutX(l, 1), y: l.y + 6, cut: l.cut })), pile, edges: geo && geo.edges, RH }) };
+})();
+startLoop(Holz);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

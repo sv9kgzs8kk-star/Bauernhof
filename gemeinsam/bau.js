@@ -15,7 +15,7 @@ const HOUSE_TYPES = [
   { key: 'small', word: 'house',    floors: 1, loads: 3, trusses: 3, steps: ['baggern', 'beton', 'mauer', 'kran', 'dach'] },
   { key: 'big',   word: 'bighouse', floors: 2, loads: 4, trusses: 6, steps: ['baggern', 'beton', 'mauer', 'kran', 'dach'] },
   // Holzhaus (Blockhaus in L-Form): Punktfundament statt Grube; Bohlen, Dach und Veranda folgen (#40, #41) – bis dahin nicht wählbar (ready: false)
-  { key: 'wood',  word: 'woodhouse', floors: 1, loads: 2, trusses: 3, shape: 'L', ready: false, steps: ['baggern', 'beton', null, null, null] },
+  { key: 'wood',  word: 'woodhouse', floors: 1, loads: 2, trusses: 3, shape: 'L', ready: false, steps: ['baggern', 'beton', 'holz', null, null] },
 ];
 Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'] });
 // L-Form im Grube-Rechteck (pit = { r0, c0, w, h }): links ganz, rechts nur die untere Hälfte
@@ -318,4 +318,65 @@ function drawMobileCraneBoom(F, x, y, tx, ty, th) {
 function drawRope(F, sx, sy, lx, ly) {
   pixLine(F, sx, sy, lx, ly, 1, '#333');
   F('#555', Math.round(lx) - 2, Math.round(ly) - 2, 5, 4); F('#ffd23f', Math.round(lx) - 1, Math.round(ly) - 1, 3, 2);
+}
+
+// ---------- Holzhaus: Blockbohlen in L-Form ----------
+Object.assign(WORDS, { plank: ['BOHLE', 'Bohle'], log: ['BAUMSTAMM', 'Baumstamm'],
+  wood_hell: ['HELL', 'Hell'], wood_honig: ['HONIG', 'Honig'], wood_dunkel: ['DUNKEL', 'Dunkel'], wood_rot: ['ROT', 'Rot'] });
+// Holztöne (beim Bohlen-Legen gewählt, gespeichert in house.color): dunkel, mittel, hell, Hirnholz
+const WOOD_COLORS = [
+  { key: 'wood_hell',   c: ['#8a6a3c', '#d9b77c', '#efd6a4', '#c49a5a'] },
+  { key: 'wood_honig',  c: ['#6e4520', '#c48a4a', '#e0ac6c', '#a8703a'] },
+  { key: 'wood_dunkel', c: ['#3e2410', '#7a4a22', '#9a6436', '#5a3418'] },
+  { key: 'wood_rot',    c: ['#5a1410', '#a8301f', '#c95a44', '#7a2218'] },
+];
+const woodColor = key => WOOD_COLORS.find(w => w.key === (key || (typeof Hof !== 'undefined' && Hof.save && Hof.save.house && Hof.save.house.color))) || WOOD_COLORS[1];
+const LOG_ROWS = 4;
+// L-Grundriss als Wandkanten: links ganz hoch, rechts nur die untere Hälfte. Vorne (Süden) Tür und Fenster.
+function logGeo(x, y, w, h, gw = 14) {
+  const cw = Math.round(w * 0.5), ym = y + Math.round(h * 0.48), x1 = x + w, y1 = y + h;
+  const door = { a: x + Math.round(cw * 0.5 - gw / 2), b: x + Math.round(cw * 0.5 + gw / 2), rows: 3 };
+  const win = { a: x + cw + Math.round((w - cw) * 0.5 - gw * 0.6), b: x + cw + Math.round((w - cw) * 0.5 + gw * 0.6), from: 1, to: 2 };
+  const edges = [
+    { k: 'h', a: x, b: x + cw, at: y, back: true },      // hinten links
+    { k: 'h', a: x + cw, b: x1, at: ym, back: true },    // hinten rechts
+    { k: 'v', a: y, b: ym, at: x + cw },                 // Innenecke
+    { k: 'v', a: y, b: y1, at: x },                      // links
+    { k: 'v', a: ym, b: y1, at: x1 },                    // rechts
+    { k: 'h', a: x, b: x1, at: y1, front: true },        // vorne (Tür, Fenster)
+  ];
+  return { x, y, w, h, cw, ym, x1, y1, edges, door, win, inside: (px, py) => px > x && px < x1 && py > y && py < y1 && (px < x + cw || py > ym) };
+}
+// Bohlen zeichnen: placed(e, r) sagt, ob Bohle r der Kante e liegt. Höhere Reihen etwas weiter oben (schräg von oben).
+function drawLogWalls(F, g, placed, colKey, rows = LOG_ROWS, rh = 4, lt = 6) {
+  const hl = lt >> 1;
+  const c = woodColor(colKey).c;
+  // Holzboden im Inneren
+  F('#b98a52', g.x, g.y, g.cw, g.h); F('#b98a52', g.x + g.cw, g.ym, g.w - g.cw, g.h - (g.ym - g.y));
+  for (let yy = g.y + 3; yy < g.y1; yy += 5) { F('#a07040', g.x, yy, g.cw, 1); if (yy > g.ym) F('#a07040', g.x + g.cw, yy, g.w - g.cw, 1); }
+  for (let r = 0; r < rows; r++) {
+    const off = r * rh, over = Math.max(3, hl);
+    const order = [0, 1, 2, 3, 4, 5];
+    for (const ei of order) {
+      if (!placed(ei, r)) continue;
+      const e = g.edges[ei];
+      if (e.k === 'h') {
+        const ext = r % 2 === 0 ? over : 0, ya = e.at - off;   // Ecken: Bohlen überkreuzen sich abwechselnd
+        let parts = [[e.a - ext, e.b + ext]];
+        if (e.front && r < g.door.rows) parts = parts.flatMap(([a, b]) => [[a, g.door.a], [g.door.b, b]]);
+        if (e.front && r >= g.win.from && r <= g.win.to) parts = parts.flatMap(([a, b]) => (a < g.win.a && b > g.win.b) ? [[a, g.win.a], [g.win.b, b]] : [[a, b]]);
+        for (const [a, b] of parts) { if (b - a < 2) continue;
+          F('rgba(0,0,0,.18)', a + 1, ya + hl, b - a, 2);
+          F(c[0], a, ya - hl, b - a, lt); F(c[1], a, ya - hl + 1, b - a, lt - 2); F(c[2], a, ya - hl + 1, b - a, Math.max(1, lt >> 2));
+          F(c[3], a, ya - hl + 1, Math.max(2, hl), lt - 2); F(c[3], b - Math.max(2, hl), ya - hl + 1, Math.max(2, hl), lt - 2); }
+      } else {
+        const ext = r % 2 === 1 ? over : 0, xa = e.at;
+        F(c[0], xa - hl, e.a - ext - off - hl, lt, e.b - e.a + 2 * ext + hl); F(c[1], xa - hl + 1, e.a - ext - off - hl + 1, lt - 2, e.b - e.a + 2 * ext + hl - 2); F(c[2], xa - hl + 1, e.a - ext - off - hl + 1, Math.max(1, lt >> 2), e.b - e.a + 2 * ext + hl - 2);
+        F(c[3], xa - hl + 1, e.a - ext - off - hl + 1, lt - 2, Math.max(2, hl));
+      }
+    }
+  }
+  // Tür und Fenster: dunkle Öffnung in der Vorderwand, sobald die Reihe darüber liegt
+  if (placed(5, 0)) F('#2e1f10', g.door.a, g.y1 - hl - (g.door.rows - 1) * rh, g.door.b - g.door.a, (g.door.rows - 1) * rh + lt);
+  if (placed(5, g.win.from)) F('#2e1f10', g.win.a, g.y1 - hl - g.win.to * rh, g.win.b - g.win.a, (g.win.to - g.win.from + 1) * rh);
 }

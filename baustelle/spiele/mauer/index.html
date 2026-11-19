@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119b">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119c">
 <title>Mauer</title>
 </head>
 <body>
@@ -45,9 +45,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261119b"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119b"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119b"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261119c"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119c"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119c"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -155,7 +155,7 @@ const Wall = (() => {
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
     const done = state === 'won';
-    drawHouseTop(R, g.hx, g.hy, g.hw, g.hh, { step: done ? 3 : 2, time });
+    drawHouseTop(snapF(R, 2), g.hx, g.hy, g.hw, g.hh, { step: done ? 3 : 2, time });
     if (!done) {
       // Mauerkrone von oben: wird mit jeder fertigen Reihe kräftiger
       if (row > 0) { const th = Math.min(3, row); R('#8e2a20', g.hx, g.hy, g.hw, th); R('#8e2a20', g.hx, g.hy, th, geo.rz); R('#8e2a20', g.hx + g.hw - th, g.hy, th, geo.rz); }

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119b">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119c">
 <title>Kran</title>
 </head>
 <body>
@@ -45,9 +45,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261119b"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119b"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119b"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261119c"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119c"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119c"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -69,10 +69,10 @@ function finishStep(step, key, back) {
 </script>
 <script>
 /* =====================================================================
-   MINISPIEL: DACHSTUHL MIT DEM KRAN (Baustelle, Wohnhaus Schritt 4) – von schräg oben wie der Hof
-   Binder auf dem Tieflader antippen → der Kran schwenkt hin und hebt ihn an. Dann die leuchtende Stelle
-   auf dem Haus antippen → der Kran schwenkt hin und setzt ab. 3 Binder, dann RICHTFEST (house.step = 4).
-   Hilfe: Wer gleich die leuchtende Stelle antippt, bekommt Holen und Absetzen in einem Rutsch.
+   MINISPIEL: DACHSTUHL MIT DEM AUTOKRAN (Baustelle, Wohnhaus Schritt 4) – schräg von oben wie der Hof
+   Binder auf dem Tieflader antippen → der Autokran hebt ihn an. Mit dem Finger ziehen: Ausleger schwenkt hin und her,
+   die Last schwebt mit (Schatten am Boden zeigt, wo sie landet). Über der leuchtenden Stelle loslassen → sie wird abgesetzt.
+   Nur antippen geht auch (Binder, dann leuchtende Stelle). Kleines Haus 3 Binder, großes Haus 6. Dann RICHTFEST (house.step = 4).
    ===================================================================== */
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('kran')));
 
@@ -89,97 +89,131 @@ function paintGround(g) {
   }
   const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
   // Bauzaun um den Bauplatz
-  const x0 = g.hx - 14, y0 = g.hy - 14, w = g.hw + 28, h = g.hh + 26;
+  const x0 = g.hx - 14, y0 = g.hy - 14, w = g.hw + 28 + 3 * G, h = g.hh + 26;   // Platz für den Autokran rechts
   for (let x = x0; x <= x0 + w; x += 9) { B('#d35400', x, y0 - 2, 2, 7); }
   for (let y = y0; y <= y0 + h; y += 9) { B('#d35400', x0, y, 2, 6); B('#d35400', x0 + w, y, 2, 6); }
   B('#ffffff', x0, y0, w + 2, 2); B('#ffffff', x0, y0, 2, h); B('#ffffff', x0 + w, y0, 2, h);
 }
 
+const Q = snapF(R, 2);                                // grobe Pixel wie auf dem Hof
 const Kran = (() => {
-  let g, geo, tower, truck, L, state, placed, ang, dist, lift, carry, queue, fest, paused = false, deliverAfter = false;
+  let g, geo, N, crane, truck, hook, carry, queue, fest, paused = false, placed, follow, idle = 0;
+  const TIP = 50;                                     // Höhe der Auslegerspitze (so viel weiter oben gezeichnet)
+  const liftH = lh => Math.round(4 + lh * 22);        // Höhe der Last über dem Boden
   const beamLen = () => geo.rz + 3;
   function enter() {
     Hof.load();
     if (house().step !== 3) { goHof('kran'); return; }
     layout(true);
-    g = siteGeo(true); geo = houseGeo(g.hx, g.hy, g.hw, g.hh);
+    g = siteGeo(true); geo = houseGeo(g.hx, g.hy, g.hw, g.hh); N = geo.nT;
     paintGround(g);
-    tower = { x: g.hx + g.hw + Math.round(G * 1.2), y: g.hy + g.hh + Math.round(G * 0.4) };     // Kran unten rechts am Haus
-    truck = { x: g.hx + Math.round(g.hw / 2) - 28, y: (gr - 1) * G + 3 };                       // Tieflader auf der Straße unter dem Haus
-    const far = [[truck.x + 22, truck.y + 9], ...[0, 1, 2].map(i => [geo.beam(i), g.hy + Math.round(geo.rz / 2)])];
-    L = Math.max(...far.map(([x, y]) => Math.hypot(x - tower.x, y - tower.y))) + 12;
-    placed = 0; ang = -Math.PI * 0.75; dist = L * 0.6; lift = 1; carry = null; queue = []; fest = null; deliverAfter = false;
-    state = 'idle'; show('khud'); hud();
+    crane = { x: g.hx + g.hw + Math.round(1.7 * G), y: g.hy + 14 };
+    const hgt = N > 3 ? N * 5 + 3 : 16;
+    truck = { x: g.hx + Math.round(g.hw / 2) - 28, y: Math.min((gr - 1) * G + 3, gr * G - hgt - 4) };
+    hook = { x: crane.x - 30, y: crane.y + 30, lh: 1, vx: 0 };
+    placed = 0; carry = null; queue = []; fest = null; follow = null; idle = 0;
+    show('khud'); hud();
     setTimeout(() => sayWord('crane'), 400);
   }
-  $('pausebtn').addEventListener('click', () => { if (state === 'fest') return; paused = true; show('gpause'); });
+  $('pausebtn').addEventListener('click', () => { if (fest !== null) return; paused = true; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
-  function hud() { $('kcount').textContent = placed + '/3'; }
-  const pickPt = () => [truck.x + 22, truck.y + FLATBED_SLOTS[2 - placed] + 1];
+  function hud() { $('kcount').textContent = placed + '/' + N; }
+  const pickPt = () => [truck.x + 22, truck.y + flatbedSlot(N - 1 - placed, N) + 1];
   const slotPt = () => [geo.beam(placed), g.hy + Math.round(geo.rz / 2)];
-  function to(x, y, lf, then) { queue.push({ a: Math.atan2(y - tower.y, x - tower.x), d: Math.hypot(x - tower.x, y - tower.y), lf, then }); }
+  const busy = () => queue.length > 0;
+  function to(x, y, lh, then) { queue.push({ x, y, lh, then }); }
   function fetch() {
-    const [x, y] = pickPt(); state = 'busy'; sfx.click();
-    to(x, y, 1); to(x, y, 0, () => { carry = { ang: 0 }; sfx.clod(); }); to(x, y, 1, () => { state = 'carry'; });
+    const [x, y] = pickPt(); sfx.click(); follow = null;
+    to(x, y, 1); to(x, y, 0, () => { carry = { ang: 0 }; sfx.clod(); }); to(x, y, 1);
   }
-  function deliver() {
-    const [x, y] = slotPt(); state = 'busy'; sfx.click();
+  function place() {
+    const [x, y] = slotPt(); follow = null;
     to(x, y, 1); to(x, y, 0, () => {
       carry = null; placed++; hud(); sfx.load();
       for (let k = 0; k < 10; k++) spawn(x + rnd(-4, 4), g.hy + rnd(0, geo.rz), rnd(-20, 20), rnd(-20, 5), .5, '#e8c27a', 30);
     });
-    to(x, y, 1, () => { if (placed >= 3) richtfest(); else state = 'idle'; });
+    to(x, y, 1, () => { if (placed >= N) richtfest(); });
   }
   function richtfest() {
-    state = 'fest'; fest = 0; hide('khud');
+    fest = 0; hide('khud');
+    to(crane.x - 30, crane.y + 30, 1);
     setTimeout(() => { sfx.unlock(); confetti(); sayWord('richtfest'); }, 900);
     setTimeout(() => finishStep(4, 'richtfest', 'kran'), 2800);
   }
+  const onTruck = (x, y) => x > truck.x - 8 && x < truck.x + 64 && y > truck.y - 10 && y < truck.y + (N > 3 ? N * 5 + 12 : 26);
+  const nearSlot = (x, y, r) => { const [sx, sy] = slotPt(); return Math.abs(x - sx) < r && y > g.hy - r && y < g.hy + geo.rz + r; };
   function onPointer(type, x, y) {
-    if (type !== 'down' || paused) return true;
-    const onTruck = x > truck.x - 8 && x < truck.x + 64 && y > truck.y - 10 && y < truck.y + 26;
-    const onHouse = x > g.hx - 10 && x < g.hx + g.hw + 10 && y > g.hy - 10 && y < g.hy + g.hh + 6;
-    if (state === 'idle') { if (onTruck) fetch(); else if (onHouse) { fetch(); deliverAfter = true; } }
-    else if (state === 'carry' && onHouse) deliver();
+    if (paused || fest !== null) return true;
+    idle = 0;
+    if (type === 'down') {
+      if (busy()) return true;
+      if (!carry && onTruck(x, y)) { fetch(); return true; }
+      if (carry && nearSlot(x, y, 10)) { place(); sfx.click(); return true; }
+      follow = { x, y, sx: x, sy: y };              // ziehen: Haken folgt dem Finger
+      return true;
+    }
+    if (type === 'move' && follow) { follow.x = x; follow.y = y; return true; }
+    if (type === 'up' && follow) {
+      const f = follow; follow = null;
+      if (carry && nearSlot(hook.x, hook.y, 26)) place();               // über der Stelle losgelassen
+      else if (!carry && Math.hypot(f.x - f.sx, f.y - f.sy) < 8 && nearSlot(x, y, 14)) { fetch(); queue.push({ thenPlace: true }); }   // gleich die Stelle angetippt: holen und hinbringen
+    }
     return true;
   }
-  function turn(a, b, step) { let d = Math.atan2(Math.sin(b - a), Math.cos(b - a)); return Math.abs(d) <= step ? b : a + Math.sign(d) * step; }
   function update(dt) {
-    if (fest !== null) { fest += dt; return; }
     if (paused) return;
-    if (carry && lift > 0.5) carry.ang = approach(carry.ang, Math.PI / 2, 2.2 * dt);   // angehoben: Binder dreht sich quer zum Haus
+    idle += dt;
+    if (carry) carry.ang = approach(carry.ang, hook.lh > 0.5 ? Math.PI / 2 : 0, 2.4 * dt);   // angehoben: Binder dreht sich quer zum Haus
+    const ox = hook.x;
     const q = queue[0];
-    if (!q) { if (state === 'carry' && deliverAfter) { deliverAfter = false; deliver(); } return; }
-    ang = turn(ang, q.a, 1.5 * dt);
-    if (ang === q.a) dist = approach(dist, q.d, 70 * dt);
-    if (ang === q.a && dist === q.d) lift = approach(lift, q.lf, 2 * dt);
-    if (ang === q.a && dist === q.d && lift === q.lf) { queue.shift(); if (q.then) q.then(); }
-    setEngine(true, !!q, 30);
+    if (q && q.thenPlace) { queue.shift(); place(); }
+    else if (q) {
+      const d = Math.hypot(q.x - hook.x, q.y - hook.y), sp = 170 * dt;
+      if (d > sp) { hook.x += (q.x - hook.x) / d * sp; hook.y += (q.y - hook.y) / d * sp; }
+      else { hook.x = q.x; hook.y = q.y; hook.lh = approach(hook.lh, q.lh, 2.2 * dt);
+        if (hook.lh === q.lh) { queue.shift(); if (q.then) q.then(); } }
+    } else if (follow) {
+      const d = Math.hypot(follow.x - hook.x, follow.y - hook.y), sp = 260 * dt;
+      if (d > sp) { hook.x += (follow.x - hook.x) / d * sp; hook.y += (follow.y - hook.y) / d * sp; } else { hook.x = follow.x; hook.y = follow.y; }
+      hook.x = clamp(hook.x, 8, W - 8); hook.y = clamp(hook.y, 30, H - 8);
+    }
+    hook.vx = approach(hook.vx, (hook.x - ox) / Math.max(dt, 1e-3), 600 * dt);
+    if (fest !== null) fest += dt;
+    setEngine(true, busy() || !!follow, 30);
   }
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
-    drawFlatbedTop(R, truck.x, truck.y, 3 - placed - (carry ? 1 : 0), Math.min(beamLen(), 44));
-    drawHouseTop(R, g.hx, g.hy, g.hw, g.hh, { step: 3, trusses: placed, ridge: fest !== null, wreath: fest !== null ? Math.min(1, fest / 1.0) : 0, time });
+    drawFlatbedTop(Q, truck.x, truck.y, N - placed - (carry ? 1 : 0), Math.min(beamLen(), 44), N);
+    drawHouseTop(Q, g.hx, g.hy, g.hw, g.hh, { step: 3, trusses: placed, ridge: fest !== null, wreath: fest !== null ? Math.min(1, fest / 1.0) : 0, time });
     // leuchtende Zielstelle für den nächsten Binder
-    if (placed < 3 && fest === null) {
+    if (placed < N && fest === null) {
       const bx = geo.beam(placed), a = Math.abs(Math.sin(time / 260)) > .5;
-      R(state === 'carry' ? (a ? 'rgba(126,217,87,.9)' : 'rgba(126,217,87,.5)') : (a ? 'rgba(255,210,63,.85)' : 'rgba(255,210,63,.45)'), bx - 2, g.hy - 2, 5, geo.rz + 3);
+      R(carry ? (a ? 'rgba(126,217,87,.9)' : 'rgba(126,217,87,.5)') : (a ? 'rgba(255,210,63,.85)' : 'rgba(255,210,63,.45)'), bx - 3, g.hy - 2, 7, geo.rz + 3);
     }
-    // Haken mit Last, dann der Kran darüber
-    const hx = tower.x + Math.cos(ang) * dist, hy = tower.y + Math.sin(ang) * dist;
-    if (carry) drawBeamTop(R, hx, hy + 4, carry.ang < 0.05 ? Math.min(beamLen(), 44) : beamLen(), carry.ang, lift);
-    R('rgba(0,0,0,.25)', Math.round(hx) + Math.round(2 + lift * 6) - 2, Math.round(hy) + Math.round(2 + lift * 6), 4, 3);
-    R('#333', Math.round(hx), Math.round(hy) - Math.round(lift * 2), 1, 4 + Math.round((1 - lift) * 4));
-    R('#e0a800', Math.round(hx) - 2, Math.round(hy) + 3 - Math.round(lift * 2) + Math.round((1 - lift) * 4), 5, 3);
-    drawCraneTop(R, tower.x, tower.y, ang, L, dist);
-    // Hinweise: erst zum Tieflader, dann zur Stelle am Haus
-    const b = Math.abs(Math.sin(time / 220)) * 4;
-    if (state === 'idle') { const [x, y] = pickPt(); drawArrow(Math.round(x - 3), Math.round(y - 22 - b)); }
-    if (state === 'carry') { const [x, y] = slotPt(); drawArrow(Math.round(x - 3), Math.round(g.hy - 18 - b)); }
+    // Autokran: Fahrzeug, Last mit Schatten am Boden, Ausleger, Seil
+    drawMobileCraneBody(Q, crane.x, crane.y, 1);
+    const sway = clamp(-hook.vx * 0.04, -8, 8), lh = liftH(hook.lh);
+    const lx = hook.x + sway, ly = hook.y - lh;
+    if (carry) {
+      const len = carry.ang < 0.05 ? Math.min(beamLen(), 44) : beamLen();
+      pixLine(Q, hook.x - Math.cos(carry.ang) * len / 2 + lh / 3, hook.y - Math.sin(carry.ang) * len / 2 + lh / 4, hook.x + Math.cos(carry.ang) * len / 2 + lh / 3, hook.y + Math.sin(carry.ang) * len / 2 + lh / 4, 4, 'rgba(0,0,0,.2)');   // Schatten
+      drawBeamTop(Q, lx, ly + 4, len, carry.ang, 0);
+    } else Q('rgba(0,0,0,.2)', Math.round(hook.x) - 2, Math.round(hook.y), 5, 3);
+    drawMobileCraneBoom(Q, crane.x, crane.y, hook.x, hook.y, TIP);
+    drawRope(R, Math.round(hook.x), Math.round(hook.y - TIP), Math.round(lx), Math.round(ly));
+    // Hinweise: erst zum Tieflader, dann zur Stelle am Haus (mit Zug-Spur)
+    if (fest === null && !busy() && !follow) {
+      const b = Math.abs(Math.sin(time / 220)) * 4;
+      if (!carry) { const [x, y] = pickPt(); drawArrow(Math.round(x - 3), Math.round(y - 22 - b)); }
+      else {
+        const [x] = slotPt(); drawArrow(Math.round(x - 3), Math.round(g.hy - 18 - b));
+        if (idle > 2) { const k = (time / 1200) % 1, n = 6; for (let i = 0; i < n; i++) { const u = i / n; if (Math.abs(u - k) < 0.12) R('rgba(255,210,63,.9)', Math.round(hook.x + (x - hook.x) * u) - 1, Math.round(hook.y - 20 + (g.hy - hook.y + 20) * u) - 1, 3, 3); } }
+      }
+    }
   }
   function resize() { layout(false); }
   function exit() { setEngine(false, false); clearTimeout(winTimer); }
-  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, placed, truck, g, slot: slotPt(), pick: pickPt() }) };
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ placed, N, truck, g, hook, carry: !!carry, slot: slotPt(), pick: pickPt(), busy: busy() }) };
 })();
 startLoop(Kran);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

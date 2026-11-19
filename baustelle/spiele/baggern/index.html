@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119a">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119c">
 <title>Baggern</title>
 <style>.pill canvas.veh{width:clamp(30px,6vmin,46px);height:clamp(30px,6vmin,46px);image-rendering:pixelated}</style>
 </head>
@@ -46,9 +46,9 @@ window.addEventListener('error', function (e) {
   </div>
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
-<script src="../../../gemeinsam/sterne.js?v=20261119a"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119a"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119a"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261119c"></script>
+<script src="../../../gemeinsam/basis.js?v=20261119c"></script>
+<script src="../../../gemeinsam/bau.js?v=20261119c"></script>
 <script>
 /* =====================================================================
    MINISPIEL: GRUBE AUSHEBEN (Baustelle, Wohnhaus Schritt 1)
@@ -62,7 +62,7 @@ document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click'
 { const g = $('mveh').getContext('2d'); g.drawImage(EXCAVATOR.frames[24], 0, 0); }
 
 const DigGame = (() => {
-  const LOADS = 3;
+  const LOADS = houseType().loads;                    // großes Haus: eine Kipperladung mehr
   let ground, total, left, cap, fill, loads, totalLoads, state, veh, truck, honked = false, truckColor = 0, winTimer = null, pit;
   function makePit() {                                // Grube = Grundriss des Hauses, mittig, gleich groß auf allen Geräten
     const w = Math.min(7, gc - 4), h = Math.min(4, gr - 5);

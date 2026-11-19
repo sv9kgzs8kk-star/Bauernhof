@@ -10,7 +10,10 @@ hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-L
 baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte (Bauarbeiter, Bagger, Bauplatz `S`)
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
                               Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
-baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, kran/, dach/
+baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, kran/, dach/, abriss/
+                              (Abriss: Bagger 0,8 s auf dem fertigen Haus → Karte ABRISS → Umzug (Möbel antippen → Kiste → Transporter),
+                              Abrissbirne am Autokran (Kugel zur Seite ziehen und loslassen, Antippen geht auch), Schutt wegbaggern wie beim Graben (über Schuttfelder fahren, Schaufel voll → zum Kipper); danach `Hof.demolishHouse`: house.pick = true, maxType +1.
+                              Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen
                               (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden, Kind läuft per Antippen und ist immer vor den Möbeln, 0,8 s auf dem Bett = schlafen; Möbel und Kind in einfacher Größe (S = 1)
@@ -20,7 +23,9 @@ gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlese
 gemeinsam/basis.css         ← gemeinsames Aussehen
 gemeinsam/feldspiel.js      ← Feld- und Wiesen-Spiele
 gemeinsam/startseite.js     ← Knopf „zur Startseite“ (1 s halten) für die Hauptseite jeder Welt
-gemeinsam/bau.js            ← Baustelle: Bauarbeiter, Bagger, Kipper, Boden-Kacheln, Bau-Wörter
+gemeinsam/bau.js            ← Baustelle: Bauarbeiter, Bagger, Kipper, Boden-Kacheln, Bau-Wörter, HOUSE_TYPES (klein 1 Stockwerk / groß 2 Stockwerke:
+                              mehr Mauerreihen, eine Kipperladung mehr), Umzugskiste, Transporter, Abrissbirne, Schutt
+gemeinsam/moebel.js         ← Möbel (FURN, BY, KID) für Einrichten und Umzug
 spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 ```
 - Vom Hof ins Spiel über `PAGES` in `hof.html`. Zurück mit `goHof('<name>')`, die Seiten setzen `window.HOF_URL = '../../hof.html'`.
@@ -49,9 +54,9 @@ spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 - **Erstes Gebäude: Wohnhaus.** Der Fortschritt liegt in `save.house.step` (0 = Grube fehlt, 1 = Grube fertig … 5 = Haus fertig). Gebaut wird in Etappen, alles im Stil des Hofs (schräg von oben, fahren/antippen statt nur zuschauen):
   1. Grube baggern wie Ernten, mit Kipper (fertig)
   2. Beton mit der Betonpumpe malen (Finger ziehen, ab 90 % läuft der Rest nach) und Wände mit Steinen setzen (von schräg oben: Steine von der Palette in leuchtende Lücken der Fassade ziehen oder Lücke antippen; 3 Reihen × 7 Spalten, Tür/Fenster aus `facadeHoles()`; **nichts fliegt durch die Luft**, Adrian dachte sonst, er müsse Steine fangen) (fertig: `spiele/beton`, `spiele/mauer`; Bauplatz-Zugang je Schritt über `STEP_GAME` in `baustelle/index.html`)
-  3. Dachbinder mit dem Kran vom Tieflader aufs Haus heben (Binder antippen, dann leuchtende Stelle), Richtfest (step 4), Dach durch Wischen decken, danach Fenster/Tür/Schornstein (step 5). Fertig: `spiele/kran`, `spiele/dach`. Alles im Hof-Raster (G-Zellen, scharfe Pixel, keine weichen Linien/Skalierung): Haus wie das Bauernhaus mit `drawHouseTop()`, Kran von oben mit `drawCraneTop()`, Balken mit `drawBeamTop()`/`pixLine()` (alle in `gemeinsam/bau.js`). Fertiges Haus (step 5) wird ohne Bauzaun/Schild als verputztes Wohnhaus mit Garten gezeigt.
+  3. Dachbinder mit dem **Autokran** vom Tieflader aufs Haus heben (Binder antippen, dann mit dem Finger ziehen und über der leuchtenden Stelle loslassen oder Stelle antippen; kleines Haus 3, großes 6 Binder), Richtfest (step 4), Dach durch Wischen decken, danach Fenster/Tür/Schornstein (step 5). Fertig: `spiele/kran`, `spiele/dach`. Alles im Hof-Raster (G-Zellen, scharfe Pixel, keine weichen Linien/Skalierung): Haus wie das Bauernhaus mit `drawHouseTop()`, Autokran mit `drawMobileCraneBody()`/`drawMobileCraneBoom()`/`drawRope()`, grobe Pixel in den Minispielen mit `snapF(R, 2)`, Balken mit `drawBeamTop()`/`pixLine()` (alle in `gemeinsam/bau.js`). Fertiges Haus (step 5) wird ohne Bauzaun/Schild als verputztes Wohnhaus mit Garten gezeigt.
 
-  Danach kann man es einrichten (Möbel platzieren): Teil 1 fertig (`wohnhaus/`, ein Zimmer, 5 Möbel). Testlinks: `?haus=0` (zu und leer) bzw. `?haus=1` (offen und leer).
+  Danach kann man es einrichten (Möbel platzieren): Teil 1 fertig (`wohnhaus/`, ein Zimmer, 5 Möbel). Testlinks: `?haus=0` (zu und leer) bzw. `?haus=1` (offen und leer). Weitere Testparameter: `?haustyp=1` (großes Haus), `?moebel=1` (ein paar Möbel fürs Umzug-Testen).
 - **Bauaufträge** bestehen aus Schritten mit wiederverwendbaren Mechaniken: GRABEN (Bagger, Zellen abtragen), GIESSEN (Betonmischer, Schalung füllen), STAPELN (Steine nach Muster setzen), HEBEN (Kran, Teil an markierte Stelle), BELEGEN (Fläche reihenweise füllen: Ziegel, Schotter, Schienen), ZUORDNEN (Fenster/Türen in Öffnungen). Ein Auftrag ist eine Datenliste von Schritten, keine eigene Seite pro Schritt.
 - **Der Bauernhof bleibt einzeln spielbar**, so wie er ist, bis die Stadt so weit ist.
 - Später weitere Welten: Feuerwache, Rettungswache, Polizei, Krankenhaus, Bahnhof, Flughafen.

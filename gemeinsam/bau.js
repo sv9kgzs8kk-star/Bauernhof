@@ -6,8 +6,21 @@ Object.assign(WORDS, {
   site: ['BAUSTELLE', 'Baustelle'], digger: ['BAGGER', 'Bagger'], dig: ['BAGGERN', 'Baggern'],
   dirt: ['ERDE', 'Erde'], tipper: ['KIPPER', 'Kipper'], house: ['HAUS', 'Haus'], concrete: ['BETON', 'Beton'],
   pump: ['BETONPUMPE', 'Betonpumpe'], wall: ['MAUER', 'Mauer'], brick: ['STEIN', 'Stein'], builder: ['BAUARBEITER', 'Bauarbeiter'],
-  crane: ['KRAN', 'Kran'], frame: ['DACHSTUHL', 'Dachstuhl'], richtfest: ['RICHTFEST', 'Richtfest!'], roof: ['DACH', 'Dach'], truss: ['DACHBINDER', 'Dachbinder']
+  crane: ['KRAN', 'Kran'], frame: ['DACHSTUHL', 'Dachstuhl'], richtfest: ['RICHTFEST', 'Richtfest!'], roof: ['DACH', 'Dach'], truss: ['DACHBINDER', 'Dachbinder'],
+  demolish: ['ABRISS', 'Abriss'], ball: ['ABRISSBIRNE', 'Abrissbirne'], box: ['UMZUGSKISTE', 'Umzugskiste'], van: ['TRANSPORTER', 'Transporter'],
+  rubble: ['SCHUTT', 'Schutt'], bighouse: ['GROSSES HAUS', 'Großes Haus'], move: ['UMZUG', 'Umzug']
 });
+// Haustypen: nach jedem Bau mit Abriss kommt der nächste dazu (save.house.maxType). floors = Stockwerke (mehr Mauerreihen, Fenster)
+const HOUSE_TYPES = [
+  { key: 'small', word: 'house',    floors: 1, loads: 3, trusses: 3 },
+  { key: 'big',   word: 'bighouse', floors: 2, loads: 4, trusses: 6 },
+];
+const houseType = () => { const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
+const houseFloors = () => houseType().floors;
+// Grobe Pixel: zeichnet über F, rastet aber alles auf ein P×P-Raster ein (Haus, Kran, Transporter wirken wie Hof-Pixelgrafik)
+function snapF(F, P = 2) {
+  return (col, x, y, w, h) => { const x0 = Math.floor(x / P) * P, y0 = Math.floor(y / P) * P, x1 = Math.ceil((x + w) / P) * P, y1 = Math.ceil((y + h) / P) * P; F(col, x0, y0, Math.max(P, x1 - x0), Math.max(P, y1 - y0)); };
+}
 const BAU_STARS_DIG = 3;                       // Sterne für die fertige Grube
 const BAU_STARS_STEP = 3;                      // Sterne je weiterem Bauschritt (Beton, Mauer …)
 
@@ -82,48 +95,60 @@ function pixLine(F, x1, y1, x2, y2, w, col) {
 // F(col,x,y,w,h) zeichnet (R für das Spielbild, B für den Hintergrund). Grundriss x,y,w,h in Pixeln.
 // o: { step 2..5, trusses 0..3, ridge, wreath 0..1, roof: Zeilen×Spalten (true = gedeckt), done, time }
 const ROOF_ROWS = 6, ROOF_COLS = 8;
-function houseGeo(x, y, w, h) {
-  const rz = Math.round(h * 0.55), fz = h - rz;
+function houseGeo(x, y, w, h, floors) {
+  floors = floors || houseFloors();
+  const rz = Math.round(h * (floors > 1 ? 0.4 : 0.55)), fz = h - rz;
   const roof = { x: x - 2, y: y - 3, w: w + 4, h: rz + 3 };
   const row = i => { const y0 = roof.y + roof.h - Math.round((i + 1) * roof.h / ROOF_ROWS), y1 = roof.y + roof.h - Math.round(i * roof.h / ROOF_ROWS); return [y0, y1 - y0]; };
   const col = c => { const x0 = roof.x + Math.round(c * roof.w / ROOF_COLS), x1 = roof.x + Math.round((c + 1) * roof.w / ROOF_COLS); return [x0, x1 - x0]; };
-  const beam = i => x + Math.round(w * (i + 1) / 4);
-  return { x, y, w, h, rz, fz, roof, row, col, beam };
+  const nT = HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, floors - 1)].trusses;
+  const beam = i => x + Math.round(w * (i + 1) / (nT + 1));
+  return { x, y, w, h, rz, fz, roof, row, col, beam, floors, nT };
 }
 // Tür und Fenster der Fassade (gleich für Zeichnen und Mauer-Spiel)
 function facadeHoles(g) {
-  const { x, y, w, h, rz, fz } = g;
+  const { x, y, w, h, rz } = g, fl = g.floors || 1, fz = Math.round(g.fz / fl);   // fz = Höhe eines Stockwerks
   const doorW = Math.max(6, Math.round(w * 0.17)), doorX = x + Math.round((w - doorW) / 2), doorH = Math.max(6, fz - 3);
-  const winW = Math.max(6, Math.round(w * 0.2)), winH = Math.max(4, Math.round(fz * 0.42)), winY = y + rz + Math.max(2, Math.round(fz * 0.22));
+  const winW = Math.max(6, Math.round(w * 0.2)), winH = Math.max(4, Math.round(fz * 0.42)), winY = y + h - fz + Math.max(2, Math.round(fz * 0.22));
   const wins = [x + Math.round(w * 0.1), x + w - Math.round(w * 0.1) - winW];
-  const rects = [[doorX, y + h - doorH, doorW, doorH], ...wins.map(wx => [wx, winY, winW, winH])];
-  return { doorW, doorX, doorH, winW, winH, winY, wins, rects };
+  const winList = wins.map(wx => [wx, winY]);
+  for (let f = 1; f < fl; f++) {                       // obere Stockwerke: drei Fenster
+    const wy = y + h - (f + 1) * fz + Math.max(2, Math.round(fz * 0.22));
+    winList.push([x + Math.round(w * 0.1), wy], [doorX + Math.round((doorW - winW) / 2), wy], [x + w - Math.round(w * 0.1) - winW, wy]);
+  }
+  const rects = [[doorX, y + h - doorH, doorW, doorH], ...winList.map(([wx, wy]) => [wx, wy, winW, winH])];
+  return { doorW, doorX, doorH, winW, winH, winY, wins, winList, rects };
 }
 function drawHouseTop(F, x, y, w, h, o = {}) {
-  const g = houseGeo(x, y, w, h), st = o.step || 0, t = o.time || 0, done = o.done || st >= 5;
+  const g = houseGeo(x, y, w, h, o.floors), st = o.step || 0, t = o.time || 0, done = o.done || st >= 5;
   const rz = g.rz, fz = g.fz;
   F('rgba(0,0,0,.25)', x + 3, y + 5, w + 1, h);
   // Bodenplatte
   F('#6a7076', x - 2, y - 2, w + 4, h + 4); F('#a2a8ae', x - 1, y - 1, w + 2, h + 2);
   if (st < 3) return g;
   // Fassade (vorne): Steine im Rohbau, fertig verputzt wie das Bauernhaus
-  const { doorW, doorX, doorH, winW, winH, winY, wins } = facadeHoles(g);
+  const { doorW, doorX, doorH, winW, winH, winList } = facadeHoles(g);
   if (done) {
-    F('#e9dcc0', x, y + rz, w, fz); F('#cdbf9f', x, y + h - 2, w, 2);
-    F('#7a4a22', doorX, y + h - doorH, doorW, doorH); F('#a0673a', doorX + 1, y + h - doorH + 1, doorW - 2, 2); F('#ffcc00', doorX + doorW - 3, y + h - Math.round(doorH / 2), 1, 1);
-    for (const wx of wins) { F('#5a3b1c', wx, winY, winW, winH); F('#9fe3ff', wx + 1, winY + 1, winW - 2, winH - 2); F('#5a3b1c', wx + Math.floor(winW / 2), winY + 1, 1, winH - 2); F('#5a3b1c', wx + 1, winY + Math.floor(winH / 2), winW - 2, 1);
-      F('#ff6b8a', wx + 1, winY + winH, 2, 1); F('#ffd23f', wx + 4, winY + winH, 2, 1); }
+    F('#b8a888', x - 1, y + rz, w + 2, fz + 1); F('#e9dcc0', x, y + rz, w, fz); F('#f6ecd4', x, y + rz, w, 1); F('#cdbf9f', x, y + h - 2, w, 2);
+    for (let i = 0, k = Math.round(x * 7 + y * 3); i < w * fz / 26; i++) { k = (k * 9301 + 49297) % 233280; F(k % 3 ? '#ddd0b0' : '#f3e8cc', x + 1 + k % (w - 3), y + rz + 2 + (k >> 4) % Math.max(1, fz - 5), 2, 1); }   // Putz
+    for (let f = 1; f < g.floors; f++) F('#cdbf9f', x, y + h - Math.round(fz * f / g.floors) - 1, w, 2);   // Stockwerk-Kante
+    F('#5a3b1c', doorX - 1, y + h - doorH - 1, doorW + 2, doorH + 1); F('#7a4a22', doorX, y + h - doorH, doorW, doorH);
+    F('#a0673a', doorX + 1, y + h - doorH + 1, doorW - 2, Math.max(1, Math.round(doorH * 0.4) - 1)); F('#a0673a', doorX + 1, y + h - Math.round(doorH * 0.55), doorW - 2, Math.round(doorH * 0.45) - 1);
+    F('#ffcc00', doorX + doorW - 3, y + h - Math.round(doorH / 2), 2, 2); F('#8f9aa3', doorX - 2, y + h, doorW + 4, 2);
+    for (const [wx, winY] of winList) { F('#5a3b1c', wx - 1, winY - 1, winW + 2, winH + 2); F('#ffffff', wx, winY, winW, winH); F('#6cc4f0', wx + 1, winY + 1, winW - 2, winH - 2); F('#9fe3ff', wx + 1, winY + 1, winW - 2, Math.round(winH / 2) - 1);
+      F('#e6f8ff', wx + 2, winY + 2, 2, 2); F('#ffffff', wx + Math.floor(winW / 2), winY + 1, 1, winH - 2); F('#ffffff', wx + 1, winY + Math.floor(winH / 2), winW - 2, 1);
+      F('#cdbf9f', wx - 2, winY + winH + 1, winW + 4, 2); F('#2e7a2a', wx, winY + winH + 3, winW, 2); F('#ff6b8a', wx + 1, winY + winH + 2, 2, 1); F('#ffd23f', wx + Math.round(winW / 2), winY + winH + 2, 2, 1); F('#ff6b8a', wx + winW - 3, winY + winH + 2, 2, 1); }
   } else {
     F('#7a2218', x, y + rz, w, fz);
-    for (let yy = y + rz, r = 0; yy < y + h; yy += 4, r++) for (let xx = x + (r % 2 ? 0 : 3); xx < x + w; xx += 6) F('#c0392b', xx, yy, Math.min(5, x + w - xx), 3);
+    for (let yy = y + rz, r = 0; yy < y + h; yy += 6, r++) for (let xx = x + (r % 2 ? -5 : 0); xx < x + w; xx += 10) { const x0 = Math.max(x, xx); F('#c0392b', x0, yy, Math.min(xx + 8, x + w) - x0, 4); F('#d9533f', x0, yy, Math.min(xx + 8, x + w) - x0, 2); }   // Ziegel groß genug für grobe Pixel
     F('#2e1f10', doorX, y + h - doorH, doorW, doorH);
-    for (const wx of wins) F('#2e1f10', wx, winY, winW, winH);
+    for (const [wx, winY] of winList) F('#2e1f10', wx, winY, winW, winH);
     // Mauerkrone von oben (Ring um den Innenraum)
     F('#8e2a20', x, y, w, 3); F('#8e2a20', x, y, 3, rz); F('#8e2a20', x + w - 3, y, 3, rz); F('#8e2a20', x, y + rz - 2, w, 2);
     F('#e06a5a', x, y, w, 1);
   }
   // Dachstuhl: Binder quer, Firstbalken längs
-  const tr = st >= 4 ? 3 : (o.trusses || 0);
+  const tr = st >= 4 ? g.nT : (o.trusses || 0);
   const fullRoof = done || (o.roof && o.roof.every(r => r.every(Boolean)));
   if (!fullRoof) {
     for (let i = 0; i < tr; i++) { const bx = g.beam(i); F('#5a3b1c', bx - 2, y - 2, 5, rz + 3); F('#a0673a', bx - 1, y - 2, 3, rz + 3); F('#c9a067', bx - 1, y - 2, 1, rz + 3); }
@@ -133,8 +158,9 @@ function drawHouseTop(F, x, y, w, h, o = {}) {
   for (let i = 0; i < ROOF_ROWS; i++) for (let c = 0; c < ROOF_COLS; c++) {
     if (!done && !(o.roof && o.roof[i][c])) continue;
     const [ry, rh] = g.row(i), [rx, rw] = g.col(c), back = i >= ROOF_ROWS / 2;
-    F(back ? '#b23427' : '#c0392b', rx, ry, rw, rh); F(back ? '#93261f' : '#a93226', rx, ry + rh - 1, rw, 1);
-    F('rgba(0,0,0,.12)', rx + rw - 1, ry, 1, rh - 1);
+    F(back ? '#a8301f' : '#c0392b', rx, ry, rw, rh); F(back ? '#c24a38' : '#d9533f', rx, ry, rw, 1);
+    F(back ? '#7a2218' : '#8e2a20', rx, ry + rh - 1, rw, 1); F(back ? '#8e2a20' : '#a93226', rx + rw - 1, ry, 1, rh - 1);
+    if (i % 2) F(back ? '#8e2a20' : '#a93226', rx + Math.floor(rw / 2), ry, 1, rh - 1);   // versetzte Ziegel
   }
   if (done) {
     const r = g.roof; F('#8e1f1f', r.x, r.y, r.w, 1); F('#8e1f1f', r.x, r.y + r.h - 1, r.w, 1); F('#8e1f1f', r.x, r.y, 1, r.h); F('#8e1f1f', r.x + r.w - 1, r.y, 1, r.h);
@@ -171,10 +197,80 @@ function drawBeamTop(F, cx, cy, len, ang, lift = 0) {
 }
 // Tieflader von oben (fährt nach rechts), n Binder liegen längs auf der Ladefläche (Länge beamLen)
 const FLATBED_SLOTS = [4, 9, 14];                    // y-Versatz der liegenden Binder
-function drawFlatbedTop(F, x, y, n, beamLen) {
-  F('rgba(0,0,0,.25)', x + 2, y + 2, 56, 18);
-  for (const wx of [4, 14, 24, 48]) { F('#1a1a1a', x + wx, y - 1, 6, 2); F('#1a1a1a', x + wx, y + 17, 6, 2); }
-  F('#444', x, y + 1, 44, 16); F('#777', x + 1, y + 2, 42, 14);
+const flatbedSlot = (i, total) => total > 3 ? 4 + i * 5 : FLATBED_SLOTS[i];   // großes Haus: 6 Binder, längere Ladefläche nach unten
+function drawFlatbedTop(F, x, y, n, beamLen, total = 3) {
+  const hgt = total > 3 ? total * 5 + 3 : 16;
+  F('rgba(0,0,0,.25)', x + 2, y + 2, 56, hgt + 2);
+  for (const wx of [4, 14, 24, 48]) { F('#1a1a1a', x + wx, y - 1, 6, 2); F('#1a1a1a', x + wx, y + hgt + 1, 6, 2); }
+  F('#444', x, y + 1, 44, hgt); F('#777', x + 1, y + 2, 42, hgt - 2);
   F('#173f80', x + 44, y, 12, 18); F('#2a6fdb', x + 45, y + 1, 10, 16); F('#9fe3ff', x + 52, y + 2, 3, 14);
-  for (let i = 0; i < n; i++) drawBeamTop(F, x + 22, y + FLATBED_SLOTS[i] + 1, beamLen, 0, 0);
+  for (let i = 0; i < n; i++) drawBeamTop(F, x + 22, y + flatbedSlot(i, total) + 1, beamLen, 0, 0);
+}
+
+// Umzugskiste von schräg oben (n = 0–1 wie voll, closed = Deckel zu)
+function drawMoveBox(F, x, y, closed) {
+  F('rgba(0,0,0,.25)', x + 2, y + 3, 22, 18);
+  F('#8a5a2b', x, y, 22, 18); F('#c98a4f', x + 1, y + 1, 20, 7); F('#b07438', x + 1, y + 8, 20, 9);
+  if (closed) { F('#d9a066', x + 1, y + 1, 20, 7); F('#e8e0c8', x + 9, y + 1, 4, 7); F('#e8e0c8', x + 9, y + 8, 4, 2); }
+  else { F('#5a3b1c', x + 2, y + 2, 18, 5); F('#d9a066', x - 3, y + 1, 4, 6); F('#d9a066', x + 21, y + 1, 4, 6); }
+  F('#5a3b1c', x + 3, y + 11, 5, 1); F('#5a3b1c', x + 3, y + 13, 7, 1);
+}
+// Kleintransporter von der Seite (fährt nach rechts), weiß mit blauem Streifen; open = Ladetür hinten offen; k = Vergrößerung
+const VAN_W = 46, VAN_H = 23;
+function drawVan(F, x, y, open, k = 2) {
+  x = Math.round(x); y = Math.round(y);
+  const V = (col, a, b, w, h) => F(col, x + a * k, y + b * k, w * k, h * k);
+  V('rgba(0,0,0,.25)', 2, 20, 44, 3);
+  V('#6a747c', 0, 0, 34, 20); V('#ffffff', 1, 1, 32, 18); V('#e6eef2', 1, 15, 32, 4); V('#2a6fdb', 1, 10, 32, 3); V('#173f80', 1, 13, 32, 1);   // Laderaum
+  V('#6a747c', 34, 5, 12, 15); V('#ffffff', 35, 6, 10, 13); V('#9fe3ff', 37, 7, 8, 5); V('#e6f8ff', 38, 8, 2, 2); V('#2a6fdb', 34, 12, 12, 3);   // Fahrerhaus
+  V('#8f9aa3', 40, 14, 3, 1); V('#ffd23f', 45, 15, 1, 2); V('#e03b3b', 0, 15, 1, 3); V('#333', 44, 18, 2, 2);
+  for (const wx of [5, 33]) { V('#1a1a1a', wx, 17, 9, 6); V('#777', wx + 2, 19, 5, 2); V('#aaa', wx + 3, 19, 2, 1); }
+  V('#ffd23f', 10, 4, 6, 4); V('#e03b3b', 18, 4, 6, 4); V('#5cb64f', 26, 4, 4, 4);   // bunte Kisten-Aufkleber
+  if (open) { V('#5a3b1c', 1, 2, 12, 16); V('#3a2a10', 1, 2, 12, 2); V('#ffffff', -6, 1, 6, 18); V('#8f9aa3', -6, 1, 1, 18); }
+}
+// Abrissbirne (von oben: Kugel mit Schatten, h = Höhe über dem Boden)
+function drawBall(F, x, y, h) {
+  x = Math.round(x); y = Math.round(y);
+  F('rgba(0,0,0,.25)', x - 4 + h, y - 2 + h, 9, 7);
+  F('#222', x - 5, y - 5, 10, 10); F('#444', x - 4, y - 4, 8, 8); F('#6a6a6a', x - 3, y - 3, 3, 2);
+}
+// Schutthaufen (von oben)
+function drawRubble(F, x, y, w, h, seed) {
+  F('#8a7a66', x, y, w, h);
+  let k = seed * 9301 + 49297;
+  const rn = () => (k = (k * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < w * h / 40; i++) {
+    const rx = x + Math.floor(rn() * (w - 4)), ry = y + Math.floor(rn() * (h - 3));
+    const col = ['#c0392b', '#9a9a9a', '#6a6058', '#b5a58a', '#7a2218'][Math.floor(rn() * 5)];
+    F(col, rx, ry, 3 + Math.floor(rn() * 3), 2 + Math.floor(rn() * 2));
+  }
+}
+
+// ---------- Autokran (schräg von oben): Fahrzeug längs (Fahrerhaus oben), Drehteller hinten, Ausleger zur Spitze ----------
+// x,y = Mitte des Drehtellers am Boden; dir = 1 Fahrerhaus nach unten, -1 nach oben
+function drawMobileCraneBody(F, x, y, dir = 1) {
+  x = Math.round(x); y = Math.round(y);
+  const by = dir > 0 ? y - 12 : y - 40;              // Fahrzeug 26 breit, 52 lang
+  F('rgba(0,0,0,.25)', x - 11, by + 4, 28, 52);
+  for (const sy of [by + 6, by + 42]) { F('#555', x - 20, sy, 40, 3); F('#e03b3b', x - 22, sy - 1, 4, 5); F('#e03b3b', x + 18, sy - 1, 4, 5); F('#888', x - 22, sy + 4, 4, 2); F('#888', x + 18, sy + 4, 4, 2); }   // Stützen
+  for (const wy of [10, 20, 30, 40]) { F('#1a1a1a', x - 14, by + wy, 3, 7); F('#1a1a1a', x + 11, by + wy, 3, 7); }
+  F('#7a5a00', x - 12, by, 24, 52); F('#f5b700', x - 11, by + 1, 22, 50); F('#ffd84a', x - 11, by + 1, 22, 2);
+  for (let i = 0; i < 6; i++) F(i % 2 ? '#1a1a1a' : '#f5b700', x - 11 + i * 4, by + (dir > 0 ? 49 : 1), 4, 2);   // Warnstreifen
+  const cy = dir > 0 ? by + 38 : by + 2;            // Fahrerhaus
+  F('#c48a00', x - 10, cy, 20, 12); F('#9fe3ff', x - 8, dir > 0 ? cy + 7 : cy + 1, 16, 4); F('#e6f8ff', x - 7, dir > 0 ? cy + 8 : cy + 2, 3, 1);
+}
+// Drehteller und Ausleger: Fuß (x,y) mit Höhe 12, Spitze am Boden über (tx,ty) in Höhe th (gezeichnet bei ty - th)
+function drawMobileCraneBoom(F, x, y, tx, ty, th) {
+  const bx = x, by = y - 12, sx = tx, sy = ty - th;
+  pixLine(F, x + 3, y + 3, tx + 3, ty + 3, 3, 'rgba(0,0,0,.08)');                  // Schatten am Boden
+  F('#555', bx - 9, by - 2, 18, 16); F('#c48a00', bx - 8, by - 1, 16, 14); F('#f5b700', bx - 7, by, 14, 6); F('#9fe3ff', bx + 2, by + 1, 4, 3);
+  pixLine(F, bx, by, sx, sy, 6, '#7a5a00'); pixLine(F, bx, by, sx, sy, 4, '#f5b700'); pixLine(F, bx, by, sx, sy, 1, '#ffd84a');
+  const L = Math.hypot(sx - bx, sy - by), n = Math.floor(L / 10);
+  for (let i = 1; i < n; i++) { const u = i / n; F('#c48a00', Math.round(bx + (sx - bx) * u) - 1, Math.round(by + (sy - by) * u) - 1, 3, 3); }
+  F('#7a5a00', Math.round(sx) - 3, Math.round(sy) - 3, 7, 6); F('#bbb', Math.round(sx) - 1, Math.round(sy) - 2, 3, 3);   // Rolle an der Spitze
+}
+// Seil von der Auslegerspitze (sx,sy) nach unten zum Haken/Last (lx,ly), Haken klein
+function drawRope(F, sx, sy, lx, ly) {
+  pixLine(F, sx, sy, lx, ly, 1, '#333');
+  F('#555', Math.round(lx) - 2, Math.round(ly) - 2, 5, 4); F('#ffd23f', Math.round(lx) - 1, Math.round(ly) - 1, 3, 2);
 }

@@ -24,7 +24,7 @@
       woodParts: 0,             // Wald: gefällte Bäume zum nächsten Stern (0–4, 5 Bäume = 1 Stern)
       saw: false,               // Kettensäge gekauft
       trees: null,              // Wald: je Baum Zeitpunkt des Fällens (0 = steht)
-      house: { step: 0 },       // Baustelle Wohnhaus: erledigte Bauschritte (0–5)
+      house: { step: 0, type: 0, maxType: 0, pick: false, built: 0 },   // Baustelle Wohnhaus: erledigte Bauschritte (0–5), Haustyp, größter wählbarer Typ, Auswahl offen (nach Abriss), Anzahl Abrisse
       farm: { items: [] },                   // Bauernhaus innen: Möbel wie beim Wohnhaus [{ k, x, y }]
       home: { unlocked: false, items: [] }   // Wohnhaus innen: freigeschaltet? Möbel [{ k: 'bed', x, y } …] (x/y = 0–1 im Zimmer, mehrfach möglich)
     };
@@ -91,6 +91,19 @@
     Hof.save[key] = n; Hof.persist(); return false;
   };
 
+  // Haus abreißen: Möbel bleiben gespeichert (Umzugskiste), Bauplatz leer, ein größerer Haustyp kommt zur Auswahl dazu
+  Hof.demolishHouse = function (stars, maxTypes) {
+    Hof.load(); const h = Hof.save.house;
+    h.maxType = Math.min(maxTypes - 1, Math.max(h.maxType | 0, (h.type | 0) + 1));
+    h.step = 0; h.pick = true; h.built = (h.built | 0) + 1;
+    Hof.save.stars += stars; Hof.persist();
+  };
+  // Neues Haus auf dem leeren Bauplatz auswählen (Bauen beginnt wieder mit der Grube)
+  Hof.pickHouse = function (type) {
+    Hof.load(); const h = Hof.save.house;
+    h.type = Math.max(0, Math.min(h.maxType | 0, type | 0)); h.pick = false; h.step = 0; Hof.persist();
+  };
+
   // Wohnhaus freischalten (die Sterne dafür vorher mit Hof.spend abziehen)
   Hof.unlockHome = function () {
     Hof.load(); Hof.save.home.unlocked = true; Hof.persist();
@@ -116,7 +129,9 @@
     const q = new URLSearchParams(location.search);
     if (q.has('sterne')) { Hof.save.stars = Math.max(0, parseInt(q.get('sterne'), 10) || 0); Hof.persist(); }
     if (q.has('heu')) { Hof.save.hay = Math.max(0, parseInt(q.get('heu'), 10) || 0); Hof.persist(); }
-    if (q.has('bau')) { Hof.save.house = { step: Math.max(0, Math.min(5, parseInt(q.get('bau'), 10) || 0)) }; Hof.persist(); }   // Hausbau-Schritt setzen
+    if (q.has('bau')) { Object.assign(Hof.save.house, { step: Math.max(0, Math.min(5, parseInt(q.get('bau'), 10) || 0)), pick: false }); Hof.persist(); }   // Hausbau-Schritt setzen
+    if (q.has('haustyp')) { const t = Math.max(0, parseInt(q.get('haustyp'), 10) || 0); Object.assign(Hof.save.house, { type: t, maxType: Math.max(t, Hof.save.house.maxType | 0) }); Hof.persist(); }   // Haustyp (0 klein, 1 groß)
+    if (q.has('moebel')) { Hof.save.home.items = [{ k: 'bed', x: .9, y: .1 }, { k: 'sofa', x: .1, y: .5 }, { k: 'tv', x: .2, y: .05 }, { k: 'tub', x: .9, y: .9 }]; Hof.persist(); }   // ein paar Möbel fürs Umzug-Testen
     if (q.has('haus')) { Hof.save.home = { unlocked: q.get('haus') === '1', items: [] }; Hof.persist(); }   // Wohnhaus: ?haus=0 zu und leer, ?haus=1 offen und leer
   }
 })();

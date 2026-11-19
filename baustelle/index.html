@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119d">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119f">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261119d"></script>
-<script src="../gemeinsam/basis.js?v=20261119d"></script>
-<script src="../gemeinsam/bau.js?v=20261119d"></script>
+<script src="../gemeinsam/sterne.js?v=20261119f"></script>
+<script src="../gemeinsam/basis.js?v=20261119f"></script>
+<script src="../gemeinsam/bau.js?v=20261119f"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -360,7 +360,6 @@ const Hub = (() => {
       R('#3e2a18', x0+8, y0+8, w-16, 2); R('#3e2a18', x0+8, y0+8, 2, h-16);
     }
     if (st >= 2) drawHouseTop(R, x0 + 9, y0 + 7, w - 18, h - 12, { step: st, time });   // Haus im Stil des Bauernhauses
-    if (st === 3 || st === 4) drawCraneTop(R, x0 + w - 2, y0 + h + 4, -2.55, 66, 40);   // Baukran am Bauplatz
     if (st >= 5) {                                  // fertig: Gartenweg zur Straße, Briefkasten, Blumen
       const dx = x0 + Math.round(w / 2) - 3;
       for (let y = y0 + h - 5; y < y0 + h + 4; y += 3) R('#c9b48a', dx, y, 6, 2);

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119f">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119g">
 <title>Wohnhaus</title>
 </head>
 <body>
@@ -30,10 +30,10 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="house" style="pointer-events:auto"><span class="word">HAUS</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261119f"></script>
-<script src="../gemeinsam/basis.js?v=20261119f"></script>
-<script src="../gemeinsam/moebel.js?v=20261119f"></script>
-<script src="../gemeinsam/bau.js?v=20261119f"></script>
+<script src="../gemeinsam/sterne.js?v=20261119g"></script>
+<script src="../gemeinsam/basis.js?v=20261119g"></script>
+<script src="../gemeinsam/moebel.js?v=20261119g"></script>
+<script src="../gemeinsam/bau.js?v=20261119g"></script>
 <script>
 /* =====================================================================
    WOHNHAUS EINRICHTEN – drei Zimmer von schräg oben (wie der Hof)
@@ -49,10 +49,14 @@ const BACK_TAG = FARM ? 'bauernhaus' : 'wohnhaus', WHERE = FARM ? 'farm' : 'home
 const save = Hof.save;
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof(BACK_TAG)));
 
+Object.assign(WORDS, { up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'], stairs: ['TREPPE', 'Treppe'] });
+// Großes Haus (2 Stockwerke): unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe
+const TWO = !FARM && ((save.house && save.house.type) | 0) >= 1;
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
-  let kid = null, night = null, grid = null;
+  let kid = null, night = null, grid = null, level = 0, stairs = null, swap = null;
   const list = () => save[WHERE].items;
+  const onLevel = it => ((it.f | 0) === level);
   const toScreen = (f, p) => ({ x: Math.round(floor.x + p.x * (floor.w - f.W)), y: Math.round(floor.y + p.y * (floor.h - f.H)) });
   const toFrac = (f, x, y) => ({ x: clamp((x - floor.x) / (floor.w - f.W), 0, 1), y: clamp((y - floor.y) / (floor.h - f.H), 0, 1) });
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
@@ -67,7 +71,16 @@ const Room = (() => {
     const barH = 38 * Math.max(1, S - 1) + 18;
     room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - barH - G - 6 };
     floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 };
-    // Innenwände: links Wohnzimmer, rechts oben Schlafzimmer, rechts unten Bad (je mit Durchgang)
+    layoutBar();
+    setupLevel();
+    if (!kid) kid = { x: floor.x + floor.w * 0.3, y: floor.y + floor.h - 2, path: [], t: 0, flip: false, still: 0 };
+    else { kid.x = clamp(kid.x, floor.x + 6, floor.x + floor.w - 6); kid.y = clamp(kid.y, floor.y + 14 * S, floor.y + floor.h); kid.path = []; }
+    drag = null; sel = null;
+    show('ihud');
+  }
+  // Wände, Treppe, Laufraster und Bild für die aktuelle Etage
+  function setupLevel() {
+    // Innenwände: links Wohnzimmer/Kinderzimmer, rechts oben Schlafzimmer/Bad, rechts unten Bad bzw. Flur mit Treppe (je mit Durchgang)
     const t = 4 * S, vx = Math.round(floor.x + floor.w * 0.56), hy = Math.round(floor.y + floor.h * 0.5), gap = 26 * S;
     const vGapY = floor.y + floor.h - gap - 6 * S;
     walls = [
@@ -76,7 +89,19 @@ const Room = (() => {
       { x: vx + t, y: hy, w: Math.round((floor.x + floor.w - vx - t) * 0.25), h: t },          // waagrecht rechts, Durchgang in der Mitte
       { x: vx + t + Math.round((floor.x + floor.w - vx - t) * 0.25) + gap, y: hy, w: floor.x + floor.w - (vx + t + Math.round((floor.x + floor.w - vx - t) * 0.25) + gap), h: t },
     ];
+    if (TWO && level === 1) {                          // oben links geteilt: Kinderzimmer (hinten) und Schlafzimmer (vorne), Durchgang in der Mitte
+      const gx = Math.round(floor.x + (vx - floor.x) / 2 - gap / 2);
+      walls.push({ x: floor.x - 4, y: hy, w: gx - floor.x + 4, h: t }, { x: gx + gap, y: hy, w: vx - gx - gap, h: t });
+    }
     room.vx = vx; room.hy = hy;
+    stairs = TWO ? { x: floor.x + floor.w - 30, y: floor.y + floor.h - 44, w: 28, h: 42 } : null;   // Treppe unten rechts im Flur
+    buildGrid();
+    paint();
+    const fixed = list().map(it => { const f = BY[it.k]; if (!f || !onLevel(it)) return it; const p = toScreen(f, it); return Object.assign({}, it, fit(f, p.x, p.y)); });
+    if (fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed, WHERE);   // Möbel nicht in Innenwänden
+  }
+  function layoutBar() {
+    const barH = 38 * Math.max(1, S - 1) + 18;
     bar = { x: room.x, y: H - barH + 2, w: room.w, h: barH - 6 };
     // Leiste in Seiten aufteilen (Pfeile links/rechts, wenn nicht alles passt)
     const aw = 22 + 6 * S, inner = bar.w - 2 * aw - 8;
@@ -86,14 +111,6 @@ const Room = (() => {
     page = Math.min(page, pages.length - 1);
     arrows = pages.length > 1 ? [{ dir: -1, x: bar.x + 4, y: bar.y + 4, w: aw - 4, h: bar.h - 8 }, { dir: 1, x: bar.x + bar.w - aw, y: bar.y + 4, w: aw - 4, h: bar.h - 8 }] : [];
     layoutSlots();
-    buildGrid();
-    paint();
-    if (!kid) kid = { x: floor.x + floor.w * 0.3, y: floor.y + floor.h - 2, path: [], t: 0, flip: false, still: 0 };
-    else { kid.x = clamp(kid.x, floor.x + 6, floor.x + floor.w - 6); kid.y = clamp(kid.y, floor.y + 14 * S, floor.y + floor.h); kid.path = []; }
-    const fixed = list().map(it => { const f = BY[it.k]; if (!f) return it; const p = toScreen(f, it); return { k: it.k, ...fit(f, p.x, p.y) }; });
-    if (fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed, WHERE);   // Möbel nicht in Innenwänden
-    drag = null; sel = null;
-    show('ihud');
   }
   function layoutSlots() {
     const aw = arrows.length ? arrows[0].w + 8 : 4, inner = bar.w - 2 * aw - 4, fs = pages[page] || [];
@@ -108,11 +125,29 @@ const Room = (() => {
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
     const { x, y, w, h, vx, hy } = room;
     B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
-    // Böden: Holz (Wohnzimmer), hellblauer Teppichboden (Schlafzimmer), Fliesen (Bad)
-    for (let yy = y + WH, k = 0; yy < y + h; yy += 6, k++) { B(k % 2 ? '#c58a4f' : '#b97f45', x, yy, vx - x, 6); B('#8e5a2e', x, yy + 5, vx - x, 1);
-      for (let xx = x + (k * 17) % 34; xx < vx; xx += 34) B('#8e5a2e', xx, yy, 1, 5); }
-    B('#a9c8e8', vx, y + WH, x + w - vx, hy - y - WH); for (let i = 0; i < 40; i++) B('#bcd6f0', vx + ((i * 37) % (x + w - vx)), y + WH + ((i * 23) % Math.max(1, hy - y - WH)), 2, 1);
-    for (let yy = hy, k = 0; yy < y + h; yy += 6 * S, k++) for (let xx = vx, j = 0; xx < x + w; xx += 6 * S, j++) B((k + j) % 2 ? '#e8f2f8' : '#cfe0ec', xx, yy, Math.min(6 * S, x + w - xx), Math.min(6 * S, y + h - yy));
+    // Böden je Zimmer: Holz (Wohnzimmer), Teppich (Schlafzimmer), Fliesen (Bad), Steinplatten (Flur), bunter Teppich (Kinderzimmer)
+    const wood = (x1, y1, x2, y2) => { for (let yy = y1, k = 0; yy < y2; yy += 6, k++) { B(k % 2 ? '#c58a4f' : '#b97f45', x1, yy, x2 - x1, Math.min(6, y2 - yy)); B('#8e5a2e', x1, yy + 5, x2 - x1, 1);
+      for (let xx = x1 + (k * 17) % 34; xx < x2; xx += 34) B('#8e5a2e', xx, yy, 1, 5); } };
+    const carpet = (x1, y1, x2, y2, c1, c2) => { B(c1, x1, y1, x2 - x1, y2 - y1); for (let i = 0; i < 40; i++) B(c2, x1 + ((i * 37) % Math.max(1, x2 - x1 - 2)), y1 + ((i * 23) % Math.max(1, y2 - y1 - 1)), 2, 1); };
+    const tileF = (x1, y1, x2, y2, c1, c2, n) => { for (let yy = y1, k = 0; yy < y2; yy += n, k++) for (let xx = x1, j = 0; xx < x2; xx += n, j++) B((k + j) % 2 ? c1 : c2, xx, yy, Math.min(n, x2 - xx), Math.min(n, y2 - yy)); };
+    const left = [x, y + WH, vx, y + h], rt = [vx, y + WH, x + w, hy], rb = [vx, hy, x + w, y + h];
+    if (!TWO) { wood(...left); carpet(...rt, '#a9c8e8', '#bcd6f0'); }                     // kleines Haus: Wohnzimmer, Schlafzimmer, Bad
+    else if (level === 0) { wood(...left); tileF(...rt, '#fff8e8', '#d9534f', 8); }          // unten: Wohnzimmer, Küche (rot-weiße Fliesen)
+    else { carpet(x, y + WH, vx, hy, '#9fd68a', '#c6e9b6');                                   // oben: Kinderzimmer (grün mit Punkten), Schlafzimmer (blau), Bad
+      for (let i = 0; i < 5; i++) B(['#ffd23f', '#ff6b8a', '#3fa9f5'][i % 3], Math.round(x + 14 + i * (vx - x - 34) / 4), Math.round(y + WH + 14 + (i % 2) * Math.max(10, hy - y - WH - 34)), 6, 6);
+      carpet(x, hy, vx, y + h, '#a9c8e8', '#bcd6f0');
+      tileF(...rt, '#e8f2f8', '#cfe0ec', 6 * S); }
+    if (TWO) tileF(...rb, '#e6dcc8', '#d4c8ae', 10); else tileF(...rb, '#e8f2f8', '#cfe0ec', 6 * S);
+    if (stairs) {                                    // Treppe: unten nach oben (helle Stufen), oben nach unten (dunkle Öffnung)
+      const s2 = stairs; B('#5a3b1c', s2.x - 2, s2.y - 2, s2.w + 4, s2.h + 4);
+      for (let i = 0; i < 7; i++) { const sy = s2.y + i * 6, c = level === 0 ? ['#e0a868', '#c98a4f'][i % 2] : `rgb(${60 + i * 18},${40 + i * 13},${24 + i * 8})`;
+        B(c, s2.x, sy, s2.w, 6); B('rgba(0,0,0,.25)', s2.x, sy + 5, s2.w, 1); }
+      B('#7a4a22', s2.x - 2, s2.y - 2, 2, s2.h + 4); B('#ffd23f', s2.x - 2, s2.y - 2, 2, 2);   // Geländer
+      // Pfeil aufs Treppenfeld: nach oben bzw. unten
+      const ax = s2.x + s2.w / 2, ay = s2.y + s2.h / 2, up = level === 0;
+      for (let i = 0; i < 5; i++) B('#ffffff', Math.round(ax - i), Math.round(up ? ay - 6 + i : ay + 6 - i), 2 * i + 1, 1);
+      B('#ffffff', ax - 1, up ? ay - 1 : ay - 6, 3, 7);
+    }
     // Rückwand mit Tapete, Fenster, Bild
     if (FARM) { B('#a0673a', x, y, w, WH + 2); for (let xx = x; xx < x + w; xx += 10) B('#7a4a22', xx, y, 1, WH + 2); B('#c98a4f', x, y, w, 1); }   // Bauernhaus: Holzwand
     else { B('#f3e3b8', x, y, w, WH + 2); for (let xx = x + 3; xx < x + w; xx += 8 * S) B('#e8d39c', xx, y, 3 * S, WH + 2); }
@@ -127,10 +162,10 @@ const Room = (() => {
     B(WD, x - 4, y - 4, w + 8, 4); B(WC, x - 4, y - 4, w + 8, 2);
     B(WD, x - 4, y - 4, 4, h + 8); B(WC, x - 4, y - 4, 2, h + 8);
     B(WD, x + w, y - 4, 4, h + 8); B(WC, x + w + 2, y - 4, 2, h + 8);
-    const dw = 2 * G, dx = x + Math.round((vx - x - dw) / 2);
+    const dw = level === 0 ? 2 * G : 0, dx = x + Math.round((vx - x - dw) / 2);   // oben: keine Haustür
     B(WD, x - 4, y + h, dx - x + 4, 4); B(WD, dx + dw, y + h, x + w - dx - dw + 4, 4);
     B(WC, x - 4, y + h, dx - x + 4, 2); B(WC, dx + dw, y + h, x + w - dx - dw + 4, 2);
-    B('#c9b48a', dx + 4, y + h, dw - 8, 4);
+    if (dw) B('#c9b48a', dx + 4, y + h, dw - 8, 4);
     // Innenwände (von oben, wie die Außenmauern) mit Schatten
     for (const r of walls) { B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2)); }
     // Leiste
@@ -175,7 +210,7 @@ const Room = (() => {
   const inBar = (x, y) => y >= bar.y - 4;
   const slotAt = (x, y) => slots.find(s => x >= s.x && x < s.x + s.w && y >= s.y - 4 && y < s.y + s.h + 4);
   const arrowAt = (x, y) => arrows.find(a => x >= a.x && x < a.x + a.w && y >= a.y - 4 && y < a.y + a.h + 4);
-  const order = () => list().map((it, i) => ({ it, i, f: BY[it.k] })).filter(o => o.f)
+  const order = () => list().map((it, i) => ({ it, i, f: BY[it.k] })).filter(o => o.f && onLevel(o.it))
     .sort((a, b) => (a.f.flat === b.f.flat ? 0 : a.f.flat ? -1 : 1) || (toScreen(a.f, a.it).y + a.f.H) - (toScreen(b.f, b.it).y + b.f.H));
   function itemAt(x, y) {
     const o = order().reverse();
@@ -185,7 +220,7 @@ const Room = (() => {
   // Möbel nicht in Wände stellen: aus der Wand herausschieben
   function fit(f, x, y) {
     let r = { x: clamp(x, floor.x, floor.x + floor.w - f.W), y: clamp(y, floor.y, floor.y + floor.h - f.H), w: f.W, h: f.H };
-    for (let n = 0; n < 3; n++) for (const wl of walls) {
+    for (let n = 0; n < 3; n++) for (const wl of stairs ? [...walls, stairs] : walls) {   // auch nicht auf die Treppe
       if (!hit(r, wl)) continue;
       const left = r.x + r.w - wl.x, right = wl.x + wl.w - r.x, up = r.y + r.h - wl.y, down = wl.y + wl.h - r.y, m = Math.min(left, right, up, down);
       if (m === left) r.x -= left; else if (m === right) r.x += right; else if (m === up) r.y -= up; else r.y += down;
@@ -195,7 +230,7 @@ const Room = (() => {
   }
   function put(f, cx, cy, i) {
     const pos = fit(f, cx - f.W / 2, cy - f.H / 2), l = list().slice();
-    if (i == null) l.push({ k: f.key, ...pos }); else l[i] = { k: f.key, ...pos };
+    if (i == null) l.push(Object.assign({ k: f.key, ...pos }, level ? { f: level } : {})); else l[i] = Object.assign({}, l[i], pos);
     Hof.setHome(l, WHERE); sfx.clod(); wob.set(i == null ? l.length - 1 : i, 0);
     const p = toScreen(f, pos);
     for (let n = 0; n < 8; n++) spawn(p.x + rnd(0, f.W), p.y + f.H, rnd(-15, 15), rnd(-12, -4), .35, '#e9d8b0', 30);
@@ -205,7 +240,7 @@ const Room = (() => {
 
   function onPointer(type, x, y) {
     idle = 0;
-    if (!room || night) return true;
+    if (!room || night || swap) return true;
     if (type === 'down') {
       const a = arrowAt(x, y);
       if (a) { page = (page + a.dir + pages.length) % pages.length; layoutSlots(); sfx.click(); sel = null; return true; }
@@ -250,6 +285,14 @@ const Room = (() => {
       if (night.t > 5.4) { kid.y = night.bed.p.y + night.bed.f.H + 8 * S; kid.x = night.bed.p.x + night.bed.f.W / 2; night = null; kid.still = 0; }
       return;
     }
+    if (swap) {                                         // Etage wechseln: kurz dunkel, dann die andere Etage
+      swap.t += dt;
+      if (swap.t > 0.35 && !swap.done) { swap.done = true; level = 1 - level; setupLevel();
+        kid.x = stairs.x - 14; kid.y = stairs.y + stairs.h - 2; kid.flip = true; kid.path = []; kid.still = 0;
+        const w = level ? 'up' : 'down'; setWord(w); sayWord(w); }
+      if (swap.t > 0.7) swap = null;
+      return;
+    }
     if (kid.path.length) {
       const tgt = kid.path[0], dx = tgt.x - kid.x, dy = tgt.y - kid.y, d = Math.hypot(dx, dy), sp = 70 * S * dt;
       if (Math.abs(dx) > 0.5) kid.flip = dx < 0;
@@ -257,6 +300,8 @@ const Room = (() => {
       kid.t += dt; kid.still = 0;
     } else {
       kid.still += dt;
+      if (stairs && kid.still > 0.3 && kid.x > stairs.x - 2 && kid.x < stairs.x + stairs.w + 2 && kid.y > stairs.y && kid.y < stairs.y + stairs.h + 4) {
+        swap = { t: 0 }; sfx.enter(); return; }
       const bed = bedUnderKid();
       if (bed && kid.still > 0.8) {
         night = { t: 0, bed }; setWord('sleep'); say('Gute Nacht');
@@ -321,11 +366,12 @@ const Room = (() => {
         for (const [sx, sy] of [[0.15, 0.1], [0.45, 0.06], [0.8, 0.12], [0.62, 0.2]]) R('#fff3a8', Math.round(W * sx), Math.round(H * sy), 2, 2);
       }
     }
+    if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`; ctx.fillRect(0, 0, W, H); }
     // Hinweis bei leerem Haus: Pfeil auf das erste Möbel
     if (!drag && !sel && !list().length && idle > 1.5) { const s = slots[0]; drawArrow(Math.round(s.x + s.w / 2 - 3), Math.round(s.y - 14 - Math.abs(Math.sin(time / 220)) * 4)); }
   }
   function resize() { enter(); }
-  return { enter, setWord, update, draw, resize, onPointer, _dbg: () => ({ floor, slots, arrows, page, items: list(), kid: kid && { x: kid.x, y: kid.y, path: kid.path.length }, night: !!night, walls }) };
+  return { enter, setWord, update, draw, resize, onPointer, _dbg: () => ({ level, stairs, floor, slots, arrows, page, items: list(), kid: kid && { x: kid.x, y: kid.y, path: kid.path.length }, night: !!night, walls }) };
 })();
 startLoop(Room);
 Room.setWord('house'); setTimeout(() => sayWord('house'), 400);

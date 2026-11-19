@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119h">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119i">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261119h"></script>
-<script src="../gemeinsam/basis.js?v=20261119h"></script>
-<script src="../gemeinsam/bau.js?v=20261119h"></script>
+<script src="../gemeinsam/sterne.js?v=20261119i"></script>
+<script src="../gemeinsam/basis.js?v=20261119i"></script>
+<script src="../gemeinsam/bau.js?v=20261119i"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -201,7 +201,7 @@ const Hub = (() => {
       ENT.digger.m = newMover(oy+4, ox+2, -Math.PI/2);   // geparkt auf dem Fahrzeughof
       posKey = key; active = 'person';
     }
-    const BACK = ['baggern', 'beton', 'mauer', 'kran', 'dach', 'wohnhaus', 'abriss'];   // zurück: Bauarbeiter steht unten am Bauplatz
+    const BACK = ['baggern', 'beton', 'mauer', 'holz', 'kran', 'dach', 'wohnhaus', 'abriss'];   // zurück: Bauarbeiter steht unten am Bauplatz
     if (BACK.includes(from)) { Object.assign(ENT.person.m, { r: oy+3, c: ox+6, a: Math.PI/2 }); active = 'person'; }
     if (from === 'hof' && plotPos.F) {           // zurück vom Bauernhof: neben dem Bauernhof-Platz
       const [r, c] = besidePlot(plotPos.F);
@@ -356,6 +356,7 @@ const Hub = (() => {
       const pit = { r0: 0, c0: 0, w: 6, h: 4 }, s2 = (col, x, y, ww, hh) => R(col, x0 + 8 + x, y0 + 7 + y, ww, hh);
       drawLOutline(s2, pit, 9);
       for (const hh of woodHoles(pit)) { const hx = hh.c * 9 + 2, hy = hh.r * 9 + 2; s2('#3e2a18', hx, hy, 6, 6); if (st >= 1) s2('#4f3520', hx + 1, hy + 1, 4, 4); if (st >= 2) s2('#a2a8ae', hx, hy, 6, 6); }
+      if (st >= 3) drawLogWalls(R, logGeo(x0 + 11, y0 + 12, 51, 30, 8), () => true, null, LOG_ROWS, 2, 4);   // Blockbohlen stehen
     } else {
     // Grube: abgesteckt (Schritt 0) oder ausgehoben (ab Schritt 1)
     if (st === 0) {

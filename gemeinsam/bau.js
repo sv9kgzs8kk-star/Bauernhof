@@ -6,8 +6,17 @@ Object.assign(WORDS, {
   site: ['BAUSTELLE', 'Baustelle'], digger: ['BAGGER', 'Bagger'], dig: ['BAGGERN', 'Baggern'],
   dirt: ['ERDE', 'Erde'], tipper: ['KIPPER', 'Kipper'], house: ['HAUS', 'Haus'], concrete: ['BETON', 'Beton'],
   pump: ['BETONPUMPE', 'Betonpumpe'], wall: ['MAUER', 'Mauer'], brick: ['STEIN', 'Stein'], builder: ['BAUARBEITER', 'Bauarbeiter'],
-  crane: ['KRAN', 'Kran'], frame: ['DACHSTUHL', 'Dachstuhl'], richtfest: ['RICHTFEST', 'Richtfest!'], roof: ['DACH', 'Dach'], truss: ['DACHBINDER', 'Dachbinder']
+  crane: ['KRAN', 'Kran'], frame: ['DACHSTUHL', 'Dachstuhl'], richtfest: ['RICHTFEST', 'Richtfest!'], roof: ['DACH', 'Dach'], truss: ['DACHBINDER', 'Dachbinder'],
+  demolish: ['ABRISS', 'Abriss'], ball: ['ABRISSBIRNE', 'Abrissbirne'], box: ['UMZUGSKISTE', 'Umzugskiste'], van: ['TRANSPORTER', 'Transporter'],
+  rubble: ['SCHUTT', 'Schutt'], bighouse: ['GROSSES HAUS', 'Großes Haus'], move: ['UMZUG', 'Umzug']
 });
+// Haustypen: nach jedem Bau mit Abriss kommt der nächste dazu (save.house.maxType). floors = Stockwerke (mehr Mauerreihen, Fenster)
+const HOUSE_TYPES = [
+  { key: 'small', word: 'house',    floors: 1, loads: 3 },
+  { key: 'big',   word: 'bighouse', floors: 2, loads: 4 },
+];
+const houseType = () => { const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
+const houseFloors = () => houseType().floors;
 const BAU_STARS_DIG = 3;                       // Sterne für die fertige Grube
 const BAU_STARS_STEP = 3;                      // Sterne je weiterem Bauschritt (Beton, Mauer …)
 
@@ -82,42 +91,48 @@ function pixLine(F, x1, y1, x2, y2, w, col) {
 // F(col,x,y,w,h) zeichnet (R für das Spielbild, B für den Hintergrund). Grundriss x,y,w,h in Pixeln.
 // o: { step 2..5, trusses 0..3, ridge, wreath 0..1, roof: Zeilen×Spalten (true = gedeckt), done, time }
 const ROOF_ROWS = 6, ROOF_COLS = 8;
-function houseGeo(x, y, w, h) {
-  const rz = Math.round(h * 0.55), fz = h - rz;
+function houseGeo(x, y, w, h, floors) {
+  floors = floors || houseFloors();
+  const rz = Math.round(h * (floors > 1 ? 0.4 : 0.55)), fz = h - rz;
   const roof = { x: x - 2, y: y - 3, w: w + 4, h: rz + 3 };
   const row = i => { const y0 = roof.y + roof.h - Math.round((i + 1) * roof.h / ROOF_ROWS), y1 = roof.y + roof.h - Math.round(i * roof.h / ROOF_ROWS); return [y0, y1 - y0]; };
   const col = c => { const x0 = roof.x + Math.round(c * roof.w / ROOF_COLS), x1 = roof.x + Math.round((c + 1) * roof.w / ROOF_COLS); return [x0, x1 - x0]; };
   const beam = i => x + Math.round(w * (i + 1) / 4);
-  return { x, y, w, h, rz, fz, roof, row, col, beam };
+  return { x, y, w, h, rz, fz, roof, row, col, beam, floors };
 }
 // Tür und Fenster der Fassade (gleich für Zeichnen und Mauer-Spiel)
 function facadeHoles(g) {
-  const { x, y, w, h, rz, fz } = g;
+  const { x, y, w, h, rz } = g, fl = g.floors || 1, fz = Math.round(g.fz / fl);   // fz = Höhe eines Stockwerks
   const doorW = Math.max(6, Math.round(w * 0.17)), doorX = x + Math.round((w - doorW) / 2), doorH = Math.max(6, fz - 3);
-  const winW = Math.max(6, Math.round(w * 0.2)), winH = Math.max(4, Math.round(fz * 0.42)), winY = y + rz + Math.max(2, Math.round(fz * 0.22));
+  const winW = Math.max(6, Math.round(w * 0.2)), winH = Math.max(4, Math.round(fz * 0.42)), winY = y + h - fz + Math.max(2, Math.round(fz * 0.22));
   const wins = [x + Math.round(w * 0.1), x + w - Math.round(w * 0.1) - winW];
-  const rects = [[doorX, y + h - doorH, doorW, doorH], ...wins.map(wx => [wx, winY, winW, winH])];
-  return { doorW, doorX, doorH, winW, winH, winY, wins, rects };
+  const winList = wins.map(wx => [wx, winY]);
+  for (let f = 1; f < fl; f++) {                       // obere Stockwerke: drei Fenster
+    const wy = y + h - (f + 1) * fz + Math.max(2, Math.round(fz * 0.22));
+    winList.push([x + Math.round(w * 0.1), wy], [doorX + Math.round((doorW - winW) / 2), wy], [x + w - Math.round(w * 0.1) - winW, wy]);
+  }
+  const rects = [[doorX, y + h - doorH, doorW, doorH], ...winList.map(([wx, wy]) => [wx, wy, winW, winH])];
+  return { doorW, doorX, doorH, winW, winH, winY, wins, winList, rects };
 }
 function drawHouseTop(F, x, y, w, h, o = {}) {
-  const g = houseGeo(x, y, w, h), st = o.step || 0, t = o.time || 0, done = o.done || st >= 5;
+  const g = houseGeo(x, y, w, h, o.floors), st = o.step || 0, t = o.time || 0, done = o.done || st >= 5;
   const rz = g.rz, fz = g.fz;
   F('rgba(0,0,0,.25)', x + 3, y + 5, w + 1, h);
   // Bodenplatte
   F('#6a7076', x - 2, y - 2, w + 4, h + 4); F('#a2a8ae', x - 1, y - 1, w + 2, h + 2);
   if (st < 3) return g;
   // Fassade (vorne): Steine im Rohbau, fertig verputzt wie das Bauernhaus
-  const { doorW, doorX, doorH, winW, winH, winY, wins } = facadeHoles(g);
+  const { doorW, doorX, doorH, winW, winH, winList } = facadeHoles(g);
   if (done) {
     F('#e9dcc0', x, y + rz, w, fz); F('#cdbf9f', x, y + h - 2, w, 2);
     F('#7a4a22', doorX, y + h - doorH, doorW, doorH); F('#a0673a', doorX + 1, y + h - doorH + 1, doorW - 2, 2); F('#ffcc00', doorX + doorW - 3, y + h - Math.round(doorH / 2), 1, 1);
-    for (const wx of wins) { F('#5a3b1c', wx, winY, winW, winH); F('#9fe3ff', wx + 1, winY + 1, winW - 2, winH - 2); F('#5a3b1c', wx + Math.floor(winW / 2), winY + 1, 1, winH - 2); F('#5a3b1c', wx + 1, winY + Math.floor(winH / 2), winW - 2, 1);
+    for (const [wx, winY] of winList) { F('#5a3b1c', wx, winY, winW, winH); F('#9fe3ff', wx + 1, winY + 1, winW - 2, winH - 2); F('#5a3b1c', wx + Math.floor(winW / 2), winY + 1, 1, winH - 2); F('#5a3b1c', wx + 1, winY + Math.floor(winH / 2), winW - 2, 1);
       F('#ff6b8a', wx + 1, winY + winH, 2, 1); F('#ffd23f', wx + 4, winY + winH, 2, 1); }
   } else {
     F('#7a2218', x, y + rz, w, fz);
     for (let yy = y + rz, r = 0; yy < y + h; yy += 4, r++) for (let xx = x + (r % 2 ? 0 : 3); xx < x + w; xx += 6) F('#c0392b', xx, yy, Math.min(5, x + w - xx), 3);
     F('#2e1f10', doorX, y + h - doorH, doorW, doorH);
-    for (const wx of wins) F('#2e1f10', wx, winY, winW, winH);
+    for (const [wx, winY] of winList) F('#2e1f10', wx, winY, winW, winH);
     // Mauerkrone von oben (Ring um den Innenraum)
     F('#8e2a20', x, y, w, 3); F('#8e2a20', x, y, 3, rz); F('#8e2a20', x + w - 3, y, 3, rz); F('#8e2a20', x, y + rz - 2, w, 2);
     F('#e06a5a', x, y, w, 1);
@@ -177,4 +192,40 @@ function drawFlatbedTop(F, x, y, n, beamLen) {
   F('#444', x, y + 1, 44, 16); F('#777', x + 1, y + 2, 42, 14);
   F('#173f80', x + 44, y, 12, 18); F('#2a6fdb', x + 45, y + 1, 10, 16); F('#9fe3ff', x + 52, y + 2, 3, 14);
   for (let i = 0; i < n; i++) drawBeamTop(F, x + 22, y + FLATBED_SLOTS[i] + 1, beamLen, 0, 0);
+}
+
+// Umzugskiste von schräg oben (n = 0–1 wie voll, closed = Deckel zu)
+function drawMoveBox(F, x, y, closed) {
+  F('rgba(0,0,0,.25)', x + 2, y + 3, 22, 18);
+  F('#8a5a2b', x, y, 22, 18); F('#c98a4f', x + 1, y + 1, 20, 7); F('#b07438', x + 1, y + 8, 20, 9);
+  if (closed) { F('#d9a066', x + 1, y + 1, 20, 7); F('#e8e0c8', x + 9, y + 1, 4, 7); F('#e8e0c8', x + 9, y + 8, 4, 2); }
+  else { F('#5a3b1c', x + 2, y + 2, 18, 5); F('#d9a066', x - 3, y + 1, 4, 6); F('#d9a066', x + 21, y + 1, 4, 6); }
+  F('#5a3b1c', x + 3, y + 11, 5, 1); F('#5a3b1c', x + 3, y + 13, 7, 1);
+}
+// Kleintransporter von der Seite (fährt nach rechts), weiß mit blauem Streifen; open = Ladetür hinten offen
+function drawVan(F, x, y, open) {
+  x = Math.round(x); y = Math.round(y);
+  F('rgba(0,0,0,.25)', x + 2, y + 20, 44, 3);
+  F('#8f9aa3', x, y, 34, 20); F('#ffffff', x + 1, y + 1, 32, 18); F('#2a6fdb', x + 1, y + 11, 32, 3);   // Laderaum
+  F('#8f9aa3', x + 34, y + 6, 12, 14); F('#ffffff', x + 35, y + 7, 10, 12); F('#9fe3ff', x + 38, y + 8, 7, 5); F('#2a6fdb', x + 34, y + 11, 12, 3);   // Fahrerhaus
+  F('#ffd23f', x + 44, y + 15, 2, 2); F('#e03b3b', x, y + 15, 1, 3);
+  for (const wx of [6, 34]) { F('#1a1a1a', x + wx, y + 17, 8, 6); F('#777', x + wx + 2, y + 19, 4, 2); }
+  if (open) { F('#5a3b1c', x + 1, y + 2, 12, 16); F('#ffffff', x - 6, y + 1, 6, 18); F('#8f9aa3', x - 6, y + 1, 1, 18); }
+}
+// Abrissbirne (von oben: Kugel mit Schatten, h = Höhe über dem Boden)
+function drawBall(F, x, y, h) {
+  x = Math.round(x); y = Math.round(y);
+  F('rgba(0,0,0,.25)', x - 4 + h, y - 2 + h, 9, 7);
+  F('#222', x - 5, y - 5, 10, 10); F('#444', x - 4, y - 4, 8, 8); F('#6a6a6a', x - 3, y - 3, 3, 2);
+}
+// Schutthaufen (von oben)
+function drawRubble(F, x, y, w, h, seed) {
+  F('#8a7a66', x, y, w, h);
+  let k = seed * 9301 + 49297;
+  const rn = () => (k = (k * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < w * h / 40; i++) {
+    const rx = x + Math.floor(rn() * (w - 4)), ry = y + Math.floor(rn() * (h - 3));
+    const col = ['#c0392b', '#9a9a9a', '#6a6058', '#b5a58a', '#7a2218'][Math.floor(rn() * 5)];
+    F(col, rx, ry, 3 + Math.floor(rn() * 3), 2 + Math.floor(rn() * 2));
+  }
 }

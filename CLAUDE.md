@@ -13,7 +13,7 @@ baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `b
 baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, kran/, dach/
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen
-                              (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden, Kind läuft per Antippen, 0,8 s auf dem Bett = schlafen
+                              (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden, Kind läuft per Antippen und ist immer vor den Möbeln, 0,8 s auf dem Bett = schlafen; Möbel und Kind in einfacher Größe (S = 1)
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
 gemeinsam/basis.js          ← Grafik, Pixel-Symbole, Fahrzeuge, Sound, Vorlesen, Steuerung, Layout, Laden, goHof()
@@ -35,7 +35,7 @@ spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 5. Wörter in GROSSBUCHSTABEN anzeigen und normal vorlesen (`WORDS`, `say()`/`sayWord()`).
 6. Pixel-Symbole statt Emojis (`<i class="ico" data-ico="…">`, `setIco()`).
 7. Anzeigen und Knöpfe bekommen die Klasse `.hud`, in Spielen zusätzlich `gamehud`. Ausnahme Hof: `#hubhud` liegt über dem Spielfeld (oben die Zähler neben dem Startseiten-Knopf, links darunter Fahrzeuge und Zahnrad). Beim Antippen gibt es dort keinen Bedienbereich, nur beim Steuerkreuz.
-   Hof-Karte (`HUB_MAP`): `g` ist das Tor zur Schafweide (→ Schafe hüten), `q` die Kuhweide unter dem Kuhstall, das Schild mit dem Stern über der Scheune zeigt den Laden, `a` der Angelsteg am Teich (→ Angeln), `W` der Waldweg (→ Bäume fällen). Zu Fuß kann man überall hinlaufen (auch über Weiden, Ställe, Felder), nur nicht in Bäume (`T`) und den Teich (`o`); nur an den Eingängen passiert etwas. Tor, Melkstand und Scheune lösen erst aus, wenn der Bauer 0,8 s darauf stehen bleibt (`DOOR_WAIT`). Darüberlaufen löst nichts aus.
+   Hof-Karte (`HUB_MAP`): `g` ist das Tor zur Schafweide (→ Schafe hüten), `q` die Kuhweide unter dem Kuhstall, das Schild mit dem Stern über der Scheune zeigt den Laden, `a` der Angelsteg am Teich (→ Angeln), `W` der Waldweg (→ Bäume fällen), `H` die Haustür des Bauernhauses (→ `wohnhaus/index.html?bauernhaus`, gratis einrichten, Spielstand `save.farm.items`). Zu Fuß kann man überall hinlaufen (auch über Weiden, Ställe, Felder), nur nicht in Bäume (`T`) und den Teich (`o`); nur an den Eingängen passiert etwas. Tor, Melkstand und Scheune lösen erst aus, wenn der Bauer 0,8 s darauf stehen bleibt (`DOOR_WAIT`). Darüberlaufen löst nichts aus.
 8. `openShop()` nur zeigen, wenn man etwas kaufen kann oder etwas fehlt. Ausnahme: Feld und Wiese zeigen zu Beginn jedes Durchgangs (Ernten bzw. Mähen) immer das nächstgrößere Feld, auch wenn es noch zu teuer ist.
 13. Feld- und Wiesenform bleiben einen ganzen Durchgang gleich (`newCycle` in `feldspiel.js`), je Bildschirmausrichtung gemerkt.
 9. Fahrspiele beherrschen Steuerkreuz **und** Antippen (`moverUpdate()`).

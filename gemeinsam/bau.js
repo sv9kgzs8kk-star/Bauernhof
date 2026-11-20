@@ -14,8 +14,8 @@ Object.assign(WORDS, {
 const HOUSE_TYPES = [
   { key: 'small', word: 'house',    floors: 1, loads: 3, trusses: 3, steps: ['baggern', 'beton', 'mauer', 'kran', 'dach'] },
   { key: 'big',   word: 'bighouse', floors: 2, loads: 4, trusses: 6, steps: ['baggern', 'beton', 'mauer', 'kran', 'dach'] },
-  // Holzhaus (Blockhaus in L-Form): Punktfundament statt Grube; Bohlen, Dach und Veranda folgen (#40, #41) – bis dahin nicht wählbar (ready: false)
-  { key: 'wood',  word: 'woodhouse', floors: 1, loads: 2, trusses: 3, shape: 'L', ready: false, steps: ['baggern', 'beton', 'holz', null, null] },
+  // Holzhaus (Blockhaus in L-Form): Punktfundament, Bohlen, 4 Binder mit dem Autokran, Schindeldach und Veranda (#39–#41)
+  { key: 'wood',  word: 'woodhouse', floors: 1, loads: 2, trusses: 4, shape: 'L', steps: ['baggern', 'beton', 'holz', 'kran', 'holzdach'] },
 ];
 Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'] });
 // L-Form im Grube-Rechteck (pit = { r0, c0, w, h }): links ganz, rechts nur die untere Hälfte
@@ -379,4 +379,104 @@ function drawLogWalls(F, g, placed, colKey, rows = LOG_ROWS, rh = 4, lt = 6) {
   // Tür und Fenster: dunkle Öffnung in der Vorderwand, sobald die Reihe darüber liegt
   if (placed(5, 0)) F('#2e1f10', g.door.a, g.y1 - hl - (g.door.rows - 1) * rh, g.door.b - g.door.a, (g.door.rows - 1) * rh + lt);
   if (placed(5, g.win.from)) F('#2e1f10', g.win.a, g.y1 - hl - g.win.to * rh, g.win.b - g.win.a, (g.win.to - g.win.from + 1) * rh);
+}
+
+// ---------- Holzhaus: Dachbinder, Schindeldach mit zwei Firsten, Veranda (#41) ----------
+Object.assign(WORDS, { shingle: ['SCHINDELN', 'Schindeln'], veranda: ['VERANDA', 'Veranda'], post: ['PFOSTEN', 'Pfosten'],
+  rocker: ['SCHAUKELSTUHL', 'Schaukelstuhl'], fireplace: ['KAMIN', 'Kamin'], attic: ['DACHBODEN', 'Dachboden'], ladder: ['LEITER', 'Leiter'] });
+// Höhe der Blockwand (so weit liegt die Wandkrone über dem Grundriss)
+const logWallUp = (rows = LOG_ROWS, rh = 4, lt = 6) => (rows - 1) * rh + (lt >> 1);
+// Dach in L-Form, um "up" Pixel angehoben: vorne 3 Reihen über die ganze Breite (8 Felder), hinten 3 Reihen nur über dem linken Flügel (4 Felder).
+// Linker Flügel: First längs (senkrecht), rechter Flügel: First quer. Reihe 0 = ganz vorne.
+const WROOF_ROWS = 6;
+function woodRoofGeo(g, up, ov = 3) {
+  const L = g.x - ov, Rr = g.x1 + ov, Rl = g.x + g.cw + ov, yTop = g.y - up - ov, yMid = g.ym - up - ov, yBot = g.y1 - up + ov;
+  const rows = [];
+  for (let i = 0; i < 3; i++) rows.push({ y: Math.round(yBot - (i + 1) * (yBot - yMid) / 3), y2: Math.round(yBot - i * (yBot - yMid) / 3), x0: L, x1: Rr, n: 8 });
+  for (let i = 0; i < 3; i++) rows.push({ y: Math.round(yMid - (i + 1) * (yMid - yTop) / 3), y2: Math.round(yMid - i * (yMid - yTop) / 3), x0: L, x1: Rl, n: 4 });
+  const cell = (i, c) => { const r = rows[i], a = Math.round(r.x0 + c * (r.x1 - r.x0) / r.n), b = Math.round(r.x0 + (c + 1) * (r.x1 - r.x0) / r.n); return [a, r.y, b - a, r.y2 - r.y]; };
+  const ridgeX = g.x + Math.round(g.cw / 2), ridgeY = Math.round((g.ym + g.y1) / 2) - up;
+  // 4 Dachbinder: 2 quer über den linken Flügel (hinten), 2 längs über den rechten Flügel
+  const rw = g.x1 - g.x - g.cw, trusses = [
+    { x: ridgeX, y: Math.round(g.y + (g.ym - g.y) * 0.3) - up, len: g.cw + 2 * ov, ang: 0 },
+    { x: ridgeX, y: Math.round(g.y + (g.ym - g.y) * 0.85) - up, len: g.cw + 2 * ov, ang: 0 },
+    { x: Math.round(g.x + g.cw + rw * 0.4), y: ridgeY, len: g.y1 - g.ym + 2 * ov, ang: Math.PI / 2 },
+    { x: Math.round(g.x + g.cw + rw * 0.8), y: ridgeY, len: g.y1 - g.ym + 2 * ov, ang: Math.PI / 2 },
+  ];
+  return { rows, cell, ridgeX, ridgeY, trusses, L, Rr, Rl, yTop, yMid, yBot, up, ov };
+}
+// Veranda vor dem rechten Flügel (vorne, gut zu sehen): Holzboden, 4 Pfosten (Löcher vorne), Geländer, Schaukelstuhl, Vordach
+function verandaGeo(g, up) {
+  const x0 = g.x + g.cw + 3, x1 = g.x1 + 1, y0 = g.y1 + 2, d = Math.max(6, Math.round((g.y1 - g.ym) * 0.6)), y1 = y0 + d, w = x1 - x0;
+  return { x0, x1, y0, y1, ph: Math.max(4, Math.round(up * 0.6)), posts: [[x0 + 1, y1 - 1], [x0 + Math.round(w / 3), y1 - 1], [x0 + Math.round(w * 2 / 3), y1 - 1], [x1 - 2, y1 - 1]],
+    chair: [x0 + Math.round(w * 0.83), y0 + Math.round(d * 0.58)] };
+}
+function drawRocker(F, x, y, t, s = 1) {
+  const k = Math.round(Math.sin(t / 400) * s);
+  F('rgba(0,0,0,.2)', x - 5 * s, y + 6 * s, 12 * s, 2 * s);
+  F('#5a3418', x - 6 * s, y + 5 * s + k, 13 * s, s); F('#5a3418', x - 6 * s, y + 6 * s - k, 13 * s, s);   // Kufen
+  F('#7a4a22', x - 4 * s, y - 6 * s + k, 9 * s, 4 * s); F('#a0673a', x - 3 * s, y - 5 * s + k, 7 * s, 2 * s);   // Lehne
+  F('#7a4a22', x - 4 * s, y - 2 * s, 9 * s, 6 * s); F('#c0392b', x - 3 * s, y - s, 7 * s, 4 * s); F('#e06a5a', x - 3 * s, y - s, 7 * s, s);   // Sitz mit Kissen
+}
+// Holzhaus von schräg oben. g = logGeo(…). o: { rh, lt, color, trusses: Anzahl Binder, ridge, roof(i, c) oder true, deck, posts: Anzahl Pfosten, chair, wreath, time }
+function drawWoodHouse(F, g, o = {}) {
+  const rh = o.rh || 4, lt = o.lt || 6, up = logWallUp(LOG_ROWS, rh, lt), t = o.time || 0;
+  const rg = woodRoofGeo(g, up, Math.max(2, lt >> 1)), vg = verandaGeo(g, up);
+  const full = o.roof === true || (typeof o.roof === 'function' && rg.rows.every((r, i) => Array.from({ length: r.n }, (_, c) => o.roof(i, c)).every(Boolean)));
+  if (o.deck) {                                       // Veranda-Boden
+    F('rgba(0,0,0,.2)', vg.x0 + 2, vg.y0 + 2, vg.x1 - vg.x0, vg.y1 - vg.y0);
+    F('#5a3418', vg.x0, vg.y0, vg.x1 - vg.x0, vg.y1 - vg.y0 + 1);
+    for (let y = vg.y0, i = 0; y < vg.y1; y += 3, i++) F(i % 2 ? '#c98a4f' : '#b97f45', vg.x0 + 1, y, vg.x1 - vg.x0 - 2, 2);
+  }
+  drawLogWalls(F, g, () => true, o.color, LOG_ROWS, rh, lt);
+  const np = o.posts || 0;
+  if (!full) {                                        // Dachstuhl
+    const nt = Math.min(rg.trusses.length, o.trusses || 0);
+    if (o.ridge) {
+      const ry = rg.ridgeY, rx = rg.ridgeX;
+      F('#5a3b1c', rx - 2, rg.yTop, 5, rg.yBot - rg.yTop); F('#a0673a', rx - 1, rg.yTop, 3, rg.yBot - rg.yTop);
+      F('#5a3b1c', rx, ry - 2, rg.Rr - rx, 5); F('#a0673a', rx, ry - 1, rg.Rr - rx, 3);
+    }
+    for (let i = 0; i < nt; i++) { const b = rg.trusses[i]; drawBeamTop(F, b.x, b.y, b.len, b.ang, 0); }
+  }
+  // Holzschindeln: links vom First dunkler (linker Flügel), hinter dem First dunkler (rechter Flügel)
+  const lc = woodColor(o.color).c;
+  for (let i = 0; i < WROOF_ROWS; i++) for (let c = 0; c < rg.rows[i].n; c++) {
+    if (!full && !(o.roof && o.roof(i, c))) continue;
+    const [x, y, w, h] = rg.cell(i, c), cx = x + w / 2, cy = y + h / 2;
+    const dark = cx < g.x + g.cw ? cx < rg.ridgeX : cy < rg.ridgeY;
+    F(dark ? '#6e5a44' : '#8f7656', x, y, w, h); F(dark ? '#7f6a52' : '#a88d6a', x, y, w, 1); F(dark ? '#4f3f2e' : '#5e4c38', x, y + h - 1, w, 1);
+    const hm = h >> 1; if (hm > 3) F(dark ? '#57462f' : '#6e5a44', x, y + hm, w, 1);
+    for (let xx = x + (i % 2 ? 2 : 4); xx < x + w - 1; xx += 5) { F(dark ? '#57462f' : '#6e5a44', xx, y + 1, 1, hm > 3 ? hm - 1 : h - 2); if (hm > 3) F(dark ? '#57462f' : '#6e5a44', xx + 2 < x + w - 1 ? xx + 2 : xx, y + hm + 1, 1, h - hm - 2); }   // einzelne Schindeln, versetzt
+  }
+  if (full) {                                          // Firste, Kamin aus Stein
+    F('#3e2f20', rg.ridgeX - 1, rg.yTop, 3, rg.yBot - rg.yTop); F('#3e2f20', rg.ridgeX, rg.ridgeY - 1, rg.Rr - rg.ridgeX, 3);
+    F(lc[0], rg.L, rg.yTop, 1, rg.yBot - rg.yTop); F(lc[0], rg.L, rg.yBot - 1, rg.Rr - rg.L, 1);
+    const kx = rg.ridgeX - Math.round(g.cw * 0.3), ky = rg.yTop + Math.round((rg.yMid - rg.yTop) * 0.4), ks = Math.max(4, lt - 2);
+    F('rgba(0,0,0,.25)', kx + 2, ky + 2, ks, ks); F('#6a6058', kx, ky - 3, ks, ks + 3); F('#9a9088', kx + 1, ky - 2, ks - 2, 2); F('#2a2420', kx + 1, ky - 3, ks - 2, 1);
+    if (o.smoke !== false) for (let k = 0; k < 3; k++) { const p = ((t / 900) + k / 3) % 1; F(`rgba(230,230,230,${(0.6 * (1 - p)).toFixed(2)})`, Math.round(kx + 1 + p * 6), Math.round(ky - 5 - p * 14), 3, 3); }
+  }
+  if (o.deck) {                                       // Pfosten, Geländer (Lücke in der Mitte = Eingang), Vordach
+    const P = vg.posts, ph = vg.ph, pw = Math.max(2, lt >> 1), has = i => i < np;
+    if (o.chair) drawRocker(F, vg.chair[0], vg.chair[1], t, Math.max(1, Math.round(lt / 6)));   // hinter dem Geländer
+    const rail = (a, b) => { for (const f of [0.35, 0.7]) F('#7a4a22', a[0], a[1] - Math.round(ph * f), b[0] - a[0], Math.max(1, pw - 2)); };
+    for (const [a, b] of [[0, 1], [2, 3]]) if (has(a) && has(b)) rail(P[a], P[b]);
+    for (let i = 0; i < np; i++) { const [px, py] = P[i]; F('rgba(0,0,0,.2)', px - 1, py, pw + 2, 2); F('#5a3418', px - (pw >> 1), py - ph, pw, ph + 1); F('#c98a4f', px - (pw >> 1), py - ph, Math.max(1, pw - 1), ph); }
+    if (np >= P.length) {
+      const top = P[0][1] - ph, bh = Math.max(3, Math.round(ph * 0.4));
+      F('#4f3f2e', vg.x0 - 2, top - bh, vg.x1 - vg.x0 + 4, bh + 1); F('#8f7656', vg.x0 - 1, top - bh, vg.x1 - vg.x0 + 2, bh - 1); F('#a88d6a', vg.x0 - 1, top - bh, vg.x1 - vg.x0 + 2, 1);
+      for (let xx = vg.x0 + 2; xx < vg.x1; xx += 5) F('#6e5a44', xx, top - bh + 1, 1, bh - 2);
+    }
+  }
+  if (o.wreath > 0 && !full) {                         // Richtbaum
+    const cx = rg.ridgeX, cy = rg.ridgeY - 2 - Math.round(4 * Math.min(1, o.wreath));
+    F('#6b4423', cx, cy - 2, 2, 6); F('#24561f', cx - 4, cy - 7, 10, 6); F('#2e7a2a', cx - 3, cy - 6, 8, 4); F('#2e7a2a', cx - 2, cy - 10, 6, 4); F('#5cb64f', cx - 1, cy - 9, 2, 2);
+    ['#e03b3b', '#ffd23f', '#3fa9f5', '#ff8ad8'].forEach((col, i) => F(col, cx - 4 + i * 3 + (Math.sin(t / 160 + i) > 0 ? 1 : 0), cy - 3, 1, 5 + (i % 2) * 2));
+  }
+  return { rg, vg, up };
+}
+// Holzstapel (Brennholz für den Kamin), von schräg oben
+function drawWoodPile(F, x, y, n = 3) {
+  F('rgba(0,0,0,.2)', x + 1, y + 2, n * 4 + 2, 9);
+  for (let r = 0; r < 2; r++) for (let i = 0; i < n - r; i++) { const xx = x + i * 4 + r * 2, yy = y + 4 - r * 4; F('#5a3418', xx, yy, 4, 4); F('#c98a4f', xx + 1, yy + 1, 2, 2); }
 }

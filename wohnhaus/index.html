@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261119i">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261120a">
 <title>Wohnhaus</title>
 </head>
 <body>
@@ -30,10 +30,10 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="house" style="pointer-events:auto"><span class="word">HAUS</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261119i"></script>
-<script src="../gemeinsam/basis.js?v=20261119i"></script>
-<script src="../gemeinsam/moebel.js?v=20261119i"></script>
-<script src="../gemeinsam/bau.js?v=20261119i"></script>
+<script src="../gemeinsam/sterne.js?v=20261120a"></script>
+<script src="../gemeinsam/basis.js?v=20261120a"></script>
+<script src="../gemeinsam/moebel.js?v=20261120a"></script>
+<script src="../gemeinsam/bau.js?v=20261120a"></script>
 <script>
 /* =====================================================================
    WOHNHAUS EINRICHTEN – drei Zimmer von schräg oben (wie der Hof)
@@ -51,7 +51,9 @@ document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click'
 
 Object.assign(WORDS, { up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'], stairs: ['TREPPE', 'Treppe'] });
 // Großes Haus (2 Stockwerke): unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe
-const TWO = !FARM && ((save.house && save.house.type) | 0) >= 1;
+// Holzhaus (L-Form): unten Wohnzimmer mit Kamin (linker Flügel), Küche und Bad (rechter Flügel); über die Leiter auf den Dachboden
+const WOOD = !FARM && houseType().shape === 'L';
+const TWO = !FARM && !WOOD && ((save.house && save.house.type) | 0) >= 1;
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
   let kid = null, night = null, grid = null, level = 0, stairs = null, swap = null;
@@ -89,12 +91,24 @@ const Room = (() => {
       { x: vx + t, y: hy, w: Math.round((floor.x + floor.w - vx - t) * 0.25), h: t },          // waagrecht rechts, Durchgang in der Mitte
       { x: vx + t + Math.round((floor.x + floor.w - vx - t) * 0.25) + gap, y: hy, w: floor.x + floor.w - (vx + t + Math.round((floor.x + floor.w - vx - t) * 0.25) + gap), h: t },
     ];
+    if (WOOD) {                                        // L-Form: hinten rechts ist draußen (Garten), Kamin im Wohnzimmer, Leiter zum Dachboden
+      const rx = Math.round(vx + (floor.x + floor.w - vx) * 0.55), rTop = hy + WH;
+      walls = [
+        { kind: 'out', x: vx, y: room.y - 4, w: room.x + room.w + 4 - vx, h: rTop + 2 - room.y + 4 },
+        { kind: 'fire', x: Math.round(floor.x + (vx - floor.x) * 0.22), y: room.y + WH - 8, w: 30, h: 18 },
+      ];
+      if (level === 0) walls.push(
+        { x: vx, y: rTop, w: t, h: Math.max(0, vGapY - rTop) }, { x: vx, y: vGapY + gap, w: t, h: floor.y + floor.h - vGapY - gap },   // Wohnzimmer | Küche
+        { x: rx, y: rTop, w: t, h: Math.max(0, vGapY - rTop) }, { x: rx, y: vGapY + gap, w: t, h: floor.y + floor.h - vGapY - gap });  // Küche | Bad
+      room.rx = rx;
+    }
     if (TWO && level === 1) {                          // oben links geteilt: Kinderzimmer (hinten) und Schlafzimmer (vorne), Durchgang in der Mitte
       const gx = Math.round(floor.x + (vx - floor.x) / 2 - gap / 2);
       walls.push({ x: floor.x - 4, y: hy, w: gx - floor.x + 4, h: t }, { x: gx + gap, y: hy, w: vx - gx - gap, h: t });
     }
     room.vx = vx; room.hy = hy;
     stairs = TWO ? { x: floor.x + floor.w - 30, y: floor.y + floor.h - 44, w: 28, h: 42 } : null;   // Treppe unten rechts im Flur
+    if (WOOD) stairs = { x: vx - 30, y: floor.y + 6, w: 24, h: 40, ladder: true };                  // Leiter hinten rechts im Wohnzimmer
     buildGrid();
     paint();
     const fixed = list().map(it => { const f = BY[it.k]; if (!f || !onLevel(it)) return it; const p = toScreen(f, it); return Object.assign({}, it, fit(f, p.x, p.y)); });
@@ -123,6 +137,7 @@ const Room = (() => {
     for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++)
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(tiles.grass), c*G+i*T, r*G+j*T);
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    if (WOOD) { paintWood(B); paintBar(B); return; }
     const { x, y, w, h, vx, hy } = room;
     B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
     // Böden je Zimmer: Holz (Wohnzimmer), Teppich (Schlafzimmer), Fliesen (Bad), Steinplatten (Flur), bunter Teppich (Kinderzimmer)
@@ -168,9 +183,64 @@ const Room = (() => {
     if (dw) B('#c9b48a', dx + 4, y + h, dw - 8, 4);
     // Innenwände (von oben, wie die Außenmauern) mit Schatten
     for (const r of walls) { B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2)); }
-    // Leiste
+    paintBar(B);
+  }
+  function paintBar(B) {                             // Leiste
     B('rgba(0,0,0,.25)', bar.x + 3, bar.y + 4, bar.w, bar.h);
     B('#5a3b1c', bar.x, bar.y, bar.w, bar.h); B('#a0673a', bar.x + 2, bar.y + 2, bar.w - 4, bar.h - 4); B('#c9a067', bar.x + 2, bar.y + 2, bar.w - 4, 1);
+  }
+  // Holzhaus innen: L-förmig, Holzwände (Bohlen) und Holzböden; Dachboden mit schrägen Dachbalken
+  function paintWood(B) {
+    const { x, y, w, h, vx, hy, rx } = room, rTop = hy + WH, c = woodColor().c;
+    const planks = (x1, y1, x2, y2, a, b, line) => { for (let yy = y1, k = 0; yy < y2; yy += 6, k++) { B(k % 2 ? a : b, x1, yy, x2 - x1, Math.min(6, y2 - yy)); B(line, x1, Math.min(y2 - 1, yy + 5), x2 - x1, 1);
+      for (let xx = x1 + (k * 23) % 46; xx < x2; xx += 46) B(line, xx, yy, 1, Math.min(5, y2 - yy)); } };
+    const logs = (x1, y1, x2, y2) => { for (let yy = y1, k = 0; yy < y2; yy += 5, k++) { B(c[k % 2 ? 1 : 2], x1, yy, x2 - x1, Math.min(5, y2 - yy)); B(c[0], x1, Math.min(y2 - 1, yy + 4), x2 - x1, 1); } };
+    B('rgba(0,0,0,.25)', x + 4, y + 6, vx - x, h); B('rgba(0,0,0,.25)', vx + 4, hy + 6, x + w - vx, y + h - hy);
+    if (level === 0) {
+      planks(x, y + WH, vx, y + h, '#c58a4f', '#b97f45', '#8e5a2e');                       // Wohnzimmer
+      planks(vx, rTop, rx, y + h, '#d9a066', '#cf9558', '#9a6436');                        // Küche: helles Holz
+      for (let yy = rTop, k = 0; yy < y + h; yy += 8, k++) for (let xx = rx, j = 0; xx < x + w; xx += 8, j++) B((k + j) % 2 ? '#e8f2f8' : '#cfe0ec', xx, yy, Math.min(8, x + w - xx), Math.min(8, y + h - yy));   // Bad: Fliesen
+      B('#a9c8e8', x + Math.round((vx - x) * 0.15), y + h - 46, Math.round((vx - x) * 0.4), 30); B('#c9dcf0', x + Math.round((vx - x) * 0.15) + 3, y + h - 43, Math.round((vx - x) * 0.4) - 6, 24);   // Flickenteppich
+    } else {
+      planks(x, y + WH, vx, y + h, '#d9b77c', '#cfa86a', '#a07a46'); planks(vx, rTop, x + w, y + h, '#d9b77c', '#cfa86a', '#a07a46');
+      for (const yy of [y + WH + Math.round((h - WH) * 0.3), y + WH + Math.round((h - WH) * 0.7)]) { B('rgba(0,0,0,.12)', x, yy + 3, vx - x, 3); B('#7a4a22', x, yy, vx - x, 3); }   // Dachbalken über dem Kopf
+      for (const xx of [vx + Math.round((x + w - vx) * 0.35), vx + Math.round((x + w - vx) * 0.7)]) { B('rgba(0,0,0,.12)', xx + 3, rTop, 3, y + h - rTop); B('#7a4a22', xx, rTop, 3, y + h - rTop); }
+      B('#7a4a22', x + Math.round((vx - x) / 2) - 2, y + WH, 4, h - WH);                  // First
+    }
+    // Rückwände aus Bohlen, mit Fenster (Dachboden: kleines rundes Fenster)
+    logs(x, y, vx, y + WH + 2); logs(vx, hy, x + w, rTop + 2);
+    B(c[0], x, y + WH, vx - x, 2); B(c[0], vx, rTop, x + w - vx, 2);
+    const win = (wx, wy, small) => { if (small) { B('#5a3b1c', wx, wy + 3, 14, 12); B('#9fe3ff', wx + 2, wy + 5, 10, 8); B('#5a3b1c', wx + 6, wy + 5, 2, 8); B('#5a3b1c', wx + 2, wy + 8, 10, 2); return; }
+      B('#5a3b1c', wx, wy + 2, 22, 14); B('#9fe3ff', wx + 2, wy + 4, 18, 10); B('#e6f8ff', wx + 2, wy + 4, 4, 10); B('#5a3b1c', wx + 10, wy + 4, 2, 10); B('#5a3b1c', wx + 2, wy + 8, 18, 2);
+      B('#c0392b', wx - 3, wy + 2, 3, 14); B('#c0392b', wx + 22, wy + 2, 3, 14); };
+    win(x + Math.round((vx - x) * 0.7), y + 2, level === 1); win(vx + Math.round((x + w - vx) * 0.4), hy + 2, level === 1);
+    // Garten hinter dem rechten Flügel (draußen): Blumen
+    for (let i = 0; i < 6; i++) { const fx = vx + 14 + i * Math.max(8, Math.round((x + w - vx - 24) / 6)), fy = y + 6 + (i % 2) * 10; B('#3f8f37', fx, fy + 2, 3, 4); B(['#ff6b8a', '#ffd23f', '#3fa9f5'][i % 3], fx - 1, fy, 4, 3); }
+    // Außenwände aus Bohlen (von oben), vorne mit offener Haustür (nur unten)
+    const WC = c[1], WD = c[0];
+    const wall = (a, b, ww, hh) => { B(WD, a, b, ww, hh); B(WC, a + (ww > hh ? 0 : 1), b + (ww > hh ? 1 : 0), ww > hh ? ww : Math.max(1, ww - 2), ww > hh ? Math.max(1, hh - 2) : hh); };
+    wall(x - 4, y - 4, vx - x + 8, 4); wall(vx, y - 4, 4, hy - y + 4); wall(vx, hy - 4, x + w - vx + 4, 4);
+    wall(x - 4, y - 4, 4, h + 8); wall(x + w, hy - 4, 4, y + h - hy + 8);
+    const dw = level === 0 ? 2 * G : 0, dx = x + Math.round((vx - x - dw) / 2);
+    wall(x - 4, y + h, dx - x + 4, 4); wall(dx + dw, y + h, x + w - dx - dw + 4, 4);
+    if (dw) B('#c9b48a', dx + 4, y + h, dw - 8, 4);
+    for (const r of walls) { if (r.kind) continue; B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); wall(r.x, r.y, r.w, r.h); }
+    // Kamin aus Stein (unten mit Feuer, oben auf dem Dachboden nur der Schornstein)
+    const f = walls.find(r => r.kind === 'fire');
+    B('rgba(0,0,0,.2)', f.x + 3, f.y + 3, f.w, f.h);
+    for (let yy = f.y, k = 0; yy < f.y + f.h; yy += 4, k++) for (let xx = f.x + (k % 2 ? -3 : 0); xx < f.x + f.w; xx += 6) { const a = Math.max(f.x, xx); B('#6a6058', a, yy, Math.min(xx + 6, f.x + f.w) - a, 4); B(k % 2 ? '#9a9088' : '#8a8078', a, yy, Math.min(xx + 5, f.x + f.w) - a, 3); }
+    if (level === 0) { B('#2a2420', f.x + 6, f.y + 6, f.w - 12, f.h - 6); B('#5a3b1c', f.x + 2, f.y + 3, f.w - 4, 3); }
+    else { B('#4f463e', f.x + 7, f.y + 3, f.w - 14, f.h - 6); B('#6a6058', f.x + 9, f.y + 5, f.w - 18, 2); f.y += 0; }
+    // Leiter: unten nach oben (Sprossen), oben die Luke mit dem Leiterende
+    if (stairs) { const s2 = stairs;
+      if (level === 1) { B('#2a1a0c', s2.x - 2, s2.y - 2, s2.w + 4, s2.h + 4); B('#5a3b1c', s2.x - 2, s2.y - 2, s2.w + 4, 2); }
+      B('rgba(0,0,0,.2)', s2.x + 3, s2.y + 3, s2.w, s2.h);
+      B('#7a4a22', s2.x + 2, s2.y, 3, s2.h); B('#7a4a22', s2.x + s2.w - 5, s2.y, 3, s2.h);
+      for (let yy = s2.y + 4; yy < s2.y + s2.h - 1; yy += 6) { B('#c98a4f', s2.x + 2, yy, s2.w - 4, 2); B('#7a4a22', s2.x + 2, yy + 2, s2.w - 4, 1); }
+      const ax = s2.x + s2.w / 2, ay = s2.y + s2.h / 2, upw = level === 0;
+      for (let i = 0; i < 5; i++) B('#ffffff', Math.round(ax - i), Math.round(upw ? ay - 6 + i : ay + 6 - i), 2 * i + 1, 1);
+      B('#ffffff', ax - 1, upw ? ay - 1 : ay - 6, 3, 7);
+    }
   }
 
   // Laufraster für das Kind: Zellen, die keine Wand berühren
@@ -289,7 +359,7 @@ const Room = (() => {
       swap.t += dt;
       if (swap.t > 0.35 && !swap.done) { swap.done = true; level = 1 - level; setupLevel();
         kid.x = stairs.x - 14; kid.y = stairs.y + stairs.h - 2; kid.flip = true; kid.path = []; kid.still = 0;
-        const w = level ? 'up' : 'down'; setWord(w); sayWord(w); }
+        const w = level ? (WOOD ? 'attic' : 'up') : 'down'; setWord(w); sayWord(w); }
       if (swap.t > 0.7) swap = null;
       return;
     }
@@ -319,6 +389,10 @@ const Room = (() => {
   function draw(time) {
     if (!room) return;
     ctx.drawImage(bg, 0, 0);
+    if (WOOD && level === 0) { const f = walls.find(r => r.kind === 'fire'), k = Math.floor(time / 120) % 3;   // Feuer im Kamin flackert
+      R('#e08a2c', f.x + 8, f.y + 10 - k, f.w - 16, f.h - 10 + k); R('#ffd23f', f.x + 10 + k, f.y + 13 - k, f.w - 22, f.h - 13 + k); R('#fff3a8', f.x + 13, f.y + f.h - 4, 4, 2);
+      R('#5a3418', f.x + 8, f.y + f.h - 2, f.w - 16, 2);
+      for (const [r, a] of [[34, .06], [22, .08]]) { ctx.fillStyle = `rgba(255,170,60,${a})`; ctx.beginPath(); ctx.arc(f.x + f.w / 2, f.y + f.h, r, 0, Math.PI * 2); ctx.fill(); } }
     if (lampOn && !night) for (const e of order()) if (e.f.key === 'lamp') {
       const p = toScreen(e.f, e.it), cx = p.x + 8 * S, cy = p.y + 7 * S;
       for (const [r, a] of [[30 * S, .08], [22 * S, .1], [14 * S, .12]]) { ctx.fillStyle = `rgba(255,230,120,${a})`; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); }

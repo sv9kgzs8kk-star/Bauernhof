@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119i">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261120a">
 <title>Abriss</title>
 </head>
 <body>
@@ -45,10 +45,10 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261119i"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119i"></script>
-<script src="../../../gemeinsam/moebel.js?v=20261119i"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119i"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261120a"></script>
+<script src="../../../gemeinsam/basis.js?v=20261120a"></script>
+<script src="../../../gemeinsam/moebel.js?v=20261120a"></script>
+<script src="../../../gemeinsam/bau.js?v=20261120a"></script>
 <script>
 /* =====================================================================
    MINISPIEL: ABRISS (Baustelle, fertiges Haus house.step = 5) – von schräg oben wie der Hof
@@ -107,7 +107,8 @@ const Abriss = (() => {
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
     }
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
-    const fx = g.hx - 14, fy = g.hy - 14, fw = g.hw + 28 + 3 * G, fh = g.hh + 26;   // Bauzaun
+    const lift = houseType().shape === 'L' ? logWallUp(LOG_ROWS, 8, 10) + 6 : 0;   // Holzhaus: Dach liegt höher, Veranda vorne
+    const fx = g.hx - 14, fy = g.hy - 14 - lift, fw = g.hw + 28 + 3 * G, fh = g.hh + 26 + lift + (lift ? 20 : 0);   // Bauzaun
     for (let x = fx; x <= fx + fw; x += 9) B('#d35400', x, fy - 2, 2, 7);
     for (let y = fy; y <= fy + fh; y += 9) { B('#d35400', fx, y, 2, 6); B('#d35400', fx + fw, y, 2, 6); }
     B('#ffffff', fx, fy, fw + 2, 2); B('#ffffff', fx, fy, 2, fh); B('#ffffff', fx + fw, fy, 2, fh);
@@ -117,14 +118,17 @@ const Abriss = (() => {
     packed = 0; carry = null; boxCarry = null;
     const geo = houseGeo(g.hx, g.hy, g.hw, g.hh), fh2 = facadeHoles(geo);
     g.door = { x: fh2.doorX + fh2.doorW / 2, y: g.hy + g.hh + 4 };
+    g.wood = houseType().shape === 'L' ? logGeo(g.hx, g.hy, g.hw, g.hh, 26) : null;   // Holzhaus: Blockhaus mit Schindeldach und Veranda
+    if (g.wood) g.door.x = (g.wood.door.a + g.wood.door.b) / 2;
+    const top = g.wood ? logWallUp(LOG_ROWS, 8, 10) + 8 : 4, bot = g.wood ? 36 : 2, side = g.wood ? 6 : 2;
     box = { x: g.hx - 4, y: Math.min(g.hy + g.hh + 10, (gr - 1) * G - 22), closed: false };
     van = { x: -110, y: gr * G - VAN_H * 2 - 2, state: 'away', open: false };
     // Abriss: 3 Spalten × (Stockwerke + 1) Reihen
     const rows = houseFloors() + 1, cols = 3;
     parts = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      const x = Math.round(g.hx - 2 + c * (g.hw + 4) / cols), y = Math.round(g.hy - 4 + r * (g.hh + 6) / rows);
-      const w = Math.round(g.hx - 2 + (c + 1) * (g.hw + 4) / cols) - x, h = Math.round(g.hy - 4 + (r + 1) * (g.hh + 6) / rows) - y;
+      const x = Math.round(g.hx - side + c * (g.hw + 2 * side) / cols), y = Math.round(g.hy - top + r * (g.hh + top + bot) / rows);
+      const w = Math.round(g.hx - side + (c + 1) * (g.hw + 2 * side) / cols) - x, h = Math.round(g.hy - top + (r + 1) * (g.hh + top + bot) / rows) - y;
       parts.push({ x, y, w, h, hit: false, gone: 0, cleared: false, seed: r * 7 + c + 1 });
     }
     // Autokran rechts neben dem Haus (Fahrerhaus unten), Ausleger über das Haus
@@ -353,7 +357,9 @@ const Abriss = (() => {
     if (parts.some(p => !p.hit)) {
       ctx.save(); ctx.beginPath();
       for (const p of parts) if (!p.hit) ctx.rect(p.x, p.y, p.w, p.h);
-      ctx.clip(); drawHouseTop(Q, g.hx, g.hy, g.hw, g.hh, { step: 5, time }); ctx.restore();
+      ctx.clip();
+      if (g.wood) drawWoodHouse(Q, g.wood, { rh: 8, lt: 10, roof: true, deck: true, posts: 4, chair: true, time }); else drawHouseTop(Q, g.hx, g.hy, g.hw, g.hh, { step: 5, time });
+      ctx.restore();
     }
     if (phase === 'move') drawMove(time);
     if (phase !== 'move' && pend && craneLeave < 3) drawCrane(time);

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261119i">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261120a">
 <title>Kran</title>
 </head>
 <body>
@@ -45,9 +45,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261119i"></script>
-<script src="../../../gemeinsam/basis.js?v=20261119i"></script>
-<script src="../../../gemeinsam/bau.js?v=20261119i"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261120a"></script>
+<script src="../../../gemeinsam/basis.js?v=20261120a"></script>
+<script src="../../../gemeinsam/bau.js?v=20261120a"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -73,6 +73,7 @@ function finishStep(step, key, back) {
    Binder auf dem Tieflader antippen → der Autokran hebt ihn an. Mit dem Finger ziehen: Ausleger schwenkt hin und her,
    die Last schwebt mit (Schatten am Boden zeigt, wo sie landet). Über der leuchtenden Stelle loslassen → sie wird abgesetzt.
    Nur antippen geht auch (Binder, dann leuchtende Stelle). Kleines Haus 3 Binder, großes Haus 6. Dann RICHTFEST (house.step = 4).
+   Holzhaus (L-Form): 4 Binder auf die Blockwände, 2 quer über den linken Flügel, 2 längs über den rechten (woodRoofGeo in bau.js).
    ===================================================================== */
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('kran')));
 
@@ -97,16 +98,26 @@ function paintGround(g) {
 
 const Q = snapF(R, 2);                                // grobe Pixel wie auf dem Hof
 const Kran = (() => {
-  let g, geo, N, crane, truck, hook, carry, queue, fest, paused = false, placed, follow, idle = 0;
+  let g, geo, N, crane, truck, hook, carry, queue, fest, paused = false, placed, follow, idle = 0, wood = null, slots = [];
+  const RH = 8, LT = 10;                              // Holzhaus: Bohlen wie beim Bohlen-Legen
   const TIP = 50;                                     // Höhe der Auslegerspitze (so viel weiter oben gezeichnet)
   const liftH = lh => Math.round(4 + lh * 22);        // Höhe der Last über dem Boden
-  const beamLen = () => geo.rz + 3;
+  const beamLen = () => slots[Math.min(placed, N - 1)].len;
   function enter() {
     Hof.load();
     if (house().step !== 3) { goHof('kran'); return; }
     layout(true);
     g = siteGeo(true); geo = houseGeo(g.hx, g.hy, g.hw, g.hh); N = geo.nT;
-    paintGround(g);
+    // Zielstellen der Binder: Mitte, Länge, Winkel (quer = PI/2) und Leuchtfläche
+    if (houseType().shape === 'L') {
+      g.hy += 8; wood = logGeo(g.hx, g.hy, g.hw, g.hh, 26);
+      slots = woodRoofGeo(wood, logWallUp(LOG_ROWS, RH, LT), LT >> 1).trusses; N = slots.length;
+    } else {
+      wood = null;
+      slots = Array.from({ length: N }, (_, i) => ({ x: geo.beam(i), y: g.hy + Math.round(geo.rz / 2), len: geo.rz + 3, ang: Math.PI / 2 }));
+    }
+    const up = wood ? logWallUp(LOG_ROWS, RH, LT) : 0;
+    paintGround({ hx: g.hx, hw: g.hw, hy: g.hy - up, hh: g.hh + up });   // Holzhaus: Zaun so weit oben, wie die Wände hoch sind
     crane = { x: g.hx + g.hw + Math.round(1.7 * G), y: g.hy + 14 };
     const hgt = N > 3 ? N * 5 + 3 : 16;
     truck = { x: g.hx + Math.round(g.hw / 2) - 28, y: Math.min((gr - 1) * G + 3, gr * G - hgt - 4) };
@@ -119,7 +130,7 @@ const Kran = (() => {
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
   function hud() { $('kcount').textContent = placed + '/' + N; }
   const pickPt = () => [truck.x + 22, truck.y + flatbedSlot(N - 1 - placed, N) + 1];
-  const slotPt = () => [geo.beam(placed), g.hy + Math.round(geo.rz / 2)];
+  const slotPt = () => { const s = slots[Math.min(placed, N - 1)]; return [s.x, s.y]; };
   const busy = () => queue.length > 0;
   function to(x, y, lh, then) { queue.push({ x, y, lh, then }); }
   function fetch() {
@@ -130,7 +141,7 @@ const Kran = (() => {
     const [x, y] = slotPt(); follow = null;
     to(x, y, 1); to(x, y, 0, () => {
       carry = null; placed++; hud(); sfx.load();
-      for (let k = 0; k < 10; k++) spawn(x + rnd(-4, 4), g.hy + rnd(0, geo.rz), rnd(-20, 20), rnd(-20, 5), .5, '#e8c27a', 30);
+      for (let k = 0; k < 10; k++) spawn(x + rnd(-6, 6), y + rnd(-8, 8), rnd(-20, 20), rnd(-20, 5), .5, '#e8c27a', 30);
     });
     to(x, y, 1, () => { if (placed >= N) richtfest(); });
   }
@@ -141,7 +152,8 @@ const Kran = (() => {
     setTimeout(() => finishStep(4, 'richtfest', 'kran'), 2800);
   }
   const onTruck = (x, y) => x > truck.x - 8 && x < truck.x + 64 && y > truck.y - 10 && y < truck.y + (N > 3 ? N * 5 + 12 : 26);
-  const nearSlot = (x, y, r) => { const [sx, sy] = slotPt(); return Math.abs(x - sx) < r && y > g.hy - r && y < g.hy + geo.rz + r; };
+  const nearSlot = (x, y, r) => { const s = slots[placed]; if (!s) return false;
+    const hx = s.ang ? r : s.len / 2 + r, hy = s.ang ? s.len / 2 + r : r; return Math.abs(x - s.x) < hx && Math.abs(y - s.y) < hy; };
   function onPointer(type, x, y) {
     if (paused || fest !== null) return true;
     idle = 0;
@@ -161,9 +173,10 @@ const Kran = (() => {
     return true;
   }
   function update(dt) {
-    if (paused) return;
+    if (paused || !hook) return;
     idle += dt;
-    if (carry) carry.ang = approach(carry.ang, hook.lh > 0.5 ? Math.PI / 2 : 0, 2.4 * dt);   // angehoben: Binder dreht sich quer zum Haus
+    if (carry) carry.k = approach(carry.k || 0, hook.lh > 0.5 ? 1 : 0, 2.4 * dt);
+    if (carry) carry.ang = approach(carry.ang, hook.lh > 0.5 ? slots[Math.min(placed, N - 1)].ang : 0, 2.4 * dt);   // angehoben: Binder dreht sich passend zur Stelle
     const ox = hook.x;
     const q = queue[0];
     if (q && q.thenPlace) { queue.shift(); place(); }
@@ -182,20 +195,22 @@ const Kran = (() => {
     setEngine(true, busy() || !!follow, 30);
   }
   function draw(time) {
+    if (!truck || !slots.length) return;              // falscher Bauschritt: es geht gleich zurück zur Stadt
     ctx.drawImage(bg, 0, 0);
     drawFlatbedTop(Q, truck.x, truck.y, N - placed - (carry ? 1 : 0), Math.min(beamLen(), 44), N);
-    drawHouseTop(Q, g.hx, g.hy, g.hw, g.hh, { step: 3, trusses: placed, ridge: fest !== null, wreath: fest !== null ? Math.min(1, fest / 1.0) : 0, time });
+    const ho = { trusses: placed, ridge: fest !== null, wreath: fest !== null ? Math.min(1, fest / 1.0) : 0, time };
+    if (wood) drawWoodHouse(Q, wood, Object.assign({ rh: RH, lt: LT }, ho)); else drawHouseTop(Q, g.hx, g.hy, g.hw, g.hh, Object.assign({ step: 3 }, ho));
     // leuchtende Zielstelle für den nächsten Binder
     if (placed < N && fest === null) {
-      const bx = geo.beam(placed), a = Math.abs(Math.sin(time / 260)) > .5;
-      R(carry ? (a ? 'rgba(126,217,87,.9)' : 'rgba(126,217,87,.5)') : (a ? 'rgba(255,210,63,.85)' : 'rgba(255,210,63,.45)'), bx - 3, g.hy - 2, 7, geo.rz + 3);
+      const s = slots[placed], a = Math.abs(Math.sin(time / 260)) > .5, col = carry ? (a ? 'rgba(126,217,87,.9)' : 'rgba(126,217,87,.5)') : (a ? 'rgba(255,210,63,.85)' : 'rgba(255,210,63,.45)');
+      if (s.ang) R(col, s.x - 3, s.y - Math.round(s.len / 2), 7, s.len); else R(col, s.x - Math.round(s.len / 2), s.y - 3, s.len, 7);
     }
     // Autokran: Fahrzeug, Last mit Schatten am Boden, Ausleger, Seil
     drawMobileCraneBody(Q, crane.x, crane.y, 1);
     const sway = clamp(-hook.vx * 0.04, -8, 8), lh = liftH(hook.lh);
     const lx = hook.x + sway, ly = hook.y - lh;
     if (carry) {
-      const len = carry.ang < 0.05 ? Math.min(beamLen(), 44) : beamLen();
+      const short = Math.min(beamLen(), 44), len = Math.round(short + (beamLen() - short) * carry.k);   // angehoben: Binder in voller Länge
       pixLine(Q, hook.x - Math.cos(carry.ang) * len / 2 + lh / 3, hook.y - Math.sin(carry.ang) * len / 2 + lh / 4, hook.x + Math.cos(carry.ang) * len / 2 + lh / 3, hook.y + Math.sin(carry.ang) * len / 2 + lh / 4, 4, 'rgba(0,0,0,.2)');   // Schatten
       drawBeamTop(Q, lx, ly + 4, len, carry.ang, 0);
     } else Q('rgba(0,0,0,.2)', Math.round(hook.x) - 2, Math.round(hook.y), 5, 3);
@@ -206,8 +221,8 @@ const Kran = (() => {
       const b = Math.abs(Math.sin(time / 220)) * 4;
       if (!carry) { const [x, y] = pickPt(); drawArrow(Math.round(x - 3), Math.round(y - 22 - b)); }
       else {
-        const [x] = slotPt(); drawArrow(Math.round(x - 3), Math.round(g.hy - 18 - b));
-        if (idle > 2) { const k = (time / 1200) % 1, n = 6; for (let i = 0; i < n; i++) { const u = i / n; if (Math.abs(u - k) < 0.12) R('rgba(255,210,63,.9)', Math.round(hook.x + (x - hook.x) * u) - 1, Math.round(hook.y - 20 + (g.hy - hook.y + 20) * u) - 1, 3, 3); } }
+        const s = slots[placed], ay = s.y - (s.ang ? Math.round(s.len / 2) : 0); drawArrow(Math.round(s.x - 3), Math.round(ay - 18 - b));
+        if (idle > 2) { const k = (time / 1200) % 1, n = 6; for (let i = 0; i < n; i++) { const u = i / n; if (Math.abs(u - k) < 0.12) R('rgba(255,210,63,.9)', Math.round(hook.x + (s.x - hook.x) * u) - 1, Math.round(hook.y - 20 + (ay - hook.y + 20) * u) - 1, 3, 3); } }
       }
     }
   }

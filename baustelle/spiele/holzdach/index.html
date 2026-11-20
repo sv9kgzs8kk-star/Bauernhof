@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261120a">
+<title>Holzdach</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="dhud" class="hud gamehud hidden">
+  <div class="pill" id="dword" data-say="shingle" style="pointer-events:auto"><span class="word">SCHINDELN</span> <span id="dcount">0/6</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261120a"></script>
+<script src="../../../gemeinsam/basis.js?v=20261120a"></script>
+<script src="../../../gemeinsam/bau.js?v=20261120a"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+let winTimer = null;
+// Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: HOLZDACH UND VERANDA (Holzhaus, Schritt 5, house.step 4 → 5) – schräg von oben wie der Hof
+   1. Holzschindeln: mit dem Finger über die leuchtende Reihe wischen, Reihe für Reihe von vorne nach hinten
+      (L-förmiges Dach mit zwei Firsten, woodRoofGeo in bau.js).
+   2. Veranda vor dem rechten Flügel: leuchtende Löcher antippen → ein Pfosten steckt drin, das Geländer wächst mit.
+      Nach 4 Pfosten kommt das Vordach und der Schaukelstuhl: Holzhaus fertig (house.step = 5).
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('holzdach')));
+const Q = snapF(R, 2);
+const HolzDach = (() => {
+  let g, geo, rg, vg, state, roof, row, down = false, posts = 0, pops = [], paused = false, idle = 0, fin = null;
+  const RH = 8, LT = 10;
+  function siteGeo() {                                 // gleiche Lage wie beim Autokran
+    const hw = Math.min(6, gc - 6) * G, hh = Math.min(4, gr - 4) * G;
+    const hx = Math.round((gc * G - hw) / 2) - G, hy = Math.max(G, Math.round(((gr - 1) * G - hh) / 2)) + 8;
+    return { hx, hy, hw, hh };
+  }
+  function setWord(k, n) { const el = $('dword'); el.dataset.say = k; el.querySelector('.word').textContent = WORDS[k][0]; $('dcount').textContent = n; }
+  function enter() {
+    Hof.load();
+    if (house().step !== 4 || houseType().shape !== 'L') { goHof('holzdach'); return; }
+    layout(true);
+    g = siteGeo(); geo = logGeo(g.hx, g.hy, g.hw, g.hh, 26);
+    const up = logWallUp(LOG_ROWS, RH, LT); rg = woodRoofGeo(geo, up, LT >> 1); vg = verandaGeo(geo, up);
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+    }
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    const fx = g.hx - 18, fy = g.hy - 22 - up, fw = g.hw + 32 + 3 * G, fh = g.hh + 32 + up;   // Bauzaun
+    for (let x = fx; x <= fx + fw; x += 9) B('#d35400', x, fy - 2, 2, 7);
+    for (let y = fy; y <= fy + fh; y += 9) { B('#d35400', fx, y, 2, 6); B('#d35400', fx + fw, y, 2, 6); }
+    B('#ffffff', fx, fy, fw + 2, 2); B('#ffffff', fx, fy, 2, fh); B('#ffffff', fx + fw, fy, 2, fh);
+    for (let i = 0; i < 4; i++) drawWoodPile(B, g.hx + g.hw + Math.round(1.2 * G), g.hy + 10 + i * 14, 4);   // Schindel-Stapel rechts
+    roof = rg.rows.map(r => Array(r.n).fill(false)); row = 0; posts = 0; pops = []; fin = null; idle = 0;
+    state = 'roof'; show('dhud'); setWord('shingle', '0/' + WROOF_ROWS);
+    setTimeout(() => sayWord('shingle'), 400);
+  }
+  $('pausebtn').addEventListener('click', () => { if (state === 'done') return; paused = true; down = false; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+  function lay(x, y) {
+    if (row >= WROOF_ROWS) return;
+    const r = rg.rows[row];
+    if (y < r.y - 8 || y > r.y2 + 8) return;
+    for (let c = 0; c < r.n; c++) {
+      const [rx, , rw, rh] = rg.cell(row, c);
+      if (!roof[row][c] && x > rx - 4 && x < rx + rw + 4) {
+        roof[row][c] = true; pops.push({ r: row, c, t: 0 }); sfx.click();
+        spawn(rx + rw / 2, r.y + rh / 2, rnd(-15, 15), rnd(-25, -5), .3, '#a88d6a', 40);
+      }
+    }
+    if (roof[row].every(Boolean)) {
+      row++; setWord('shingle', row + '/' + WROOF_ROWS); sfx.load();
+      if (row >= WROOF_ROWS) { state = 'wait'; down = false; confetti(); setTimeout(() => { state = 'posts'; idle = 0; setWord('veranda', '0/' + vg.posts.length); sayWord('veranda'); }, 1400); }
+    }
+  }
+  const postAt = (x, y) => { const p = vg.posts[posts]; return p && Math.abs(x - p[0]) < 16 && y > p[1] - vg.ph - 10 && y < p[1] + 14; };
+  function setPost() {
+    const [px, py] = vg.posts[posts]; posts++; sfx.clod();
+    for (let k = 0; k < 8; k++) spawn(px + rnd(-3, 3), py, rnd(-14, 14), rnd(-16, -4), .35, '#c98a4f', 30);
+    setWord('post', posts + '/' + vg.posts.length);
+    if (posts >= vg.posts.length) {
+      state = 'done'; hide('dhud'); fin = 0;
+      setTimeout(() => { sfx.unlock(); sayWord('rocker'); confetti(); }, 600);
+      setTimeout(() => finishStep(5, 'woodhouse', 'holzdach'), 2600);
+    }
+  }
+  function onPointer(type, x, y) {
+    if (paused) return true;
+    idle = 0;
+    if (state === 'roof') {
+      if (type === 'down') { down = true; lay(x, y); }
+      else if (type === 'move' && down) lay(x, y);
+      else if (type === 'up') down = false;
+    } else if (state === 'posts' && type === 'down') {
+      if (postAt(x, y)) setPost(); else sfx.bonk();
+    }
+    return true;
+  }
+  function update(dt) { if (paused) return; idle += dt; if (fin !== null) fin += dt; for (const p of pops) p.t += dt; pops = pops.filter(p => p.t < 0.2); }
+  function draw(time) {
+    if (!rg) return;                                  // falscher Bauschritt: es geht gleich zurück zur Stadt
+    ctx.drawImage(bg, 0, 0);
+    const veranda = state === 'posts' || state === 'done';
+    drawWoodHouse(Q, geo, { rh: RH, lt: LT, trusses: 4, ridge: true, roof: (i, c) => roof[i][c], deck: veranda, posts, chair: fin !== null && fin > 0.4, time });
+    const on = Math.abs(Math.sin(time / 260)) > .5;
+    if (state === 'roof' && row < WROOF_ROWS) {
+      const r = rg.rows[row];
+      for (let c = 0; c < r.n; c++) if (!roof[row][c]) { const [rx, ry, rw, rh] = rg.cell(row, c); R(on ? 'rgba(255,210,63,.75)' : 'rgba(255,210,63,.4)', rx, ry, rw, rh); }
+      if (!down) {                                   // Hinweis: Finger wischt an der Reihe entlang
+        const k = (time / 1500) % 1, x = r.x0 + Math.round((r.x1 - r.x0) * k), y = Math.round((r.y + r.y2) / 2);
+        R('rgba(0,0,0,.35)', x - 3, y - 2, 7, 6); R('#ffffff', x - 2, y - 3, 5, 5);
+      }
+    }
+    if (state === 'posts') {                          // Löcher für die Pfosten, das nächste leuchtet
+      vg.posts.forEach(([px, py], i) => { if (i < posts) return;
+        R('#2e1f10', px - 3, py - 2, 6, 4);
+        if (i === posts) { R(on ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.45)', px - 5, py - 4, 10, 8); R('#2e1f10', px - 2, py - 1, 4, 2); } });
+      if (idle > 1.5) { const [px, py] = vg.posts[posts]; drawArrow(px - 3, Math.round(py - 22 - Math.abs(Math.sin(time / 220)) * 4)); }
+    }
+    for (const p of pops) { const [rx, ry, rw, rh] = rg.cell(p.r, p.c); R('rgba(255,255,255,.7)', rx, ry, rw, rh); }
+  }
+  function resize() { layout(false); }
+  function exit() { clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, posts, rows: rg && rg.rows.map((r, i) => Array.from({ length: r.n }, (_, c) => rg.cell(i, c))), posts_at: vg && vg.posts, ph: vg && vg.ph }) };
+})();
+startLoop(HolzDach);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

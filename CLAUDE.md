@@ -10,12 +10,14 @@ hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-L
 baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte, **nur zu Fuß** (Bauarbeiter; Bagger und Kipper stehen geparkt als Deko; Bauplatz `S` → Bau-Spiel des aktuellen Schritts)
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
                               Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
-baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, holz/, kran/, dach/, abriss/
+baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, holz/, kran/, dach/, holzdach/, abriss/
                               (Abriss: Schild „Neues Haus“ über dem Bauplatz (Zelle oy/ox+5), steht sobald das fertige Haus einmal betreten wurde (`house.seenInside`, nach Abriss wieder false), beim ersten Mal wackelt es und wird vorgelesen (`house.signIntro`); 0,8 s davor stehen → Karte Haus → Abrissbirne → neues Haus → Umzug (Möbel antippen → Kiste → Transporter),
                               Abrissbirne am Autokran (Kugel zur Seite ziehen und loslassen, Antippen geht auch), Schutt wegbaggern wie beim Graben (über Schuttfelder fahren, Schaufel voll → zum Kipper); danach `Hof.demolishHouse`: house.pick = true, maxType +1.
                               Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
-                              einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen
+                              einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen.
+                              Holzhaus (`WOOD`): L-förmig, Holzwände/-böden, unten Wohnzimmer mit Kamin (linker Flügel), Küche und Bad (rechter Flügel),
+                              hinten rechts Garten; Leiter im Wohnzimmer = Dachboden (Etage `f: 1`, wie beim großen Haus)
                               (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden (großes Haus `TWO`: unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe; Kind kurz auf der Treppe = Etage wechseln, Möbel mit `f: 1` stehen oben), Kind läuft per Antippen und ist immer vor den Möbeln, 0,8 s auf dem Bett = schlafen; Möbel und Kind in einfacher Größe (S = 1)
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)
@@ -26,10 +28,13 @@ gemeinsam/startseite.js     ← Knopf „zur Startseite“ (1 s halten) für die
 gemeinsam/bau.js            ← Baustelle: Bauarbeiter, Bagger, Kipper, Boden-Kacheln, Bau-Wörter, HOUSE_TYPES (klein 1 Stockwerk / groß 2 Stockwerke:
                               mehr Mauerreihen, eine Kipperladung mehr), Umzugskiste, Transporter, Abrissbirne, Schutt
                               Jeder Haustyp hat eigene Bauschritte (`HOUSE_TYPES[].steps`, Seitennamen je `house.step`; die Stadt startet daraus das Spiel).
-                              Haustyp 3 HOLZHAUS (`shape: 'L'`, `ready: false` bis Bohlen/Dach/Veranda fertig sind = in der Hauswahl gesperrt):
+                              Haustyp 3 HOLZHAUS (`shape: 'L'`; `ready: false` würde einen Haustyp in der Hauswahl sperren):
                               Punktfundament (`woodHoles()`, `drawLOutline()`), baggern/beton füllen nur die Löcher. Testlink `?haustyp=2`.
                               Schritt 3 `spiele/holz/`: Holzton wählen (`WOOD_COLORS`, in `house.color`), 3 Stämme an je 2 Linien sägen (wischen/antippen),
                               dann Bohlen vom Stapel auf leuchtende Kanten des L ziehen (`logGeo()`, `drawLogWalls()`, 4 Reihen × 6 Kanten, Tür/Fenster vorne).
+                              Schritt 4 `spiele/kran/` mit 4 Bindern auf dem L (`woodRoofGeo().trusses`). Schritt 5 `spiele/holzdach/`: Holzschindeln wischen
+                              (6 Reihen, vorne 8 Felder, hinten 4; zwei Firste), dann 4 Pfosten der Veranda vor dem rechten Flügel antippen (`verandaGeo()`),
+                              Vordach und Schaukelstuhl erscheinen. Zeichnen des Holzhauses überall mit `drawWoodHouse()` (Stadt, Kran, Holzdach, Abriss).
 gemeinsam/moebel.js         ← Möbel (FURN, BY, KID) für Einrichten und Umzug
 spiele/feld|wiese|schafe|kuehe|angeln|wald/index.html  ← Bauernhof-Minispiele
 ```

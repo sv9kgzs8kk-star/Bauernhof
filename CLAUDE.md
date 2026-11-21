@@ -10,7 +10,10 @@ hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-L
 baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte, **nur zu Fuß** (Bauarbeiter; Bagger und Kipper stehen geparkt als Deko; Bauplatz `S` → Bau-Spiel des aktuellen Schritts)
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
                               Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
-baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, holz/, kran/, dach/, holzdach/, abriss/
+baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, holz/, kran/, dach/, holzdach/, abriss/, holzabriss/
+                              (Holzabriss, nur Holzhaus: Umzug → Schindeln wegwischen, fliegen in den Container → Autokran hebt 4 Binder auf einen Lastwagen →
+                              Veranda und 6 Wände (je ganze Wand) auf Lastwagen mit 4 Plätzen, voll fährt er weg → Betonsockel mit dem Bagger zum Kipper.
+                              `drawWoodHouse` kennt dafür `logs(e,r)`, `truss(i)`, `vroof`, `floor`.)
                               (Abriss: Schild „Neues Haus“ über dem Bauplatz (Zelle oy/ox+5), steht sobald das fertige Haus einmal betreten wurde (`house.seenInside`, nach Abriss wieder false), beim ersten Mal wackelt es und wird vorgelesen (`house.signIntro`); 0,8 s davor stehen → Karte Haus → Abrissbirne → neues Haus → Umzug (Möbel antippen → Kiste → Transporter),
                               Abrissbirne am Autokran (Kugel zur Seite ziehen und loslassen, Antippen geht auch), Schutt wegbaggern wie beim Graben (über Schuttfelder fahren, Schaufel voll → zum Kipper); danach `Hof.demolishHouse`: house.pick = true, maxType +1.
                               Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)

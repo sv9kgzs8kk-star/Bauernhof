@@ -348,12 +348,12 @@ function logGeo(x, y, w, h, gw = 14) {
   return { x, y, w, h, cw, ym, x1, y1, edges, door, win, inside: (px, py) => px > x && px < x1 && py > y && py < y1 && (px < x + cw || py > ym) };
 }
 // Bohlen zeichnen: placed(e, r) sagt, ob Bohle r der Kante e liegt. Höhere Reihen etwas weiter oben (schräg von oben).
-function drawLogWalls(F, g, placed, colKey, rows = LOG_ROWS, rh = 4, lt = 6) {
+function drawLogWalls(F, g, placed, colKey, rows = LOG_ROWS, rh = 4, lt = 6, floor = true) {
   const hl = lt >> 1;
   const c = woodColor(colKey).c;
   // Holzboden im Inneren
-  F('#b98a52', g.x, g.y, g.cw, g.h); F('#b98a52', g.x + g.cw, g.ym, g.w - g.cw, g.h - (g.ym - g.y));
-  for (let yy = g.y + 3; yy < g.y1; yy += 5) { F('#a07040', g.x, yy, g.cw, 1); if (yy > g.ym) F('#a07040', g.x + g.cw, yy, g.w - g.cw, 1); }
+  if (floor) { F('#b98a52', g.x, g.y, g.cw, g.h); F('#b98a52', g.x + g.cw, g.ym, g.w - g.cw, g.h - (g.ym - g.y)); }
+  if (floor) for (let yy = g.y + 3; yy < g.y1; yy += 5) { F('#a07040', g.x, yy, g.cw, 1); if (yy > g.ym) F('#a07040', g.x + g.cw, yy, g.w - g.cw, 1); }
   for (let r = 0; r < rows; r++) {
     const off = r * rh, over = Math.max(3, hl);
     const order = [0, 1, 2, 3, 4, 5];
@@ -383,6 +383,7 @@ function drawLogWalls(F, g, placed, colKey, rows = LOG_ROWS, rh = 4, lt = 6) {
 
 // ---------- Holzhaus: Dachbinder, Schindeldach mit zwei Firsten, Veranda (#41) ----------
 Object.assign(WORDS, { shingle: ['SCHINDELN', 'Schindeln'], veranda: ['VERANDA', 'Veranda'], post: ['PFOSTEN', 'Pfosten'],
+  container: ['CONTAINER', 'Container'], beams: ['BALKEN', 'Balken'], lorry: ['LASTWAGEN', 'Lastwagen'],
   rocker: ['SCHAUKELSTUHL', 'Schaukelstuhl'], fireplace: ['KAMIN', 'Kamin'], attic: ['DACHBODEN', 'Dachboden'], ladder: ['LEITER', 'Leiter'] });
 // Höhe der Blockwand (so weit liegt die Wandkrone über dem Grundriss)
 const logWallUp = (rows = LOG_ROWS, rh = 4, lt = 6) => (rows - 1) * rh + (lt >> 1);
@@ -428,7 +429,7 @@ function drawWoodHouse(F, g, o = {}) {
     F('#5a3418', vg.x0, vg.y0, vg.x1 - vg.x0, vg.y1 - vg.y0 + 1);
     for (let y = vg.y0, i = 0; y < vg.y1; y += 3, i++) F(i % 2 ? '#c98a4f' : '#b97f45', vg.x0 + 1, y, vg.x1 - vg.x0 - 2, 2);
   }
-  drawLogWalls(F, g, () => true, o.color, LOG_ROWS, rh, lt);
+  drawLogWalls(F, g, o.logs || (() => true), o.color, LOG_ROWS, rh, lt, o.floor !== false);   // Abriss: o.logs(e, r) = Bohle steht noch
   const np = o.posts || 0;
   if (!full) {                                        // Dachstuhl
     const nt = Math.min(rg.trusses.length, o.trusses || 0);
@@ -437,7 +438,7 @@ function drawWoodHouse(F, g, o = {}) {
       F('#5a3b1c', rx - 2, rg.yTop, 5, rg.yBot - rg.yTop); F('#a0673a', rx - 1, rg.yTop, 3, rg.yBot - rg.yTop);
       F('#5a3b1c', rx, ry - 2, rg.Rr - rx, 5); F('#a0673a', rx, ry - 1, rg.Rr - rx, 3);
     }
-    for (let i = 0; i < nt; i++) { const b = rg.trusses[i]; drawBeamTop(F, b.x, b.y, b.len, b.ang, 0); }
+    for (let i = 0; i < nt; i++) { if (o.truss && !o.truss(i)) continue; const b = rg.trusses[i]; drawBeamTop(F, b.x, b.y, b.len, b.ang, 0); }   // Abriss: o.truss(i) = Binder liegt noch
   }
   // Holzschindeln: links vom First dunkler (linker Flügel), hinter dem First dunkler (rechter Flügel)
   const lc = woodColor(o.color).c;
@@ -462,7 +463,7 @@ function drawWoodHouse(F, g, o = {}) {
     const rail = (a, b) => { for (const f of [0.35, 0.7]) F('#7a4a22', a[0], a[1] - Math.round(ph * f), b[0] - a[0], Math.max(1, pw - 2)); };
     for (const [a, b] of [[0, 1], [2, 3]]) if (has(a) && has(b)) rail(P[a], P[b]);
     for (let i = 0; i < np; i++) { const [px, py] = P[i]; F('rgba(0,0,0,.2)', px - 1, py, pw + 2, 2); F('#5a3418', px - (pw >> 1), py - ph, pw, ph + 1); F('#c98a4f', px - (pw >> 1), py - ph, Math.max(1, pw - 1), ph); }
-    if (np >= P.length) {
+    if (np >= P.length && o.vroof !== false) {
       const top = P[0][1] - ph, bh = Math.max(3, Math.round(ph * 0.4));
       F('#4f3f2e', vg.x0 - 2, top - bh, vg.x1 - vg.x0 + 4, bh + 1); F('#8f7656', vg.x0 - 1, top - bh, vg.x1 - vg.x0 + 2, bh - 1); F('#a88d6a', vg.x0 - 1, top - bh, vg.x1 - vg.x0 + 2, 1);
       for (let xx = vg.x0 + 2; xx < vg.x1; xx += 5) F('#6e5a44', xx, top - bh + 1, 1, bh - 2);

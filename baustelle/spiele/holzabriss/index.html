@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261121d">
+<title>Holzhaus-Abriss</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ahud" class="hud gamehud hidden">
+  <div class="pill" id="aword" data-say="move" style="pointer-events:auto"><span class="word">UMZUG</span> <span id="acount"></span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" data-say="demolish" style="cursor:pointer"><span class="word">ABRISS</span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261121d"></script>
+<script src="../../../gemeinsam/basis.js?v=20261121d"></script>
+<script src="../../../gemeinsam/moebel.js?v=20261121d"></script>
+<script src="../../../gemeinsam/bau.js?v=20261121d"></script>
+<script>
+/* =====================================================================
+   MINISPIEL: HOLZHAUS-ABRISS (Baustelle, fertiges Holzhaus house.step = 5) – von schräg oben wie der Hof
+   Das Holzhaus wird Stück für Stück zurückgebaut (statt Abrissbirne):
+   1. Umzug: Möbel antippen → Bauarbeiter trägt sie in die Kiste, Kiste in den Transporter (wie beim Abriss).
+   2. Schindeln: übers Dach wischen (wie beim Decken, nur rückwärts) → jede Schindel fliegt in den Container. Zum Schluss das Vordach der Veranda.
+   3. Dachstuhl: Autokran. Binder antippen (oder Ausleger drüberziehen) → Haken nimmt ihn. Dann Lastwagen antippen (oder drüberziehen und loslassen) → er liegt auf der Ladefläche.
+   4. Wände: genauso, eine Wand (Balken) nach der anderen und die Veranda. Der Lastwagen nimmt 4 Teile, voll fährt er weg, ein neuer kommt.
+   5. Fundament: mit dem Bagger über die Betonsockel fahren, Schaufel voll → zum Kipper (wie Schutt wegbaggern).
+   Danach: Bauplatz leer, nächstes Haus kommt zur Auswahl (Hof.demolishHouse). Möbel bleiben gespeichert.
+   ===================================================================== */
+window.HOF_URL = '../../index.html';
+const save = Hof.save;
+const house = () => save.house;
+const STARS = 3;
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('abriss')));
+
+function siteGeo() {                                    // gleiche Lage wie Kran und Holzdach
+  const hw = Math.min(6, gc - 6) * G, hh = Math.min(4, gr - 4) * G;
+  const hx = Math.round((gc * G - hw) / 2) - G, hy = Math.max(G, Math.round(((gr - 1) * G - hh) / 2)) + 8;
+  return { hx, hy, hw, hh };
+}
+const WORKER = BUILDER_FRONT;
+function drawWorker(x, y, step) {
+  x = Math.round(x); y = Math.round(y);
+  R('rgba(0,0,0,.25)', x - 9, y - 2, 20, 3);
+  WORKER.px.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (ch === '.') return;
+    let yy = y - 24 + j * 2; if (j >= 10 && step && (i < 5) === (step > 0)) yy -= 1;
+    R(WORKER.pal[ch], x - 10 + i * 2, yy, 2, 2);
+  }));
+}
+const Q = snapF(R, 2);
+function drawFurn(f, X, Y, t) { f.draw((col, x, y, w, h) => R(col, Math.round(X + x), Math.round(Y + y), w, h), 0, 0, true, t || 0); }
+// Container (Absetzmulde) von schräg oben, fill 0–1 = wie voll mit Schindeln
+function drawSkip(F, x, y, fill) {
+  F('rgba(0,0,0,.25)', x + 3, y + 4, 44, 26);
+  F('#1f5a2a', x, y, 44, 26); F('#2f8f3f', x + 1, y + 1, 42, 24); F('#3fae52', x + 1, y + 1, 42, 2);
+  F('#173f1f', x + 4, y + 4, 36, 18);                                         // innen
+  const h = Math.round(18 * Math.min(1, fill));
+  if (h > 0) { F('#6e5a44', x + 4, y + 22 - h, 36, h); for (let yy = y + 22 - h, k = 0; yy < y + 22; yy += 3, k++) for (let xx = x + 4 + (k % 2) * 3; xx < x + 38; xx += 7) F(k % 2 ? '#8f7656' : '#a88d6a', xx, yy, 5, 2); }
+  F('#ffd23f', x + 2, y + 25, 6, 2); F('#ffd23f', x + 36, y + 25, 6, 2);   // Ösen
+}
+
+const Abriss = (() => {
+  const RH = 8, LT = 10, TIP = 50, CAP_WALL = 4;
+  let g, wood, rg, vg, up, phase, paused = false, idle = 0, winTimer = null;
+  let queue, packed, carry, box, van, boxCarry;                        // Umzug
+  let roof, vroof, flying, skip, wiping = false, roofLeft, roofTotal;  // Schindeln
+  let crane, hook, hq, follow, finger, load, items, lorry, trussOn, wallOn, verandaOn, floorOn, craneLeave = 0;   // Kran
+  let veh, truck, cells, fill, cap, loads, totalLoads, left, totalCells, honked = false, truckColor = 0;   // Fundament
+  function setWord(k, count) { const el = $('aword'); el.dataset.say = k; el.querySelector('.word').textContent = WORDS[k][0]; $('acount').textContent = count || ''; }
+  function enter() {
+    Hof.load();
+    if (!house() || house().step < 5 || house().pick || houseType().shape !== 'L') { goHof('abriss'); return; }
+    layout(true);
+    g = siteGeo(); wood = logGeo(g.hx, g.hy, g.hw, g.hh, 26); up = logWallUp(LOG_ROWS, RH, LT);
+    rg = woodRoofGeo(wood, up, LT >> 1); vg = verandaGeo(wood, up);
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+    }
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    const fx = g.hx - 18, fy = g.hy - 22 - up, fw = g.hw + 32 + 3 * G, fh = g.hh + 32 + up;   // Bauzaun
+    for (let x = fx; x <= fx + fw; x += 9) B('#d35400', x, fy - 2, 2, 7);
+    for (let y = fy; y <= fy + fh; y += 9) { B('#d35400', fx, y, 2, 6); B('#d35400', fx + fw, y, 2, 6); }
+    B('#ffffff', fx, fy, fw + 2, 2); B('#ffffff', fx, fy, 2, fh); B('#ffffff', fx + fw, fy, 2, fh);
+    // Umzug
+    const kinds = [...new Set((save.home.items || []).map(i => i.k))].filter(k => BY[k]).slice(0, 6);
+    queue = (kinds.length ? kinds : ['lamp', 'chair']).map(k => BY[k]);
+    packed = 0; carry = null; boxCarry = null;
+    g.door = { x: (wood.door.a + wood.door.b) / 2, y: wood.y1 + 4 };
+    box = { x: g.hx - 4, y: Math.min(wood.y1 + 10, (gr - 1) * G - 22), closed: false };
+    van = { x: -110, y: gr * G - VAN_H * 2 - 2, state: 'away', open: false };
+    // Schindeln: alle liegen (true = liegt noch), Vordach extra; Container links vorne
+    roof = rg.rows.map(r => Array(r.n).fill(true)); vroof = true; flying = [];
+    roofTotal = roofLeft = rg.rows.reduce((a, r) => a + r.n, 0) + 1;
+    skip = { x: Math.max(2, g.hx - 8), y: Math.min(wood.y1 + 8, (gr - 1) * G - 26), fill: 0, on: false };
+    // Kran, Teile
+    crane = { x: g.hx + g.hw + Math.round(1.7 * G), y: g.hy + 14 };
+    hook = { x: crane.x - 30, y: crane.y + 30, lh: 1, vx: 0 }; hq = []; follow = null; finger = null; load = null; lorry = null;
+    trussOn = rg.trusses.map(() => true); wallOn = wood.edges.map(() => true); verandaOn = true; floorOn = true; craneLeave = 0;
+    // Fundament: Betonsockel an den Ecken der L-Form (wie gebaut)
+    // Sockel in den Rasterfeldern unter den Ecken des L (das Haus liegt nicht genau im Raster)
+    const w0 = wood, ins = 8, seen = new Set(); cells = [];
+    for (const [px, py] of [[w0.x + ins, w0.y + ins], [w0.x + w0.cw - ins, w0.y + ins], [w0.x + w0.cw - ins, w0.ym + ins], [w0.x1 - ins, w0.ym + ins], [w0.x1 - ins, w0.y1 - ins], [w0.x + ins, w0.y1 - ins], [w0.x + w0.cw - ins, w0.y1 - ins]]) {
+      const r = Math.min(gr - 2, Math.floor(py / G)), c = Math.floor(px / G), k = r + ',' + c; if (seen.has(k)) continue; seen.add(k);
+      cells.push({ r, c, dug: false, seed: r * 31 + c * 7 }); }
+    totalCells = left = cells.length; totalLoads = 2; cap = Math.ceil(totalCells / totalLoads); fill = 0; loads = 0; veh = null; truck = null;
+    phase = 'move'; idle = 0; paused = false;
+    show('ahud'); setWord('move', '0/' + queue.length);
+    setTimeout(() => sayWord('move'), 400);
+  }
+  $('pausebtn').addEventListener('click', () => { if (phase === 'done') return; paused = true; wiping = false; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+
+  // ---------- 1. Umzug (wie beim Abriss) ----------
+  function pieceSpot(f) { return { x: Math.round(g.door.x - f.w / 2), y: Math.round(g.door.y + 2) }; }
+  function tapMove() {
+    if (!carry && packed < queue.length) { const f = queue[packed]; carry = { f, t: 0 }; sfx.click(); setWord(f.key, packed + '/' + queue.length); sayWord(f.key); return; }
+    if (packed >= queue.length && van.state === 'park' && !boxCarry) { boxCarry = { t: 0 }; van.open = true; sfx.click(); setWord('box'); sayWord('box'); }
+  }
+  function updMove(dt) {
+    if (carry) {
+      carry.t += dt / 1.4;
+      if (carry.t >= 1) { carry = null; packed++; sfx.clod(); setWord('move', packed + '/' + queue.length);
+        for (let i = 0; i < 6; i++) spawn(box.x + 11, box.y + 4, rnd(-15, 15), rnd(-12, -4), .3, '#d9a066', 30);
+        if (packed >= queue.length) { box.closed = true; sfx.load(); setTimeout(() => { van.state = 'come'; sfx.honk(); setWord('van'); sayWord('van'); }, 700); } }
+    }
+    if (van.state === 'come') { van.x += 110 * dt; if (van.x >= box.x - 20) { van.x = box.x - 20; van.state = 'park'; } }
+    if (boxCarry) { boxCarry.t += dt / 1.2; if (boxCarry.t >= 1) { boxCarry = null; box.gone = true; van.open = false; sfx.clod(); van.state = 'go'; sfx.honk(); } }
+    if (van.state === 'go') { van.x += 140 * dt; if (van.x > W + 20) { van.state = 'gone'; startRoof(); } }
+  }
+  function drawMove(time) {
+    if (!box.gone && !boxCarry) drawMoveBox(Q, box.x, box.y, box.closed);
+    const nf = !carry && packed < queue.length ? queue[packed] : null;
+    if (nf) { const p = pieceSpot(nf); drawFurn(nf, p.x, p.y, time);
+      if (Math.abs(Math.sin(time / 260)) > .5) { R('rgba(255,210,63,.9)', p.x - 2, p.y - 2, nf.w + 4, 1); R('rgba(255,210,63,.9)', p.x - 2, p.y + nf.h + 1, nf.w + 4, 1); R('rgba(255,210,63,.9)', p.x - 2, p.y - 2, 1, nf.h + 4); R('rgba(255,210,63,.9)', p.x + nf.w + 1, p.y - 2, 1, nf.h + 4); } }
+    if (carry) {
+      const k = carry.t, back = k > 0.6, u = back ? (k - 0.6) / 0.4 : k / 0.6;
+      const sx = g.door.x, sy = g.door.y + 26, ex = box.x + 11, ey = box.y + 16;
+      const x = back ? ex + (sx - ex) * u : sx + (ex - sx) * u, y = back ? ey + (sy - ey) * u : sy + (ey - sy) * u;
+      drawWorker(x, y, Math.floor(time / 120) % 2 ? 1 : -1);
+      if (!back) drawFurn(carry.f, Math.round(x - carry.f.w / 2), Math.round(y - 24 - carry.f.h), time);
+    } else if (!boxCarry) drawWorker(g.door.x + 18, g.door.y + 26, 0);
+    if (van.state !== 'away' && van.state !== 'gone') drawVan(Q, van.x, van.y, van.open, 2);
+    if (boxCarry) { const u = boxCarry.t, x = box.x + 11 + (van.x + 4 - box.x - 11) * u, y = box.y + 16 + (van.y + 40 - box.y - 16) * u;
+      drawWorker(x, y, Math.floor(time / 120) % 2 ? 1 : -1); drawMoveBox(Q, Math.round(x - 11), Math.round(y - 24 - 18), true); }
+    if (idle > 2.5 && !carry && !boxCarry) { const b = Math.round(Math.abs(Math.sin(time / 220)) * 4);
+      if (nf) { const p = pieceSpot(nf); drawArrow(Math.round(p.x + nf.w / 2 - 3), p.y - 14 - b); } else if (van.state === 'park') drawArrow(box.x + 8, box.y - 14 - b); }
+  }
+
+  // ---------- 2. Schindeln runter (wischen) → fliegen in den Container ----------
+  function vroofRect() { const P = vg.posts, ph = vg.ph, top = P[0][1] - ph, bh = Math.max(3, Math.round(ph * 0.4)); return [vg.x0 - 2, top - bh, vg.x1 - vg.x0 + 4, bh + 1]; }
+  function startRoof() { phase = 'roof'; idle = 0; skip.on = true; sfx.load(); setWord('shingle', '0/' + roofTotal); sayWord('shingle'); }
+  function toss(x, y) {                               // eine Schindel fliegt im Bogen in den Container
+    flying.push({ x0: x, y0: y, x1: skip.x + 8 + rnd(0, 28), y1: skip.y + 8 + rnd(0, 10), t: 0, d: 0.55 + Math.random() * 0.2 });
+  }
+  function wipe(x, y) {
+    let hit = false;
+    for (let i = 0; i < rg.rows.length; i++) for (let c = 0; c < rg.rows[i].n; c++) {
+      if (!roof[i][c]) continue;
+      const [rx, ry, rw, rh] = rg.cell(i, c);
+      if (x > rx - 3 && x < rx + rw + 3 && y > ry - 3 && y < ry + rh + 3) { roof[i][c] = false; roofLeft--; hit = true; toss(rx + rw / 2, ry + rh / 2); }
+    }
+    if (vroof && roof.every(r => r.every(v => !v))) {  // zum Schluss das Vordach der Veranda (erst wenn das Dach leer ist, sonst sieht man es kaum)
+      const [vx, vy, vw, vh] = vroofRect();
+      if (x > vx - 4 && x < vx + vw + 4 && y > vy - 8 && y < vy + vh + 8) { vroof = false; roofLeft--; hit = true; for (let k = 0; k < 3; k++) toss(vx + vw * (k + 1) / 4, vy + 2); }
+    }
+    if (hit) { sfx.click(); setWord('shingle', (roofTotal - roofLeft) + '/' + roofTotal); }
+  }
+  function updRoof(dt) {
+    for (const f of flying) { f.t += dt / f.d; if (f.t >= 1 && !f.in) { f.in = true; skip.fill = Math.min(1, skip.fill + 1 / (roofTotal + 2)); sfx.clod(); } }
+    flying = flying.filter(f => !f.in);
+    if (phase === 'roof' && roofLeft <= 0 && !flying.length) { phase = 'wait'; wiping = false; sfx.load(); confetti(); setTimeout(startTrusses, 1200); }
+  }
+  function drawFlying() {
+    for (const f of flying) { const u = Math.min(1, f.t), x = f.x0 + (f.x1 - f.x0) * u, y = f.y0 + (f.y1 - f.y0) * u - Math.sin(u * Math.PI) * 30;
+      Q('#4f3f2e', Math.round(x) - 3, Math.round(y) - 2, 7, 5); Q('#a88d6a', Math.round(x) - 2, Math.round(y) - 1, 5, 3); }
+  }
+
+  // ---------- 3./4. Autokran: Dachstuhl und Wände auf den Lastwagen ----------
+  const liftH = lh => Math.round(4 + lh * 22);
+  const busy = () => hq.length > 0;
+  const to = (x, y, lh, then) => hq.push({ x, y, lh, then });
+  function newLorry(capN) {
+    const park = Math.max(4, Math.min(skip.x + 50, W - 66));
+    lorry = { x: W + 10, park, y: (gr - 1) * G - 4, n: 0, cap: capN, loads: [], state: 'arrive' };
+  }
+  function startTrusses() {
+    phase = 'truss'; idle = 0;
+    items = rg.trusses.map((b, i) => ({ kind: 'truss', i, x: b.x, y: b.y, len: b.len, ang: b.ang }));
+    newLorry(items.length); setWord('truss', '0/' + items.length); sayWord('crane');
+  }
+  function startWalls() {
+    phase = 'wall'; idle = 0;
+    const e = wood.edges, top = (LOG_ROWS - 1) * RH;
+    items = [{ kind: 'veranda', x: (vg.x0 + vg.x1) / 2, y: (vg.y0 + vg.y1) / 2, len: vg.x1 - vg.x0, ang: 0 }]
+      .concat(e.map((d, i) => d.k === 'h' ? { kind: 'wall', i, x: (d.a + d.b) / 2, y: d.at - top / 2, len: d.b - d.a, ang: 0 } : { kind: 'wall', i, x: d.at, y: (d.a + d.b) / 2 - top / 2, len: d.b - d.a, ang: Math.PI / 2 }));
+    newLorry(CAP_WALL); setWord('beams', '0/' + items.length); sayWord('beams');
+  }
+  const total = () => items.length, gone = () => items.filter(q => q.gone).length;
+  const itemAt = (x, y, r) => {                      // nächstes Teil an dieser Stelle (Binder/Wand = Strecke, Veranda = Fläche)
+    let best = null, bd = r;
+    for (const q of items) { if (q.gone) continue;
+      let d;
+      if (q.kind === 'veranda') d = (x > vg.x0 - 4 && x < vg.x1 + 4 && y > vg.y0 - vg.ph - 8 && y < vg.y1 + 6) ? 0 : 1e9;
+      else { const ca = Math.cos(q.ang), sa = Math.sin(q.ang), dx = x - q.x, dy = y - q.y, u = clamp(dx * ca + dy * sa, -q.len / 2, q.len / 2); d = Math.hypot(dx - u * ca, dy - u * sa); }
+      if (d < bd) { bd = d; best = q; } }
+    return best;
+  };
+  const onLorry = (x, y) => lorry && lorry.state === 'park' && lorry.n < lorry.cap && x > lorry.x - 10 && x < lorry.x + 66 && y > lorry.y - 16 && y < lorry.y + 30;
+  const lorrySlot = () => [lorry.x + 22, lorry.y + flatbedSlot(lorry.n, Math.max(4, lorry.cap)) + 1];
+  function fetch(q) {
+    follow = null; sfx.click();
+    to(q.x, q.y, 1); to(q.x, q.y, 0, () => {
+      q.gone = true; load = { q, k: 1, ang: q.ang }; sfx.clod();
+      if (q.kind === 'truss') trussOn[q.i] = false; else if (q.kind === 'wall') wallOn[q.i] = false; else verandaOn = false;
+      for (let k = 0; k < 8; k++) spawn(q.x + rnd(-8, 8), q.y + rnd(-6, 6), rnd(-15, 15), rnd(-18, 2), .4, '#c9a067', 30);
+      if (wallOn.every(v => !v)) floorOn = false;
+    });
+    to(q.x, q.y, 1, () => { if (finger) follow = { x: finger.x, y: finger.y, sx: finger.x, sy: finger.y }; });
+  }
+  function drop() {
+    const [x, y] = lorrySlot(); follow = null;
+    to(x, y, 1); to(x, y, 0, () => {
+      lorry.loads.push(load.q); lorry.n++; load = null; sfx.load();
+      const w = phase === 'truss' ? 'truss' : 'beams'; setWord(w, gone() + '/' + total());
+      if (lorry.n >= lorry.cap || gone() >= total()) { lorry.state = 'leave'; setTimeout(() => sfx.honk(), 300); }
+    });
+    to(x, y, 1);
+  }
+  function lorryGone() {                              // Lastwagen ist weg: neuer, oder nächster Abschnitt
+    if (gone() < total()) { newLorry(lorry.cap); return; }
+    lorry = null;
+    if (phase === 'truss') setTimeout(startWalls, 400); else startFound();
+  }
+  function pointerLift(type, x, y) {
+    if (type === 'down' || type === 'move') finger = { x, y }; else if (type === 'up') finger = null;
+    if (type === 'down') {
+      if (busy()) return;
+      if (!load) { const q = itemAt(x, y, 16); if (q) { fetch(q); return; } }
+      if (load && onLorry(x, y)) { drop(); sfx.click(); return; }
+      follow = { x, y, sx: x, sy: y }; return;
+    }
+    if (type === 'move' && follow) { follow.x = x; follow.y = y; return; }
+    if (type === 'up' && follow) { follow = null; if (load && onLorry(hook.x, hook.y)) drop(); }
+  }
+  function updLift(dt) {
+    if (load) { const over = lorry && Math.abs(hook.x - lorry.x - 22) < 40 && Math.abs(hook.y - lorry.y - 10) < 30;   // über dem Lastwagen: kurz und längs, damit es draufpasst
+      load.k = approach(load.k, over ? 0 : 1, 2.4 * dt); load.ang = approach(load.ang, over ? 0 : load.q.ang, 2.4 * dt); }
+    const ox = hook.x, q = hq[0];
+    if (q) {
+      const d = Math.hypot(q.x - hook.x, q.y - hook.y), sp = 170 * dt;
+      if (d > sp) { hook.x += (q.x - hook.x) / d * sp; hook.y += (q.y - hook.y) / d * sp; }
+      else { hook.x = q.x; hook.y = q.y; hook.lh = approach(hook.lh, q.lh, 2.2 * dt); if (hook.lh === q.lh) { hq.shift(); if (q.then) q.then(); } }
+    } else if (follow) {
+      const d = Math.hypot(follow.x - hook.x, follow.y - hook.y), sp = 260 * dt;
+      if (d > sp) { hook.x += (follow.x - hook.x) / d * sp; hook.y += (follow.y - hook.y) / d * sp; } else { hook.x = follow.x; hook.y = follow.y; }
+      hook.x = clamp(hook.x, 8, W - 8); hook.y = clamp(hook.y, 30, H - 8);
+      if (!load) { const it = itemAt(hook.x, hook.y, 8); if (it) fetch(it); }   // Ausleger über ein Teil gezogen: Haken nimmt es
+    }
+    hook.vx = approach(hook.vx, (hook.x - ox) / Math.max(dt, 1e-3), 600 * dt);
+    if (lorry) {
+      if (lorry.state === 'arrive') { lorry.x = approach(lorry.x, lorry.park, 110 * dt); if (lorry.x === lorry.park) { lorry.state = 'park'; sfx.honk(); } }
+      else if (lorry.state === 'leave') { lorry.x -= 120 * dt; if (lorry.x < -80) lorryGone(); }
+    }
+    setEngine(true, busy() || !!follow, 30);
+  }
+  // Teil am Haken bzw. auf der Ladefläche zeichnen (k = 1 volle Länge, 0 = kurz, damit es auf den Lastwagen passt)
+  function drawPiece(q, x, y, ang, k) {
+    const len = Math.round(Math.min(q.len, 44) + (q.len - Math.min(q.len, 44)) * k);
+    if (q.kind === 'truss') { drawBeamTop(Q, x, y, len, ang, 0); return; }
+    const c = woodColor().c, vert = Math.abs(Math.sin(ang)) > 0.7;
+    if (q.kind === 'veranda') { const w = Math.round(Math.min(len, 40)), h = 12;
+      Q('#5a3418', x - w / 2, y - h / 2, w, h); for (let yy = 0; yy < h - 1; yy += 3) Q(yy % 6 ? '#c98a4f' : '#b97f45', x - w / 2 + 1, y - h / 2 + yy + 1, w - 2, 2);
+      for (const px of [x - w / 2 + 1, x + w / 2 - 4]) Q('#7a4a22', px, y - h / 2 - 4, 3, 6); return; }
+    for (let r = 0; r < 3; r++) {                     // Bündel aus Balken
+      const o = (r - 1) * 5;
+      if (vert) { Q(c[0], x + o - 3, y - len / 2, 6, len); Q(c[1], x + o - 2, y - len / 2 + 1, 4, len - 2); Q(c[3], x + o - 2, y - len / 2 + 1, 4, 3); }
+      else { Q(c[0], x - len / 2, y + o - 3, len, 6); Q(c[1], x - len / 2 + 1, y + o - 2, len - 2, 4); Q(c[3], x - len / 2 + 1, y + o - 2, 3, 4); Q(c[3], x + len / 2 - 4, y + o - 2, 3, 4); }
+    }
+  }
+  function drawLorry(time) {
+    if (!lorry) return;
+    const L = Math.round(lorry.x), tot = Math.max(4, lorry.cap);
+    drawFlatbedTop(Q, L, lorry.y, 0, 44, tot);
+    lorry.loads.forEach((q, i) => drawPiece(q, L + 22, lorry.y + flatbedSlot(i, tot) + 1, 0, 0));
+  }
+  function drawCraneAll(time) {
+    if (craneLeave) { crane.y += craneLeave * 4; hook.y += craneLeave * 4; }
+    drawMobileCraneBody(Q, crane.x, crane.y, 1);
+    const sway = clamp(-hook.vx * 0.04, -8, 8), lh = liftH(hook.lh), lx = hook.x + sway, ly = hook.y - lh;
+    if (load) { Q('rgba(0,0,0,.2)', Math.round(hook.x) - 8, Math.round(hook.y), 16, 3); drawPiece(load.q, lx, ly + 4, load.ang, load.k); }
+    else Q('rgba(0,0,0,.2)', Math.round(hook.x) - 2, Math.round(hook.y), 5, 3);
+    drawMobileCraneBoom(Q, crane.x, crane.y, hook.x, hook.y, TIP);
+    drawRope(R, Math.round(hook.x), Math.round(hook.y - TIP), Math.round(lx), Math.round(ly));
+  }
+  function drawLiftHints(time) {
+    if (busy() || follow) return;
+    const a = Math.abs(Math.sin(time / 260)) > .5, b = Math.abs(Math.sin(time / 220)) * 4;
+    if (!load) {
+      for (const q of items) { if (q.gone) continue; const col = a ? 'rgba(255,210,63,.85)' : 'rgba(255,210,63,.4)';
+        if (q.kind === 'veranda') { R(col, vg.x0 - 2, vg.y0 - 2, vg.x1 - vg.x0 + 4, 2); R(col, vg.x0 - 2, vg.y1, vg.x1 - vg.x0 + 4, 2); }
+        else if (q.ang) R(col, q.x - 2, q.y - Math.round(q.len / 2), 4, q.len); else R(col, q.x - Math.round(q.len / 2), q.y - 2, q.len, 4); }
+      if (idle > 2) { const q = items.find(o => !o.gone); if (q) drawArrow(Math.round(q.x - 3), Math.round(q.y - 20 - b)); }
+    } else if (lorry && lorry.state === 'park') {
+      const col = a ? 'rgba(126,217,87,.9)' : 'rgba(126,217,87,.45)'; R(col, lorry.x - 2, lorry.y - 2, 48, 3); R(col, lorry.x - 2, lorry.y + Math.max(4, lorry.cap) * 5 + 3, 48, 3);
+      drawArrow(Math.round(lorry.x + 19), Math.round(lorry.y - 16 - b));
+    }
+  }
+
+  // ---------- 5. Fundament wegbaggern (wie Schutt) ----------
+  const cellAt = (r, c) => cells.find(q => q.r === r && q.c === c);
+  const truckCell = (r, c) => truck && r === gr - 1 && ['arrive', 'park', 'pause'].includes(truck.state) && (c === truck.tx || c === truck.tx + 1);
+  const passable = (r, c) => r >= 0 && c >= 0 && r < gr && c < gc && !truckCell(r, c);
+  const nearTruck = () => truck && !veh.moving && veh.r >= gr - 2 && veh.c >= truck.tx - 1 && veh.c <= truck.tx + 2;
+  const canUnload = () => fill >= cap || (left === 0 && fill > 0);
+  function startFound() {
+    phase = 'found'; idle = 0; craneLeave = 0.01; setEngine(false, false); skip.on = false;   // Container ist abgeholt (sonst steht er auf einem Sockel)
+    veh = newMover(gr - 2, gc - 2, Math.PI); veh.unloading = false;
+    newTruck(); setWord('holes', '0/' + totalCells); sayWord('holes');
+  }
+  function newTruck() {
+    truckColor = (truckColor + 1) % TIPPERS.length; let tx;
+    for (let t = 0; t < 30; t++) { tx = 1 + ((Math.random() * (gc - 3)) | 0); if (!(veh.r === gr - 1 && (veh.c === tx || veh.c === tx + 1))) break; }
+    truck = { tx, x: W + 10, y: (gr - 1) * G + 4, park: tx * G + 6, fill: 0, state: 'arrive', timer: 0, col: TIPPERS[truckColor] };
+  }
+  function work(m) {
+    if (m.done || m.prog < 0.25) return;
+    m.done = true;
+    const q = cellAt(m.tr, m.tc);
+    if (!q || q.dug) return;
+    if (fill >= cap) { if (!honked) { sfx.honk(); honked = true; } return; }
+    q.dug = true; left--; fill++; honked = false; sfx.clod(); setWord('holes', (totalCells - left) + '/' + totalCells);
+    const px = q.c * G + G / 2, py = q.r * G + G / 2;
+    for (let i = 0; i < 14; i++) spawn(px + rnd(-10, 10), py + rnd(-10, 10), rnd(-25, 25), rnd(-30, 10), rnd(.3, .8), pick(['#8a8a8a', '#b0b0b0', '#6a5a48']), 40);
+  }
+  function updFound(dt) {
+    if (craneLeave) craneLeave += dt;
+    if (!veh.unloading) {
+      moverUpdate(veh, dt, { passable, speed: 1.9, onProg: m => { work(m); const p = moverPos(m);
+        if (Math.random() < .25) spawn(p.x - Math.cos(m.a) * 12, p.y - Math.sin(m.a) * 12, rnd(-6, 6), rnd(-6, 6), .5, 'rgba(90,80,70,.6)'); } });
+      if (truck.state === 'park' && canUnload() && nearTruck()) { veh.unloading = true; sfx.pour(); }
+    } else {
+      const amt = Math.min(fill, cap * dt / 1.3); fill -= amt; truck.fill += amt / cap;
+      const p = moverPos(veh), tx = truck.x + 23, ty = truck.y + 8;
+      for (let i = 0; i < 3; i++) { const sx = p.x + rnd(-3, 3), sy = p.y + rnd(-3, 3), ex = tx + rnd(-7, 7), ey = ty + rnd(-4, 4); spawn(sx, sy, (ex - sx) / .4, (ey - sy) / .4, .4, pick(['#8a8a8a', '#b0b0b0'])); }
+      if (fill <= 0.001) { fill = 0; veh.unloading = false; loads++; sfx.load(); truck.state = 'pause'; truck.timer = 0.6; }
+    }
+    setEngine(true, veh.moving || veh.unloading, 40);
+    const t = truck; if (!t) return;
+    if (t.state === 'arrive') { t.x = approach(t.x, t.park, 80 * dt); if (t.x === t.park) t.state = 'park'; }
+    else if (t.state === 'pause') { t.timer -= dt; if (t.timer <= 0) { t.state = 'leave'; t.v = 10; sfx.honk(); } }
+    else if (t.state === 'leave') { t.v += 90 * dt; t.x -= t.v * dt; if (t.x < -50) { if (left === 0 && fill === 0) { t.state = 'gone'; finish(); } else newTruck(); } }
+  }
+  function drawPad(q) {                               // Betonsockel im Boden
+    const x = q.c * G + 4, y = q.r * G + 4;
+    Q('#6a6a6a', x, y, G - 8, G - 8); Q('#a8a8a8', x + 2, y + 2, G - 12, G - 12); Q('#c8c8c8', x + 2, y + 2, G - 12, 2);
+  }
+  function finish() {
+    phase = 'done'; hide('ahud'); clearTapGoal(); setEngine(false, false);
+    Hof.demolishHouse(STARS, HOUSE_TYPES.length);
+    setTimeout(() => {
+      $('wingain').textContent = STARS;
+      const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(STARS); applyIcons(row);
+      show('gwin'); sfx.win(); confetti(); setTimeout(() => sayWord('demolish'), 1200);
+      winTimer = setTimeout(() => goHof('abriss'), 4200);
+    }, 300);
+  }
+
+  function onPointer(type, x, y) {
+    if (paused) return true;
+    idle = 0;
+    if (phase === 'roof') { if (type === 'down') { wiping = true; wipe(x, y); } else if (type === 'move' && wiping) wipe(x, y); else if (type === 'up') wiping = false; return true; }
+    if (phase === 'truss' || phase === 'wall') { pointerLift(type, x, y); return true; }
+    if (phase === 'found') return false;             // Feld antippen: Bagger fährt hin
+    if (type === 'down' && phase === 'move') tapMove();
+    return true;
+  }
+  function update(dt) {
+    if (paused) return;
+    idle += dt;
+    if (phase === 'move') updMove(dt);
+    updRoof(dt);
+    if (phase === 'truss' || phase === 'wall') updLift(dt);
+    if (phase === 'found') updFound(dt);
+  }
+  function draw(time) {
+    if (!wood) return;                                 // falsches Haus: es geht gleich zurück zur Stadt
+    ctx.drawImage(bg, 0, 0);
+    // Fundament: sichtbar, sobald die Wände weg sind
+    if (!floorOn) for (const q of cells) if (!q.dug) drawPad(q);
+    if (wallOn.some(Boolean) || verandaOn || floorOn) {
+      const anyTruss = trussOn.some(Boolean);
+      drawWoodHouse(Q, wood, { rh: RH, lt: LT, trusses: anyTruss ? rg.trusses.length : 0, truss: i => trussOn[i], ridge: anyTruss,
+        roof: (i, c) => roof[i][c], vroof, deck: verandaOn, posts: verandaOn ? 4 : 0, chair: verandaOn, logs: e => wallOn[e], floor: floorOn, time });
+    }
+    if (skip.on) drawSkip(Q, skip.x, skip.y, skip.fill);
+    if (phase === 'move') drawMove(time);
+    drawFlying();
+    if (phase === 'roof' && idle > 2 && !wiping) {     // Hinweis: übers Dach wischen
+      const left0 = roof.every(r => r.every(v => !v)), k = (time / 1100) % 1;
+      if (left0 && vroof) { const [vx, vy, vw] = vroofRect(); drawArrow(Math.round(vx + vw / 2 - 3), Math.round(vy - 16 - Math.abs(Math.sin(time / 220)) * 4)); }
+      else { const i = roof.findIndex(r => r.some(Boolean)), r = rg.rows[i], y = Math.round((r.y + r.y2) / 2), x = Math.round(r.x0 + (r.x1 - r.x0) * k);
+        R('#ffd23f', x - 3, y - 3, 6, 6); R('#fff', x - 1, y - 1, 2, 2); }
+    }
+    if (phase === 'truss' || phase === 'wall') { drawLorry(time); drawLiftHints(time); drawCraneAll(time); }
+    else if (craneLeave && craneLeave < 3) drawCraneAll(time);
+    if (veh) {
+      if (truck && truck.state !== 'gone') drawTipper(truck.x, truck.y, truck.fill, truck.col);
+      drawMover(veh, EXCAVATOR, time);
+      if (fill > 0) { const p = moverPos(veh), fx = p.x + Math.cos(veh.a) * 12, fy = p.y + Math.sin(veh.a) * 12, n = Math.ceil(4 * fill / cap);
+        R('#6a6058', fx - 4, fy - 4, 8, 8); R('#a8a8a8', fx - 3, fy - 3 - n, 6, 3 + n); }
+      const bounce = Math.abs(Math.sin(time / 180)) * 4;
+      if (phase === 'found' && truck && canUnload() && truck.state === 'park' && !veh.unloading) drawArrow(Math.round(truck.x + 16), Math.round(truck.y - 12 - bounce));
+      else if (phase === 'found' && !veh.moving && idle > 1.5) { const q = cells.find(o => !o.dug); if (q) drawArrow(q.c * G + 9, Math.round(q.r * G - 14 - bounce)); }
+      if (phase === 'found') { const p = moverPos(veh); for (let i = 0; i < cap; i++) R(i < Math.round(fill) ? '#ffd23f' : 'rgba(0,0,0,.35)', Math.round(p.x - cap * 2 + i * 4), Math.round(p.y - 24), 3, 3); }
+    }
+  }
+  function resize() { layout(false); }
+  function exit() { clearTimeout(winTimer); setEngine(false, false); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ phase, packed, n: queue.length, van: van.state, roofLeft, vroofRect: vroofRect(),
+    cells: rg.rows.map((r, i) => Array.from({ length: r.n }, (_, c) => rg.cell(i, c))), items: items && items.map(q => ({ x: q.x, y: q.y, kind: q.kind, gone: !!q.gone })),
+    lorry: lorry && { x: lorry.x, y: lorry.y, state: lorry.state, n: lorry.n, cap: lorry.cap }, load: !!load, busy: busy(), left, fill, cap,
+    veh: veh && { r: veh.r, c: veh.c, moving: veh.moving }, truck: truck && { tx: truck.tx, state: truck.state }, todo: cells.filter(q => !q.dug).map(q => [q.r, q.c]) }) };
+})();
+startLoop(Abriss);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

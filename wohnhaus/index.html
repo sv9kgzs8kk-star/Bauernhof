@@ -114,8 +114,9 @@ const Room = (() => {
     if (WOOD) stairs = { x: vx - 30, y: floor.y + 6, w: 24, h: 40, ladder: true };                  // Leiter hinten rechts im Wohnzimmer
     buildGrid();
     paint();
-    const fixed = list().map(it => { const f = rotF(BY[it.k], it.r); if (!f || !onLevel(it)) return it; const p = toScreen(f, it); return Object.assign({}, it, fit(f, p.x, p.y)); });
-    if (fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed, WHERE);   // Möbel nicht in Innenwänden
+    const fixed = list().filter(it => { const f = rotF(BY[it.k], it.r); return !f || !onLevel(it) || !lost(f, it); })   // Möbel an Stellen, die es hier nicht gibt: weg
+      .map(it => { const f = rotF(BY[it.k], it.r); if (!f || !onLevel(it)) return it; const p = toScreen(f, it); return Object.assign({}, it, fit(f, p.x, p.y)); });
+    if (fixed.length !== list().length || fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed, WHERE);   // Möbel nicht in Innenwänden
   }
   function layoutBar() {
     const barH = 38 * Math.max(1, S - 1) + 18;
@@ -341,8 +342,19 @@ const Room = (() => {
       if (m === left) r.x -= left; else if (m === right) r.x += right; else if (m === up) r.y -= up; else r.y += down;
       r.x = clamp(r.x, floor.x, floor.x + floor.w - f.W); r.y = clamp(r.y, floor.y, floor.y + floor.h - f.H);
     }
+    if (blocked(r)) {                                  // steckt noch im Garten/in einer Wand/auf der Treppe: nächste freie Stelle suchen
+      let best = null, bd = 1e9;
+      for (let yy = floor.y; yy <= floor.y + floor.h - f.H; yy += 4) for (let xx = floor.x; xx <= floor.x + floor.w - f.W; xx += 4) {
+        const q = { x: xx, y: yy, w: f.W, h: f.H }, d = (xx - r.x) ** 2 + (yy - r.y) ** 2; if (d < bd && !blocked(q)) { bd = d; best = q; } }
+      if (best) r = best;
+    }
     return toFrac(f, r.x, r.y);
   }
+  const blockers = () => stairs ? [...walls, stairs] : walls;
+  const blocked = r => blockers().some(wl => hit(r, wl));
+  // Steht ein Möbel (aus einem früheren Haus) mitten im Garten, unterm Vordach oder auf der Treppe? Dann kommt es weg.
+  const lost = (f, it) => { const p = toScreen(f, it), cx = p.x + f.W / 2, cy = p.y + f.H / 2;
+    return walls.concat(stairs ? [stairs] : []).some(wl => (wl.kind === 'out' || wl === stairs) && cx > wl.x && cx < wl.x + wl.w && cy > wl.y && cy < wl.y + wl.h); };
   function put(f, cx, cy, i) {
     const pos = fit(f, cx - f.W / 2, cy - f.H / 2), l = list().slice();
     if (i == null) l.push(Object.assign({ k: f.key, ...pos }, level ? { f: level } : {})); else l[i] = Object.assign({}, l[i], pos);
@@ -497,7 +509,17 @@ const Room = (() => {
     if (sel || drag) {
       const on = Math.abs(Math.sin(time / 260)) > .5;
       ctx.strokeStyle = on ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.5)'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
-      ctx.strokeRect(floor.x + 1, floor.y + 1, floor.w - 2, floor.h - 2); ctx.setLineDash([]);
+      // Rahmen um die Fläche, auf die Möbel dürfen: beim Holzhaus L-förmig (ohne Garten, oben ohne Vordach), Treppe/Leiter ausgespart
+      const x0 = floor.x + 1, y0 = floor.y + 1, x1 = floor.x + floor.w - 1, y1 = floor.y + floor.h - 1, outs = walls.filter(r => r.kind === 'out');
+      const garden = outs.find(r => r.y < floor.y), roofOut = outs.find(r => r.y >= floor.y);
+      ctx.beginPath();
+      if (garden || roofOut) {
+        const vx = (garden || roofOut).x + 1, gy = garden ? Math.min(y1, garden.y + garden.h + 1) : y0, ry = roofOut ? roofOut.y - 1 : y1;
+        ctx.moveTo(x0, y0); ctx.lineTo(vx, y0); ctx.lineTo(vx, gy); ctx.lineTo(x1, gy); ctx.lineTo(x1, ry); ctx.lineTo(vx, ry); ctx.lineTo(vx, y1); ctx.lineTo(x0, y1); ctx.closePath();
+      } else ctx.rect(x0, y0, x1 - x0, y1 - y0);
+      if (stairs) ctx.rect(stairs.x - 1, stairs.y - 1, stairs.w + 2, stairs.h + 2);
+      ctx.stroke(); ctx.setLineDash([]);
+      if (stairs) { ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(stairs.x, stairs.y, stairs.w, stairs.h); }
     }
     if (drag) { const f = drag.f; R('rgba(0,0,0,.25)', Math.round(drag.x + drag.dx - f.W / 2) + 4, Math.round(drag.y + drag.dy - f.H / 2) + 6, f.W, f.H); drawAt(f, Math.round(drag.x + drag.dx - f.W / 2), Math.round(drag.y + drag.dy - f.H / 2) - 3, true, time); }
     // Nacht: alles wird dunkel, Zzz steigen auf, dann wird es wieder hell

@@ -71,7 +71,7 @@ function finishStep(step, key, back) {
 /* =====================================================================
    MINISPIEL: DACHSTUHL MIT DEM AUTOKRAN (Baustelle, Wohnhaus Schritt 4) – schräg von oben wie der Hof
    Binder auf dem Tieflader antippen oder den Ausleger über den Tieflader ziehen → der Haken geht runter und hebt ihn an.
-   Ein Tieflader bringt höchstens 3 Binder; ist er leer, fährt er weg und ein neuer kommt. Mit dem Finger ziehen: Ausleger schwenkt hin und her,
+   Ein Tieflader bringt höchstens 3 Binder; ist er leer, fährt er (vorwärts) nach rechts weg und ein neuer kommt von links. Mit dem Finger ziehen: Ausleger schwenkt hin und her,
    die Last schwebt mit (Schatten am Boden zeigt, wo sie landet). Über der leuchtenden Stelle loslassen → sie wird abgesetzt.
    Nur antippen geht auch (Binder, dann leuchtende Stelle). Kleines Haus 3 Binder, großes Haus 6. Dann RICHTFEST (house.step = 4).
    Holzhaus (L-Form): 4 Binder auf die Blockwände, 2 quer über den linken Flügel, 2 längs über den rechten (woodRoofGeo in bau.js).
@@ -199,8 +199,8 @@ const Kran = (() => {
       hook.x = clamp(hook.x, 8, W - 8); hook.y = clamp(hook.y, 30, H - 8);
       if (!carry && onTruck(hook.x, hook.y)) fetch();   // Ausleger über den Tieflader gezogen: Haken geht automatisch runter und nimmt den Binder
     }
-    // Tieflader: leer → fährt nach links weg, neuer kommt von rechts mit den nächsten Bindern
-    if (truck.state === 'leave') { truck.x -= 120 * dt; if (truck.x < -70) { if (delivered >= N) { truck.state = 'gone'; truck.x = -200; } else { truck.load = Math.min(PER_TRUCK, N - delivered); delivered += truck.load; truck.x = W + 10; truck.state = 'arrive'; } } }
+    // Tieflader: leer → fährt nach rechts weg, neuer kommt von links mit den nächsten Bindern
+    if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 10) { if (delivered >= N) { truck.state = 'gone'; truck.x = -200; } else { truck.load = Math.min(PER_TRUCK, N - delivered); delivered += truck.load; truck.x = -70; truck.state = 'arrive'; } } }   // Fahrerhaus vorne rechts: vorwärts nach rechts weg, neuer kommt von links
     else if (truck.state === 'arrive') { truck.x = approach(truck.x, truck.park, 110 * dt); if (truck.x === truck.park) { truck.state = 'park'; sfx.honk(); } }
     hook.vx = approach(hook.vx, (hook.x - ox) / Math.max(dt, 1e-3), 600 * dt);
     if (fest !== null) fest += dt;

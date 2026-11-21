@@ -216,7 +216,7 @@ const Abriss = (() => {
   const to = (x, y, lh, then) => hq.push({ x, y, lh, then });
   function newLorry(capN) {
     const park = Math.max(4, Math.min(skip.x + 50, W - 66));
-    lorry = { x: W + 10, park, y: (gr - 1) * G - 4, n: 0, cap: capN, loads: [], state: 'arrive' };
+    lorry = { x: -70, park, y: (gr - 1) * G - 4, n: 0, cap: capN, loads: [], state: 'arrive' };
   }
   function startTrusses() {
     phase = 'truss'; idle = 0;
@@ -294,7 +294,7 @@ const Abriss = (() => {
     hook.vx = approach(hook.vx, (hook.x - ox) / Math.max(dt, 1e-3), 600 * dt);
     if (lorry) {
       if (lorry.state === 'arrive') { lorry.x = approach(lorry.x, lorry.park, 110 * dt); if (lorry.x === lorry.park) { lorry.state = 'park'; sfx.honk(); } }
-      else if (lorry.state === 'leave') { lorry.x -= 120 * dt; if (lorry.x < -80) lorryGone(); }
+      else if (lorry.state === 'leave') { lorry.x += 120 * dt; if (lorry.x > W + 10) lorryGone(); }   // vorwärts: kommt von links, fährt nach rechts weg
     }
     setEngine(true, busy() || !!follow, 30);
   }

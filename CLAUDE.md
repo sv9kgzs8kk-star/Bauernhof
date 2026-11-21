@@ -18,6 +18,10 @@ wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.ht
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen.
                               Holzhaus (`WOOD`): L-förmig, Holzwände/-böden, unten Wohnzimmer mit Kamin (linker Flügel), Küche und Bad (rechter Flügel),
                               hinten rechts Garten; Leiter im Wohnzimmer = Dachboden (Etage `f: 1`, wie beim großen Haus)
+                              Rustikal: Rundholz-Wände mit Stammköpfen, raue Dielen, Terrakotta (Küche), Schiefer (Bad), Natursteinkamin, Geweih, Pfannen, karierte Vorhänge.
+                              Veranda vor dem rechten Flügel (`room.yb`, Tür vom Wohnzimmer, Geländer; oben sieht man ihr Vordach), Möbel darf man draufstellen. Kamin nur unten.
+                              **Schaukelstuhl** (alle Innenräume): Kind 0,5 s darauf stehen = setzt sich und schaukelt (`sit`), bis es woanders hinläuft.
+                              **Möbel drehen** (alle Innenräume): zweimal schnell antippen = 90° drehen (`it.r` 0–3, `rotF()`/`rotRect()` in moebel.js, Pixel bleiben scharf).
                               (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden (großes Haus `TWO`: unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe; Kind kurz auf der Treppe = Etage wechseln, Möbel mit `f: 1` stehen oben), Kind läuft per Antippen und ist immer vor den Möbeln, 0,8 s auf dem Bett = schlafen; Möbel und Kind in einfacher Größe (S = 1)
 manifest.json, icon.png     ← start_url ./ NIE ändern (sonst App neu anlegen = Spielstand weg)
 gemeinsam/sterne.js         ← Spielstand lesen/schreiben (nur hier!)

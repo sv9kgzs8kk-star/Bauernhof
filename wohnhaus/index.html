@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261120a">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261121b">
 <title>Wohnhaus</title>
 </head>
 <body>
@@ -30,10 +30,10 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="house" style="pointer-events:auto"><span class="word">HAUS</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261120a"></script>
-<script src="../gemeinsam/basis.js?v=20261120a"></script>
-<script src="../gemeinsam/moebel.js?v=20261120a"></script>
-<script src="../gemeinsam/bau.js?v=20261120a"></script>
+<script src="../gemeinsam/sterne.js?v=20261121b"></script>
+<script src="../gemeinsam/basis.js?v=20261121b"></script>
+<script src="../gemeinsam/moebel.js?v=20261121b"></script>
+<script src="../gemeinsam/bau.js?v=20261121b"></script>
 <script>
 /* =====================================================================
    WOHNHAUS EINRICHTEN – drei Zimmer von schräg oben (wie der Hof)
@@ -56,6 +56,7 @@ const WOOD = !FARM && houseType().shape === 'L';
 const TWO = !FARM && !WOOD && ((save.house && save.house.type) | 0) >= 1;
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
+  let lastTap = null, sit = null;          // sit = Kind sitzt im Schaukelstuhl { i, t }
   let kid = null, night = null, grid = null, level = 0, stairs = null, swap = null;
   const list = () => save[WHERE].items;
   const onLevel = it => ((it.f | 0) === level);
@@ -83,7 +84,7 @@ const Room = (() => {
   // Wände, Treppe, Laufraster und Bild für die aktuelle Etage
   function setupLevel() {
     // Innenwände: links Wohnzimmer/Kinderzimmer, rechts oben Schlafzimmer/Bad, rechts unten Bad bzw. Flur mit Treppe (je mit Durchgang)
-    const t = 4 * S, vx = Math.round(floor.x + floor.w * 0.56), hy = Math.round(floor.y + floor.h * 0.5), gap = 26 * S;
+    const t = 4 * S, vx = Math.round(floor.x + floor.w * 0.56), hy = Math.round(floor.y + floor.h * (WOOD ? 0.3 : 0.5)), gap = 26 * S;   // Holzhaus: Garten kleiner, rechter Flügel höher (Platz für die Veranda)
     const vGapY = floor.y + floor.h - gap - 6 * S;
     walls = [
       { x: vx, y: room.y + WH - 2, w: t, h: vGapY - room.y - WH + 2 },                      // senkrecht, Durchgang unten
@@ -93,14 +94,16 @@ const Room = (() => {
     ];
     if (WOOD) {                                        // L-Form: hinten rechts ist draußen (Garten), Kamin im Wohnzimmer, Leiter zum Dachboden
       const rx = Math.round(vx + (floor.x + floor.w - vx) * 0.55), rTop = hy + WH;
-      walls = [
-        { kind: 'out', x: vx, y: room.y - 4, w: room.x + room.w + 4 - vx, h: rTop + 2 - room.y + 4 },
-        { kind: 'fire', x: Math.round(floor.x + (vx - floor.x) * 0.22), y: room.y + WH - 8, w: 30, h: 18 },
-      ];
+      const fb = floor.y + floor.h, yb = Math.round(fb - Math.max(40 * S, (fb - hy) * 0.3));          // vor dem rechten Flügel: Veranda (draußen, aber mit Möbeln)
+      const d1 = yb - gap - 6 * S, d2 = yb + t + Math.round((fb - yb - t - gap) / 2);   // Türen: Wohnzimmer→Küche, Wohnzimmer→Veranda
+      walls = [{ kind: 'out', x: vx, y: room.y - 4, w: room.x + room.w + 4 - vx, h: rTop + 2 - room.y + 4 }];
       if (level === 0) walls.push(
-        { x: vx, y: rTop, w: t, h: Math.max(0, vGapY - rTop) }, { x: vx, y: vGapY + gap, w: t, h: floor.y + floor.h - vGapY - gap },   // Wohnzimmer | Küche
-        { x: rx, y: rTop, w: t, h: Math.max(0, vGapY - rTop) }, { x: rx, y: vGapY + gap, w: t, h: floor.y + floor.h - vGapY - gap });  // Küche | Bad
-      room.rx = rx;
+        { kind: 'fire', x: Math.round(floor.x + (vx - floor.x) * 0.2), y: room.y + WH - 10, w: 40, h: 20 },   // großer Natursteinkamin (nur unten)
+        { x: vx, y: rTop, w: t, h: Math.max(0, d1 - rTop) }, { x: vx, y: d1 + gap, w: t, h: d2 - d1 - gap }, { x: vx, y: d2 + gap, w: t, h: fb - d2 - gap },   // Wohnzimmer | Küche | Veranda
+        { x: rx, y: rTop, w: t, h: Math.max(0, d1 - rTop) }, { x: rx, y: d1 + gap, w: t, h: yb - d1 - gap },   // Küche | Bad
+        { x: vx + t, y: yb, w: floor.x + floor.w + 4 - vx - t, h: t });                                       // Hauswand vorne (dahinter die Veranda)
+      else walls.push({ kind: 'out', x: vx, y: yb, w: room.x + room.w + 4 - vx, h: room.y + room.h + 4 - yb });   // oben: Vordach über der Veranda
+      room.rx = rx; room.yb = yb;
     }
     if (TWO && level === 1) {                          // oben links geteilt: Kinderzimmer (hinten) und Schlafzimmer (vorne), Durchgang in der Mitte
       const gx = Math.round(floor.x + (vx - floor.x) / 2 - gap / 2);
@@ -111,7 +114,7 @@ const Room = (() => {
     if (WOOD) stairs = { x: vx - 30, y: floor.y + 6, w: 24, h: 40, ladder: true };                  // Leiter hinten rechts im Wohnzimmer
     buildGrid();
     paint();
-    const fixed = list().map(it => { const f = BY[it.k]; if (!f || !onLevel(it)) return it; const p = toScreen(f, it); return Object.assign({}, it, fit(f, p.x, p.y)); });
+    const fixed = list().map(it => { const f = rotF(BY[it.k], it.r); if (!f || !onLevel(it)) return it; const p = toScreen(f, it); return Object.assign({}, it, fit(f, p.x, p.y)); });
     if (fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed, WHERE);   // Möbel nicht in Innenwänden
   }
   function layoutBar() {
@@ -191,28 +194,58 @@ const Room = (() => {
   }
   // Holzhaus innen: L-förmig, Holzwände (Bohlen) und Holzböden; Dachboden mit schrägen Dachbalken
   function paintWood(B) {
-    const { x, y, w, h, vx, hy, rx } = room, rTop = hy + WH, c = woodColor().c;
-    const planks = (x1, y1, x2, y2, a, b, line) => { for (let yy = y1, k = 0; yy < y2; yy += 6, k++) { B(k % 2 ? a : b, x1, yy, x2 - x1, Math.min(6, y2 - yy)); B(line, x1, Math.min(y2 - 1, yy + 5), x2 - x1, 1);
-      for (let xx = x1 + (k * 23) % 46; xx < x2; xx += 46) B(line, xx, yy, 1, Math.min(5, y2 - yy)); } };
-    const logs = (x1, y1, x2, y2) => { for (let yy = y1, k = 0; yy < y2; yy += 5, k++) { B(c[k % 2 ? 1 : 2], x1, yy, x2 - x1, Math.min(5, y2 - yy)); B(c[0], x1, Math.min(y2 - 1, yy + 4), x2 - x1, 1); } };
+    const { x, y, w, h, vx, hy, rx, yb } = room, rTop = hy + WH, c = woodColor().c;
+    let seed = 7; const rn = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    // breite, raue Dielen: jede Diele eigener Ton, Astlöcher, Nägel, versetzte Stöße
+    const planks = (x1, y1, x2, y2, tones, line) => { for (let yy = y1, k = 0; yy < y2; yy += 9, k++) {
+        let xx = x1 - Math.floor(rn() * 40);
+        while (xx < x2) { const len = 34 + Math.floor(rn() * 30), a = Math.max(x1, xx), b = Math.min(x2, xx + len), hh = Math.min(9, y2 - yy);
+          if (b > a) { B(tones[Math.floor(rn() * tones.length)], a, yy, b - a, hh); B('rgba(255,255,255,.08)', a, yy, b - a, 1); B(line, a, Math.min(y2 - 1, yy + 8), b - a, 1); B(line, b - 1, yy, 1, hh);
+            if (b - a > 10) { B('rgba(0,0,0,.35)', a + 2, yy + 4, 1, 1); B('rgba(0,0,0,.35)', b - 4, yy + 4, 1, 1); }
+            if (rn() < 0.35 && b - a > 16) { const kx = a + 6 + Math.floor(rn() * (b - a - 12)); B(line, kx, yy + 3, 3, 2); B('rgba(0,0,0,.25)', kx + 1, yy + 3, 1, 1); } }
+          xx += len; } } };
+    // Rundholz-Wand: dicke Stämme mit hellem Rücken, dunkler Fuge und Astlöchern
+    const logs = (x1, y1, x2, y2) => { for (let yy = y1, k = 0; yy < y2; yy += 8, k++) { const hh = Math.min(8, y2 - yy);
+        B(c[1], x1, yy, x2 - x1, hh); B(c[2], x1, yy + 1, x2 - x1, 2); B(c[3], x1, Math.min(y2 - 2, yy + 5), x2 - x1, 2); B(c[0], x1, Math.min(y2 - 1, yy + 7), x2 - x1, 1);
+        for (let i = 0; i < (x2 - x1) / 40; i++) { const kx = x1 + 8 + Math.floor(rn() * Math.max(1, x2 - x1 - 16)); B(c[3], kx, yy + 3, 3, 2); B(c[0], kx + 1, yy + 3, 1, 1); } } };
+    // Stammköpfe an den Wandenden (wie bei einer echten Blockhütte)
+    const ends = (ex, y1, y2) => { for (let yy = y1; yy + 7 <= y2; yy += 8) { B(c[0], ex - 3, yy, 7, 7); B('#e0c08a', ex - 2, yy + 1, 5, 5); B('#c49a5a', ex - 1, yy + 2, 3, 3); B('#a8803c', ex, yy + 3, 1, 1); } };
+    // Natursteinplatten (Küche, Bad)
+    const stones = (x1, y1, x2, y2, cols) => { B('#6a6058', x1, y1, x2 - x1, y2 - y1);
+      for (let yy = y1, k = 0; yy < y2; yy += 11, k++) { let xx = x1 + (k % 2 ? -7 : 0);
+        while (xx < x2) { const len = 12 + Math.floor(rn() * 10), a = Math.max(x1, xx + 1), b = Math.min(x2, xx + len - 1), hh = Math.min(10, y2 - yy - 1);
+          if (b > a && hh > 0) { B(cols[Math.floor(rn() * cols.length)], a, yy + 1, b - a, hh); B('rgba(255,255,255,.15)', a, yy + 1, b - a, 1); } xx += len; } } };
     B('rgba(0,0,0,.25)', x + 4, y + 6, vx - x, h); B('rgba(0,0,0,.25)', vx + 4, hy + 6, x + w - vx, y + h - hy);
     if (level === 0) {
-      planks(x, y + WH, vx, y + h, '#c58a4f', '#b97f45', '#8e5a2e');                       // Wohnzimmer
-      planks(vx, rTop, rx, y + h, '#d9a066', '#cf9558', '#9a6436');                        // Küche: helles Holz
-      for (let yy = rTop, k = 0; yy < y + h; yy += 8, k++) for (let xx = rx, j = 0; xx < x + w; xx += 8, j++) B((k + j) % 2 ? '#e8f2f8' : '#cfe0ec', xx, yy, Math.min(8, x + w - xx), Math.min(8, y + h - yy));   // Bad: Fliesen
-      B('#a9c8e8', x + Math.round((vx - x) * 0.15), y + h - 46, Math.round((vx - x) * 0.4), 30); B('#c9dcf0', x + Math.round((vx - x) * 0.15) + 3, y + h - 43, Math.round((vx - x) * 0.4) - 6, 24);   // Flickenteppich
+      planks(x, y + WH, vx, y + h, ['#b97f45', '#a8703a', '#c58a4f', '#9a6436'], '#6e4520');   // Wohnzimmer: dunkle, raue Dielen
+      stones(vx, rTop, rx, yb, ['#c9a068', '#b98a52', '#d4b07c', '#a87a46']);              // Küche: Terrakotta-Platten
+      stones(rx, rTop, x + w, yb, ['#9a9088', '#8a8078', '#a8a098', '#7a7068']);           // Bad: Schiefer
+      // Flickenteppich vor dem Sofa (bunt gestreift, Fransen)
+      const tx = x + Math.round((vx - x) * 0.12), tw = Math.round((vx - x) * 0.42), ty = y + h - 48;
+      for (let i = 0; i < 6; i++) B(['#c0392b', '#e0a868', '#3f6fa8', '#f3e3b8', '#5c8a3a', '#c0392b'][i], tx, ty + i * 5, tw, 5);
+      for (let xx = tx; xx < tx + tw; xx += 3) { B('#f3e3b8', xx, ty - 2, 1, 2); B('#f3e3b8', xx, ty + 30, 1, 2); }
+      planks(vx, yb, x + w, y + h, ['#b59a74', '#a68c68', '#c2a67e', '#9c8460'], '#6e5a40');   // Veranda: verwitterte Dielen
     } else {
-      planks(x, y + WH, vx, y + h, '#d9b77c', '#cfa86a', '#a07a46'); planks(vx, rTop, x + w, y + h, '#d9b77c', '#cfa86a', '#a07a46');
+      planks(x, y + WH, vx, y + h, ['#d9b77c', '#cfa86a', '#c49a5a', '#e0c08a'], '#8a6a3c'); planks(vx, rTop, x + w, yb, ['#d9b77c', '#cfa86a', '#c49a5a', '#e0c08a'], '#8a6a3c');
       for (const yy of [y + WH + Math.round((h - WH) * 0.3), y + WH + Math.round((h - WH) * 0.7)]) { B('rgba(0,0,0,.12)', x, yy + 3, vx - x, 3); B('#7a4a22', x, yy, vx - x, 3); }   // Dachbalken über dem Kopf
-      for (const xx of [vx + Math.round((x + w - vx) * 0.35), vx + Math.round((x + w - vx) * 0.7)]) { B('rgba(0,0,0,.12)', xx + 3, rTop, 3, y + h - rTop); B('#7a4a22', xx, rTop, 3, y + h - rTop); }
+      for (const xx of [vx + Math.round((x + w - vx) * 0.35), vx + Math.round((x + w - vx) * 0.7)]) { B('rgba(0,0,0,.12)', xx + 3, rTop, 3, yb - rTop); B('#7a4a22', xx, rTop, 3, yb - rTop); }
       B('#7a4a22', x + Math.round((vx - x) / 2) - 2, y + WH, 4, h - WH);                  // First
     }
     // Rückwände aus Bohlen, mit Fenster (Dachboden: kleines rundes Fenster)
     logs(x, y, vx, y + WH + 2); logs(vx, hy, x + w, rTop + 2);
     B(c[0], x, y + WH, vx - x, 2); B(c[0], vx, rTop, x + w - vx, 2);
+    ends(x + 1, y, y + WH + 2); ends(vx - 2, y, y + WH + 2); ends(vx + 2, hy, rTop + 2); ends(x + w - 2, hy, rTop + 2);
+    if (level === 0) {                                // Deko an der Wand: Geweih über dem Kamin, Pfannen in der Küche, Laterne
+      const f0 = walls.find(r => r.kind === 'fire'), gx = f0.x + f0.w + 14, gy = y + 4;
+      B('#e8dcc0', gx + 4, gy + 6, 6, 4); B('#5a3b1c', gx + 5, gy + 9, 4, 3);
+      for (const [dx, dy] of [[0, 0], [2, 2], [-2, 3], [4, 4], [10, 0], [8, 2], [12, 3], [6, 4]]) B('#e8dcc0', gx + dx, gy + dy, 2, 2);
+      const px = vx + 8; for (let i = 0; i < 3; i++) { B('#333', px + i * 9 + 3, hy + 2, 1, 3); B('#2a2a2a', px + i * 9, hy + 5, 7, 6); B('#555', px + i * 9 + 1, hy + 6, 5, 4); }
+      const lx = rx + 10; B('#333', lx + 3, hy + 2, 1, 3); B('#2a2a2a', lx, hy + 5, 7, 9); B('#ffd23f', lx + 2, hy + 7, 3, 5);
+    }
     const win = (wx, wy, small) => { if (small) { B('#5a3b1c', wx, wy + 3, 14, 12); B('#9fe3ff', wx + 2, wy + 5, 10, 8); B('#5a3b1c', wx + 6, wy + 5, 2, 8); B('#5a3b1c', wx + 2, wy + 8, 10, 2); return; }
       B('#5a3b1c', wx, wy + 2, 22, 14); B('#9fe3ff', wx + 2, wy + 4, 18, 10); B('#e6f8ff', wx + 2, wy + 4, 4, 10); B('#5a3b1c', wx + 10, wy + 4, 2, 10); B('#5a3b1c', wx + 2, wy + 8, 18, 2);
-      B('#c0392b', wx - 3, wy + 2, 3, 14); B('#c0392b', wx + 22, wy + 2, 3, 14); };
+      for (let yy = wy + 2; yy < wy + 16; yy += 2) { B((yy >> 1) % 2 ? '#c0392b' : '#ffffff', wx - 4, yy, 4, 2); B((yy >> 1) % 2 ? '#ffffff' : '#c0392b', wx + 22, yy, 4, 2); }   // rot-weiß karierte Vorhänge
+      B('#7a4a22', wx - 2, wy + 16, 26, 2); };
     win(x + Math.round((vx - x) * 0.7), y + 2, level === 1); win(vx + Math.round((x + w - vx) * 0.4), hy + 2, level === 1);
     // Garten hinter dem rechten Flügel (draußen): Blumen
     for (let i = 0; i < 6; i++) { const fx = vx + 14 + i * Math.max(8, Math.round((x + w - vx - 24) / 6)), fy = y + 6 + (i % 2) * 10; B('#3f8f37', fx, fy + 2, 3, 4); B(['#ff6b8a', '#ffd23f', '#3fa9f5'][i % 3], fx - 1, fy, 4, 3); }
@@ -220,17 +253,29 @@ const Room = (() => {
     const WC = c[1], WD = c[0];
     const wall = (a, b, ww, hh) => { B(WD, a, b, ww, hh); B(WC, a + (ww > hh ? 0 : 1), b + (ww > hh ? 1 : 0), ww > hh ? ww : Math.max(1, ww - 2), ww > hh ? Math.max(1, hh - 2) : hh); };
     wall(x - 4, y - 4, vx - x + 8, 4); wall(vx, y - 4, 4, hy - y + 4); wall(vx, hy - 4, x + w - vx + 4, 4);
-    wall(x - 4, y - 4, 4, h + 8); wall(x + w, hy - 4, 4, y + h - hy + 8);
+    wall(x - 4, y - 4, 4, h + 8); wall(x + w, hy - 4, 4, yb - hy + 8);
     const dw = level === 0 ? 2 * G : 0, dx = x + Math.round((vx - x - dw) / 2);
-    wall(x - 4, y + h, dx - x + 4, 4); wall(dx + dw, y + h, x + w - dx - dw + 4, 4);
+    wall(x - 4, y + h, dx - x + 4, 4); wall(dx + dw, y + h, vx + 4 - dx - dw, 4);
+    if (level === 0) {                                // Veranda: Geländer vorne und rechts, Pfosten
+      const rail = (a, b, ww, hh) => { B('rgba(0,0,0,.2)', a + 2, b + 2, ww, hh); B('#5a3418', a, b, ww, hh); B('#c98a4f', a + (ww > hh ? 0 : 1), b + (ww > hh ? 1 : 0), ww > hh ? ww : 1, ww > hh ? 1 : hh); };
+      rail(vx + 4, y + h + 1, x + w - vx, 3); rail(x + w + 1, yb + 4, 3, y + h - yb);
+      const px = [vx + 4, vx + 4 + Math.round((x + w - vx - 4) / 3), vx + 4 + Math.round((x + w - vx - 4) * 2 / 3), x + w - 2];
+      for (const q of px) { B('#3e2410', q - 1, y + h - 1, 6, 6); B('#7a4a22', q, y + h, 4, 4); }
+      B('#3e2410', x + w - 1, yb + 2, 6, 6); B('#7a4a22', x + w, yb + 3, 4, 4);
+    } else {                                          // Dachboden: von oben sieht man das Vordach der Veranda (Holzschindeln)
+      B('rgba(0,0,0,.25)', vx + 4, yb + 4, x + w - vx + 4, y + h - yb + 4);
+      for (let yy = yb, k = 0; yy < y + h + 4; yy += 6, k++) for (let xx = vx + (k % 2 ? -5 : 0); xx < x + w + 4; xx += 10) {
+        const a = Math.max(vx, xx), b2 = Math.min(x + w + 4, xx + 10); B(c[0], a, yy, b2 - a, 6); B(k % 2 ? c[2] : c[1], a, yy, b2 - a - 1, 5); }
+      B(c[0], vx, yb, x + w - vx + 4, 2);
+    }
     if (dw) B('#c9b48a', dx + 4, y + h, dw - 8, 4);
     for (const r of walls) { if (r.kind) continue; B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); wall(r.x, r.y, r.w, r.h); }
     // Kamin aus Stein (unten mit Feuer, oben auf dem Dachboden nur der Schornstein)
     const f = walls.find(r => r.kind === 'fire');
-    B('rgba(0,0,0,.2)', f.x + 3, f.y + 3, f.w, f.h);
+    if (f) { B('rgba(0,0,0,.2)', f.x + 3, f.y + 3, f.w, f.h);
     for (let yy = f.y, k = 0; yy < f.y + f.h; yy += 4, k++) for (let xx = f.x + (k % 2 ? -3 : 0); xx < f.x + f.w; xx += 6) { const a = Math.max(f.x, xx); B('#6a6058', a, yy, Math.min(xx + 6, f.x + f.w) - a, 4); B(k % 2 ? '#9a9088' : '#8a8078', a, yy, Math.min(xx + 5, f.x + f.w) - a, 3); }
-    if (level === 0) { B('#2a2420', f.x + 6, f.y + 6, f.w - 12, f.h - 6); B('#5a3b1c', f.x + 2, f.y + 3, f.w - 4, 3); }
-    else { B('#4f463e', f.x + 7, f.y + 3, f.w - 14, f.h - 6); B('#6a6058', f.x + 9, f.y + 5, f.w - 18, 2); f.y += 0; }
+    if (level === 0) { B('#2a2420', f.x + 8, f.y + 7, f.w - 16, f.h - 7); B('#3e2410', f.x - 3, f.y + 2, f.w + 6, 4); B('#7a4a22', f.x - 3, f.y + 2, f.w + 6, 1);   // Feuerloch, Kaminsims aus Balken
+      for (const [dx, dy] of [[f.w + 4, 8], [f.w + 10, 8], [f.w + 7, 3]]) { B('#5a3418', f.x + dx, f.y + dy, 6, 6); B('#c9a067', f.x + dx + 1, f.y + dy + 1, 4, 4); } } }   // Brennholz daneben
     // Leiter: unten nach oben (Sprossen), oben die Luke mit dem Leiterende
     if (stairs) { const s2 = stairs;
       if (level === 1) { B('#2a1a0c', s2.x - 2, s2.y - 2, s2.w + 4, s2.h + 4); B('#5a3b1c', s2.x - 2, s2.y - 2, s2.w + 4, 2); }
@@ -280,7 +325,7 @@ const Room = (() => {
   const inBar = (x, y) => y >= bar.y - 4;
   const slotAt = (x, y) => slots.find(s => x >= s.x && x < s.x + s.w && y >= s.y - 4 && y < s.y + s.h + 4);
   const arrowAt = (x, y) => arrows.find(a => x >= a.x && x < a.x + a.w && y >= a.y - 4 && y < a.y + a.h + 4);
-  const order = () => list().map((it, i) => ({ it, i, f: BY[it.k] })).filter(o => o.f && onLevel(o.it))
+  const order = () => list().map((it, i) => ({ it, i, f: rotF(BY[it.k], it.r) })).filter(o => o.f && onLevel(o.it))
     .sort((a, b) => (a.f.flat === b.f.flat ? 0 : a.f.flat ? -1 : 1) || (toScreen(a.f, a.it).y + a.f.H) - (toScreen(b.f, b.it).y + b.f.H));
   function itemAt(x, y) {
     const o = order().reverse();
@@ -305,6 +350,13 @@ const Room = (() => {
     const p = toScreen(f, pos);
     for (let n = 0; n < 8; n++) spawn(p.x + rnd(0, f.W), p.y + f.H, rnd(-15, 15), rnd(-12, -4), .35, '#e9d8b0', 30);
   }
+  // Möbel um 90° drehen (Mitte bleibt, rutscht aus Wänden heraus)
+  function rotate(i) {
+    const l = list().slice(), it = l[i], f0 = rotF(BY[it.k], it.r), p = toScreen(f0, it), cx = p.x + f0.W / 2, cy = p.y + f0.H / 2;
+    const r = ((it.r | 0) + 1) & 3, f1 = rotF(BY[it.k], r);
+    l[i] = Object.assign({}, it, { r }, fit(f1, cx - f1.W / 2, cy - f1.H / 2));
+    Hof.setHome(l, WHERE); sfx.click(); wob.set(i, 0); kid.path = [];
+  }
   function remove(i) { const l = list().slice(); l.splice(i, 1); Hof.setHome(l, WHERE); sfx.load(); }
   function walkTo(x, y) { kid.path = findPath(x, y); kid.still = 0; }
 
@@ -328,7 +380,10 @@ const Room = (() => {
       const d = drag; drag = null;
       const tap = Math.hypot(d.x - d.sx, d.y - d.sy) < 8;
       if (tap && d.from === 'bar') { sel = sel === d.f.key ? null : d.f.key; return true; }
-      if (tap && d.from === 'room') {                 // Möbel antippen: Kind läuft hin (Lampe: Licht an/aus)
+      if (tap && d.from === 'room') {                 // Möbel antippen: Kind läuft hin (Lampe: Licht an/aus); zweimal schnell antippen = drehen
+        const now = performance.now();
+        if (lastTap && lastTap.i === d.i && now - lastTap.t < 450) { lastTap = null; rotate(d.i); return true; }
+        lastTap = { i: d.i, t: now };
         wob.set(d.i, 0); if (d.f.key === 'lamp') { lampOn = !lampOn; sfx.click(); }
         const p = toScreen(d.f, list()[d.i]); walkTo(p.x + d.f.W / 2, p.y + d.f.H / 2); return true;
       }
@@ -340,6 +395,10 @@ const Room = (() => {
     return true;
   }
 
+  function rockerUnderKid() {
+    for (const e of order()) if (e.f.key === 'rocker') { const p = toScreen(e.f, e.it); if (kid.x > p.x - 2 && kid.x < p.x + e.f.W + 2 && kid.y > p.y + 2 && kid.y < p.y + e.f.H + 6) return { ...e, p }; }
+    return null;
+  }
   function bedUnderKid() {
     for (const e of order()) if (e.f.key === 'bed') { const p = toScreen(e.f, e.it); if (kid.x > p.x + 2 && kid.x < p.x + e.f.W - 2 && kid.y > p.y + 4 && kid.y < p.y + e.f.H + 4) return { ...e, p }; }
     return null;
@@ -363,6 +422,7 @@ const Room = (() => {
       if (swap.t > 0.7) swap = null;
       return;
     }
+    if (sit) { if (kid.path.length || !order().some(e => e.i === sit.i && e.f.key === 'rocker')) sit = null; else { sit.t += dt; return; } }   // Weglaufen = aufstehen
     if (kid.path.length) {
       const tgt = kid.path[0], dx = tgt.x - kid.x, dy = tgt.y - kid.y, d = Math.hypot(dx, dy), sp = 70 * S * dt;
       if (Math.abs(dx) > 0.5) kid.flip = dx < 0;
@@ -372,6 +432,8 @@ const Room = (() => {
       kid.still += dt;
       if (stairs && kid.still > 0.3 && kid.x > stairs.x - 2 && kid.x < stairs.x + stairs.w + 2 && kid.y > stairs.y && kid.y < stairs.y + stairs.h + 4) {
         swap = { t: 0 }; sfx.enter(); return; }
+      const rk = rockerUnderKid();
+      if (rk && kid.still > 0.5) { sit = { i: rk.i, t: 0 }; setWord('rock'); sayWord('rock'); tone(330, .12, 'triangle', .06); return; }
       const bed = bedUnderKid();
       if (bed && kid.still > 0.8) {
         night = { t: 0, bed }; setWord('sleep'); say('Gute Nacht');
@@ -385,6 +447,15 @@ const Room = (() => {
     const K = 2 * S, fr = kid.path.length && Math.floor(kid.t * 8) % 2 ? KID.b : KID.a, w = 10 * K, h = 13 * K;   // Kind doppelt so groß: passt zu Bett und Sofa
     R('rgba(0,0,0,.25)', Math.round(x - w / 2) + K, Math.round(y) - 2 * K, w, 2 * K);
     fr.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(KID.pal[ch], Math.round(x - w / 2) + (kid.flip ? 9 - i : i) * K, Math.round(y - h) + j * K, K, K); }));
+  }
+  const rockK = time => Math.round(Math.sin(time / 280) * 2.4);   // Schaukeln: hin und her
+  function drawSitting(time) {                       // Kind sitzt im Schaukelstuhl und schaukelt mit
+    const e = order().find(o => o.i === sit.i); if (!e) return;
+    const p = toScreen(e.f, e.it), k = rockK(time), K = 2 * S, rows = KID.a.slice(0, 9).concat(['..bb..bb..', '..nn..nn..']);
+    const x0 = Math.round(p.x + e.f.W / 2 - 5 * K) + k, y0 = Math.round(p.y + e.f.H - 3 * S - rows.length * K) + (Math.abs(k) > 1 ? 1 : 0);
+    rows.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(KID.pal[ch], x0 + i * K, y0 + j * K, K, K); }));
+    const ay = y0 + 6 * K, ah = 4 * K;   // Armlehnen vor dem Kind: es sitzt richtig drin
+    R('#5a3b1c', x0 - S, ay, 3 * S, ah); R('#5a3b1c', x0 + 10 * K - 2 * S, ay, 3 * S, ah);
   }
   function draw(time) {
     if (!room) return;
@@ -402,13 +473,13 @@ const Room = (() => {
     things.sort((a, b) => a.y - b.y);
     if (!night) things.push({ kid: true });          // Kind immer vor den Möbeln
     for (const th of things) {
-      if (th.kid) { drawKid(time, kid.x, kid.y); continue; }
-      const e = th.e, p = toScreen(e.f, e.it), wv = wob.get(e.i), wb = wv !== undefined ? Math.round(Math.sin(wv * 30) * 2 * (1 - wv / 0.35)) : 0;
+      if (th.kid) { if (sit) drawSitting(time); else drawKid(time, kid.x, kid.y); continue; }
+      const e = th.e, p = toScreen(e.f, e.it), wv = wob.get(e.i), wb = sit && sit.i === e.i ? rockK(time) : wv !== undefined ? Math.round(Math.sin(wv * 30) * 2 * (1 - wv / 0.35)) : 0;
       R('rgba(0,0,0,.22)', p.x + 2 + wb, p.y + 3, e.f.W, e.f.H);
       drawAt(e.f, p.x + wb, p.y, e.f.key !== 'lamp' || lampOn, time);
       if (night && night.bed.i === e.i) {              // Kind liegt im Bett: Kopf auf dem Kissen
-        const hx = p.x + 6 * S, hy = p.y + 5 * S;
-        R('#6b3e1e', hx, hy, 16 * S, 6 * S); R('#f1c27d', hx + 2 * S, hy + 4 * S, 12 * S, 7 * S); R('#222', hx + 4 * S, hy + 8 * S, 3 * S, S); R('#222', hx + 9 * S, hy + 8 * S, 3 * S, S);
+        const Hd = (col, x, y, w, h) => { const q = e.f.r ? rotRect(e.f.base, e.f.r, x, y, w, h) : [x, y, w, h]; R(col, p.x + q[0] * S, p.y + q[1] * S, q[2] * S, q[3] * S); };   // auch im gedrehten Bett
+        Hd('#6b3e1e', 6, 5, 16, 6); Hd('#f1c27d', 8, 9, 12, 7); Hd('#222', 10, 13, 3, 1); Hd('#222', 15, 13, 3, 1);
       }
     }
     // Leiste: Seite mit Möbeln (jedes beliebig oft), Pfeile zum Blättern

@@ -5,7 +5,8 @@ Object.assign(WORDS, {
   bed: ['BETT', 'Bett'], table: ['TISCH', 'Tisch'], chair: ['STUHL', 'Stuhl'], sofa: ['SOFA', 'Sofa'], lamp: ['LAMPE', 'Lampe'],
   fridge: ['KÜHLSCHRANK', 'Kühlschrank'], stove: ['HERD', 'Herd'], tub: ['BADEWANNE', 'Badewanne'], toilet: ['KLO', 'Klo'],
   closet: ['SCHRANK', 'Schrank'], plant: ['PFLANZE', 'Pflanze'], tv: ['FERNSEHER', 'Fernseher'], rug: ['TEPPICH', 'Teppich'],
-  train: ['EISENBAHN', 'Eisenbahn'], sleep: ['SCHLAFEN', 'Schlafen']
+  train: ['EISENBAHN', 'Eisenbahn'], sleep: ['SCHLAFEN', 'Schlafen'],
+  rocker: ['SCHAUKELSTUHL', 'Schaukelstuhl'], chest: ['TRUHE', 'Truhe'], woodpile: ['HOLZSTAPEL', 'Holzstapel'], fur: ['FELL', 'Fell'], rock: ['SCHAUKELN', 'Schaukeln']
 });
 // Möbel von schräg oben: Breite/Höhe in Pixeln (vor der Vergrößerung S), Zeichnen ab linker oberer Ecke. flat = liegt am Boden (wird zuerst gezeichnet)
 const FURN = [
@@ -79,7 +80,39 @@ const FURN = [
       F('#222', x + p[0] - 1, y + p[1] - 1, 6, 5); F('#e03b3b', x + p[0], y + p[1], 4, 3); F('#ffd23f', x + p[0] + 1, y + p[1], 1, 1);   // Lok
       F('#ffffff', x + 16, y + 10, 8, 6); F('#e03b3b', x + 16, y + 9, 8, 2);                                           // Bahnhof
     } },
+  // rustikale Möbel (Holzhaus, passen aber überall)
+  { key: 'rocker', w: 18, h: 24, draw(F, x, y) {
+      F('#5a3b1c', x + 1, y + 21, 16, 3); F('#7a4a22', x + 2, y + 21, 14, 1);                                         // Kufen
+      F('#5a3b1c', x, y, 18, 8); for (let i = 0; i < 4; i++) F('#a0673a', x + 2 + i * 4, y + 1, 2, 6);               // Lehne mit Stäben
+      F('#5a3b1c', x, y + 8, 18, 13); F('#a0673a', x + 1, y + 9, 16, 11); F('#c0392b', x + 3, y + 10, 12, 8); F('#ffffff', x + 5, y + 12, 2, 2); F('#ffffff', x + 11, y + 15, 2, 2);   // Sitz mit Kissen
+    } },
+  { key: 'chest', w: 26, h: 18, draw(F, x, y) {
+      F('#3e2410', x, y, 26, 18); F('#7a4a22', x + 1, y + 1, 24, 7); F('#9a6436', x + 1, y + 1, 24, 2);
+      F('#5a3418', x + 1, y + 8, 24, 9); F('#8a8078', x + 4, y, 2, 18); F('#8a8078', x + 20, y, 2, 18); F('#ffd23f', x + 11, y + 7, 4, 4); F('#3e2410', x + 12, y + 9, 2, 1);
+    } },
+  { key: 'woodpile', w: 24, h: 18, draw(F, x, y) {
+      for (const [a, b] of [[0, 10], [8, 10], [16, 10], [4, 4], [12, 4], [8, -2]]) { F('#5a3418', x + a, y + b + 2, 8, 8); F('#c9a067', x + a + 1, y + b + 3, 6, 6); F('#a8803c', x + a + 3, y + b + 5, 2, 2); }
+    } },
+  { key: 'fur', w: 40, h: 26, flat: true, draw(F, x, y) {
+      F('#5a3418', x + 6, y + 4, 28, 18); F('#5a3418', x, y + 2, 8, 6); F('#5a3418', x + 32, y + 2, 8, 6); F('#5a3418', x, y + 18, 8, 6); F('#5a3418', x + 32, y + 18, 8, 6);   // Pfoten
+      F('#7a4a22', x + 8, y + 6, 24, 14); F('#8a5a2e', x + 10, y + 8, 20, 10); F('#5a3418', x + 15, y, 10, 6); F('#7a4a22', x + 16, y + 1, 8, 4); F('#222', x + 17, y + 2, 1, 1); F('#222', x + 22, y + 2, 1, 1);   // Kopf
+    } },
 ];
+// Gedrehte Möbel: 0–3 × 90° im Uhrzeigersinn. Jedes Rechteck wird gedreht, die Pixel bleiben scharf.
+const ROT_CACHE = {};
+function rotRect(f, r, x, y, w, h) {
+  if (r === 1) return [f.h - y - h, x, h, w];
+  if (r === 2) return [f.w - x - w, f.h - y - h, w, h];
+  if (r === 3) return [y, f.w - x - w, h, w];
+  return [x, y, w, h];
+}
+function rotF(f, r) {
+  r = (r | 0) & 3; if (!r || !f) return f;
+  const id = f.key + r; if (ROT_CACHE[id] && ROT_CACHE[id].W === (r % 2 ? f.H : f.W)) return ROT_CACHE[id];
+  const o = { key: f.key, flat: f.flat, base: f, r, w: r % 2 ? f.h : f.w, h: r % 2 ? f.w : f.h, W: r % 2 ? f.H : f.W, H: r % 2 ? f.W : f.H,
+    draw(F, x0, y0, on, t) { f.draw((col, x, y, w, h) => { const q = rotRect(f, r, x, y, w, h); F(col, x0 + q[0], y0 + q[1], q[2], q[3]); }, 0, 0, on, t); } };
+  return ROT_CACHE[id] = o;
+}
 const BY = Object.fromEntries(FURN.map(f => [f.key, f]));
 // Kind von vorne (läuft durchs Haus), 10×13 Pixel, zwei Schritt-Bilder
 const KID = { pal: { h: '#6b3e1e', s: '#f1c27d', k: '#222', r: '#e03b3b', w: '#ffffff', b: '#2a5db0', n: '#5a3b1c' },

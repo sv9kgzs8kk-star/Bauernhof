@@ -224,7 +224,8 @@ const Wall = (() => {
     for (let j = 0; j < 3; j++) for (let i = 0; i < 2; i++) brick(pal.x + 3 + i * (cw + 1), pal.y + 3 + j * (ch - 1), cw, ch);
     const fr = ((Math.round(wk.a / (Math.PI * 2) * 32) % 32) + 32) % 32, bob = wk.path.length && Math.floor(wk.t * 8) % 2 ? 1 : 0;
     ctx.drawImage(BUILDER.shadows[fr], Math.round(wk.x - 17 + 2), Math.round(wk.y - 17 + 2)); ctx.drawImage(BUILDER.frames[fr], Math.round(wk.x - 17), Math.round(wk.y - 17 - bob));
-    if (wk.carry) brick(Math.round(wk.x - cw / 2), Math.round(wk.y - 17 - ch), cw, ch);   // Stein über dem Kopf
+    if (wk.carry) { const bw = Math.round(cw * 0.75), bh = Math.round(ch * 0.75), hx = wk.x + Math.cos(wk.a) * 9, hy = wk.y + Math.sin(wk.a) * 9 - bob;   // Stein in den Händen, direkt vor ihm
+      brick(Math.round(hx - bw / 2), Math.round(hy - bh / 2), bw, bh); }
     if (state === 'play' && !drag && !wk.path.length && Math.floor(time / 700) % 4 === 0) R('rgba(255,210,63,.6)', Math.round(wk.x - 11), Math.round(wk.y + 11), 22, 2);   // leiser Hinweis: man kann ihn antippen
     if (drag) brick(Math.round(drag.x - cw / 2), Math.round(drag.y - ch / 2), cw, ch);
     // Hinweis ohne fliegende Steine: gepunkteter Weg von der Palette zur ersten Lücke, Pfeil auf die Palette

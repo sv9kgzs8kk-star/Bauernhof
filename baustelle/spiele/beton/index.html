@@ -110,7 +110,9 @@ const Pour = (() => {
     B('#c9a067', x0-3, y0-3, w+6, 2); B('#c9a067', x0-3, y0+h+1, w+6, 2); B('#c9a067', x0-3, y0-3, 2, h+6); B('#c9a067', x0+w+1, y0-3, 2, h+6);
     for (let x = x0; x < x0 + w; x += 18) { B('#3e2a18', x, y0-4, 1, 4); B('#3e2a18', x, y0+h, 1, 4); }
     }
-    truck = { x: Math.min(W - 52, (pit.c0 + pit.w) * G + 22), y: (pit.r0 + pit.h - 1) * G + G / 2 };   // Pumpe steht rechts neben der Grube (unten)
+    // Pumpe rechts neben der Grube (unten); ist rechts zu wenig Platz (Handy), steht sie unter der Grube
+    const side = W - (pit.c0 + pit.w) * G >= 44;
+    truck = side ? { x: (pit.c0 + pit.w) * G + 22, y: (pit.r0 + pit.h - 1) * G + G / 2 } : { x: Math.min(W - 54, (pit.c0 + pit.w) * G - 20), y: (pit.r0 + pit.h) * G + 20 };
     tip = { x: truck.x - 8, y: truck.y - 30 }; target = null;
     // Betonmischer: großes Haus braucht zwei (jeder reicht für die Hälfte)
     nMix = houseFloors() > 1 ? 2 : 1; mixNo = 0; budget = total / nMix; poured = 0; newMixer();
@@ -120,7 +122,7 @@ const Pour = (() => {
   $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; holding = false; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
   function newMixer() {                              // Mischer kommt von links und hält mit der Rutsche (hinten) unter der Pumpe
-    mixNo++; mixer = { x: -70, park: Math.round(truck.x - 8), y: Math.min((gr - 1) * G - 22, (pit.r0 + pit.h) * G + 6), state: 'arrive', left: 1, rot: 0 };   // Zeile unter der Pumpe, Rutsche unter dem Pumpenheck
+    mixNo++; mixer = { x: -70, park: Math.round(Math.min(truck.x - 8, W - 60)), y: Math.min((gr - 1) * G - 22, Math.max((pit.r0 + pit.h) * G + 6, truck.y + 20)), state: 'arrive', left: 1, rot: 0 };   // Zeile unter der Pumpe, Rutsche unter dem Pumpenheck
   }
   const ready = () => mixer && mixer.state === 'park' && (mixer.left > 0 || mixNo >= nMix);   // der letzte Mischer reicht immer bis zum Schluss
   function hud() { $('bfill').style.width = (100 * filled / total) + '%'; }

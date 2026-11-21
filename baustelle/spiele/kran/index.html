@@ -70,7 +70,8 @@ function finishStep(step, key, back) {
 <script>
 /* =====================================================================
    MINISPIEL: DACHSTUHL MIT DEM AUTOKRAN (Baustelle, Wohnhaus Schritt 4) – schräg von oben wie der Hof
-   Binder auf dem Tieflader antippen → der Autokran hebt ihn an. Mit dem Finger ziehen: Ausleger schwenkt hin und her,
+   Binder auf dem Tieflader antippen oder den Ausleger über den Tieflader ziehen → der Haken geht runter und hebt ihn an.
+   Ein Tieflader bringt höchstens 3 Binder; ist er leer, fährt er weg und ein neuer kommt. Mit dem Finger ziehen: Ausleger schwenkt hin und her,
    die Last schwebt mit (Schatten am Boden zeigt, wo sie landet). Über der leuchtenden Stelle loslassen → sie wird abgesetzt.
    Nur antippen geht auch (Binder, dann leuchtende Stelle). Kleines Haus 3 Binder, großes Haus 6. Dann RICHTFEST (house.step = 4).
    Holzhaus (L-Form): 4 Binder auf die Blockwände, 2 quer über den linken Flügel, 2 längs über den rechten (woodRoofGeo in bau.js).
@@ -98,7 +99,8 @@ function paintGround(g) {
 
 const Q = snapF(R, 2);                                // grobe Pixel wie auf dem Hof
 const Kran = (() => {
-  let g, geo, N, crane, truck, hook, carry, queue, fest, paused = false, placed, follow, idle = 0, wood = null, slots = [];
+  let g, geo, N, crane, truck, hook, carry, queue, fest, paused = false, placed, follow, idle = 0, wood = null, slots = [], delivered = 0, finger = null;
+  const PER_TRUCK = 3;                                // so viele Binder bringt ein Tieflader; danach kommt ein neuer
   const RH = 8, LT = 10;                              // Holzhaus: Bohlen wie beim Bohlen-Legen
   const TIP = 50;                                     // Höhe der Auslegerspitze (so viel weiter oben gezeichnet)
   const liftH = lh => Math.round(4 + lh * 22);        // Höhe der Last über dem Boden
@@ -119,8 +121,9 @@ const Kran = (() => {
     const up = wood ? logWallUp(LOG_ROWS, RH, LT) : 0;
     paintGround({ hx: g.hx, hw: g.hw, hy: g.hy - up, hh: g.hh + up });   // Holzhaus: Zaun so weit oben, wie die Wände hoch sind
     crane = { x: g.hx + g.hw + Math.round(1.7 * G), y: g.hy + 14 };
-    const hgt = N > 3 ? N * 5 + 3 : 16;
-    truck = { x: g.hx + Math.round(g.hw / 2) - 28, y: Math.min((gr - 1) * G + 3, gr * G - hgt - 4) };
+    const park = g.hx + Math.round(g.hw / 2) - 28;
+    delivered = Math.min(PER_TRUCK, N);
+    truck = { x: park, park, y: Math.min((gr - 1) * G + 3, gr * G - 20), load: delivered, state: 'park' };
     hook = { x: crane.x - 30, y: crane.y + 30, lh: 1, vx: 0 };
     placed = 0; carry = null; queue = []; fest = null; follow = null; idle = 0;
     show('khud'); hud();
@@ -129,13 +132,17 @@ const Kran = (() => {
   $('pausebtn').addEventListener('click', () => { if (fest !== null) return; paused = true; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
   function hud() { $('kcount').textContent = placed + '/' + N; }
-  const pickPt = () => [truck.x + 22, truck.y + flatbedSlot(N - 1 - placed, N) + 1];
+  const pickPt = () => [truck.x + 22, truck.y + FLATBED_SLOTS[Math.max(0, truck.load - 1)] + 1];
   const slotPt = () => { const s = slots[Math.min(placed, N - 1)]; return [s.x, s.y]; };
   const busy = () => queue.length > 0;
   function to(x, y, lh, then) { queue.push({ x, y, lh, then }); }
   function fetch() {
     const [x, y] = pickPt(); sfx.click(); follow = null;
-    to(x, y, 1); to(x, y, 0, () => { carry = { ang: 0 }; sfx.clod(); }); to(x, y, 1);
+    to(x, y, 1); to(x, y, 0, () => { carry = { ang: 0 }; truck.load--; sfx.clod(); });
+    to(x, y, 1, () => {
+      if (truck.load <= 0) { truck.state = 'leave'; sfx.honk(); }   // leer: Tieflader fährt weg (und ein neuer kommt, falls noch Binder fehlen)
+      if (finger) follow = { x: finger.x, y: finger.y, sx: finger.x, sy: finger.y };   // Finger noch drauf: gleich weiterziehen
+    });
   }
   function place() {
     const [x, y] = slotPt(); follow = null;
@@ -151,12 +158,13 @@ const Kran = (() => {
     setTimeout(() => { sfx.unlock(); confetti(); sayWord('richtfest'); }, 900);
     setTimeout(() => finishStep(4, 'richtfest', 'kran'), 2800);
   }
-  const onTruck = (x, y) => x > truck.x - 8 && x < truck.x + 64 && y > truck.y - 10 && y < truck.y + (N > 3 ? N * 5 + 12 : 26);
+  const onTruck = (x, y) => truck.state === 'park' && truck.load > 0 && x > truck.x - 8 && x < truck.x + 64 && y > truck.y - 10 && y < truck.y + 26;
   const nearSlot = (x, y, r) => { const s = slots[placed]; if (!s) return false;
     const hx = s.ang ? r : s.len / 2 + r, hy = s.ang ? s.len / 2 + r : r; return Math.abs(x - s.x) < hx && Math.abs(y - s.y) < hy; };
   function onPointer(type, x, y) {
     if (paused || fest !== null) return true;
     idle = 0;
+    if (type === 'down' || type === 'move') finger = { x, y }; else if (type === 'up') finger = null;
     if (type === 'down') {
       if (busy()) return true;
       if (!carry && onTruck(x, y)) { fetch(); return true; }
@@ -189,7 +197,11 @@ const Kran = (() => {
       const d = Math.hypot(follow.x - hook.x, follow.y - hook.y), sp = 260 * dt;
       if (d > sp) { hook.x += (follow.x - hook.x) / d * sp; hook.y += (follow.y - hook.y) / d * sp; } else { hook.x = follow.x; hook.y = follow.y; }
       hook.x = clamp(hook.x, 8, W - 8); hook.y = clamp(hook.y, 30, H - 8);
+      if (!carry && onTruck(hook.x, hook.y)) fetch();   // Ausleger über den Tieflader gezogen: Haken geht automatisch runter und nimmt den Binder
     }
+    // Tieflader: leer → fährt nach links weg, neuer kommt von rechts mit den nächsten Bindern
+    if (truck.state === 'leave') { truck.x -= 120 * dt; if (truck.x < -70) { if (delivered >= N) { truck.state = 'gone'; truck.x = -200; } else { truck.load = Math.min(PER_TRUCK, N - delivered); delivered += truck.load; truck.x = W + 10; truck.state = 'arrive'; } } }
+    else if (truck.state === 'arrive') { truck.x = approach(truck.x, truck.park, 110 * dt); if (truck.x === truck.park) { truck.state = 'park'; sfx.honk(); } }
     hook.vx = approach(hook.vx, (hook.x - ox) / Math.max(dt, 1e-3), 600 * dt);
     if (fest !== null) fest += dt;
     setEngine(true, busy() || !!follow, 30);
@@ -197,7 +209,7 @@ const Kran = (() => {
   function draw(time) {
     if (!truck || !slots.length) return;              // falscher Bauschritt: es geht gleich zurück zur Stadt
     ctx.drawImage(bg, 0, 0);
-    drawFlatbedTop(Q, truck.x, truck.y, N - placed - (carry ? 1 : 0), Math.min(beamLen(), 44), N);
+    drawFlatbedTop(Q, Math.round(truck.x), truck.y, truck.load, Math.min(beamLen(), 44), 3);
     const ho = { trusses: placed, ridge: fest !== null, wreath: fest !== null ? Math.min(1, fest / 1.0) : 0, time };
     if (wood) drawWoodHouse(Q, wood, Object.assign({ rh: RH, lt: LT }, ho)); else drawHouseTop(Q, g.hx, g.hy, g.hw, g.hh, Object.assign({ step: 3 }, ho));
     // leuchtende Zielstelle für den nächsten Binder
@@ -219,7 +231,7 @@ const Kran = (() => {
     // Hinweise: erst zum Tieflader, dann zur Stelle am Haus (mit Zug-Spur)
     if (fest === null && !busy() && !follow) {
       const b = Math.abs(Math.sin(time / 220)) * 4;
-      if (!carry) { const [x, y] = pickPt(); drawArrow(Math.round(x - 3), Math.round(y - 22 - b)); }
+      if (!carry && truck.state === 'park') { const [x, y] = pickPt(); drawArrow(Math.round(x - 3), Math.round(y - 22 - b)); }
       else {
         const s = slots[placed], ay = s.y - (s.ang ? Math.round(s.len / 2) : 0); drawArrow(Math.round(s.x - 3), Math.round(ay - 18 - b));
         if (idle > 2) { const k = (time / 1200) % 1, n = 6; for (let i = 0; i < n; i++) { const u = i / n; if (Math.abs(u - k) < 0.12) R('rgba(255,210,63,.9)', Math.round(hook.x + (s.x - hook.x) * u) - 1, Math.round(hook.y - 20 + (ay - hook.y + 20) * u) - 1, 3, 3); } }
@@ -228,7 +240,7 @@ const Kran = (() => {
   }
   function resize() { layout(false); }
   function exit() { setEngine(false, false); clearTimeout(winTimer); }
-  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ placed, N, truck, g, hook, carry: !!carry, slot: slotPt(), pick: pickPt(), busy: busy() }) };
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ placed, N, delivered, truck, g, hook, carry: !!carry, slot: slotPt(), pick: pickPt(), busy: busy() }) };
 })();
 startLoop(Kran);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

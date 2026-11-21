@@ -6,7 +6,7 @@ Object.assign(WORDS, {
   fridge: ['KÜHLSCHRANK', 'Kühlschrank'], stove: ['HERD', 'Herd'], tub: ['BADEWANNE', 'Badewanne'], toilet: ['KLO', 'Klo'],
   closet: ['SCHRANK', 'Schrank'], plant: ['PFLANZE', 'Pflanze'], tv: ['FERNSEHER', 'Fernseher'], rug: ['TEPPICH', 'Teppich'],
   train: ['EISENBAHN', 'Eisenbahn'], sleep: ['SCHLAFEN', 'Schlafen'],
-  rocker: ['SCHAUKELSTUHL', 'Schaukelstuhl'], chest: ['TRUHE', 'Truhe'], woodpile: ['HOLZSTAPEL', 'Holzstapel'], fur: ['FELL', 'Fell']
+  rocker: ['SCHAUKELSTUHL', 'Schaukelstuhl'], chest: ['TRUHE', 'Truhe'], woodpile: ['HOLZSTAPEL', 'Holzstapel'], fur: ['FELL', 'Fell'], rock: ['SCHAUKELN', 'Schaukeln']
 });
 // Möbel von schräg oben: Breite/Höhe in Pixeln (vor der Vergrößerung S), Zeichnen ab linker oberer Ecke. flat = liegt am Boden (wird zuerst gezeichnet)
 const FURN = [

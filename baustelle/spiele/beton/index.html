@@ -72,13 +72,16 @@ function finishStep(step, key, back) {
 /* =====================================================================
    MINISPIEL: BETON MALEN (Baustelle, Wohnhaus Schritt 2)
    Finger über die Grube ziehen: der Arm der Betonpumpe folgt, und dort, wo er ist, läuft Beton hinein.
+   Die Pumpe steht rechts neben der Grube. Ein Betonmischer kommt (von links, vorwärts), stellt sich unten daneben,
+   der Beton läuft aus seiner Rutsche in die Pumpe. Ein Balken über dem Mischer zeigt, wie viel noch drin ist.
+   Großes Haus: Ein Mischer reicht nur für die Hälfte; leer fährt er nach rechts weg und ein zweiter kommt.
    Alles voll = Bodenplatte fertig (house.step = 2).
    ===================================================================== */
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('beton')));
 { const g = $('bveh').getContext('2d'); g.drawImage(PUMP.frames[24], 0, 0); }
 
 const Pour = (() => {
-  let pit, cells, nx, ny, state, tip, target, holding = false, truck, filled = 0, mask = null, total = 0;
+  let pit, cells, nx, ny, state, tip, target, holding = false, truck, filled = 0, mask = null, total = 0, mixer, nMix, mixNo, budget, poured;
   const RADIUS = 18, RATE = 2.4, SPREAD = 0.9;   // ab 90 % läuft der Rest von selbst nach (keine fummeligen Ecken)
   function makePit() {                               // gleiche Grube wie beim Baggern
     const w = Math.min(7, gc - 4), h = Math.min(4, gr - 5);
@@ -107,18 +110,24 @@ const Pour = (() => {
     B('#c9a067', x0-3, y0-3, w+6, 2); B('#c9a067', x0-3, y0+h+1, w+6, 2); B('#c9a067', x0-3, y0-3, 2, h+6); B('#c9a067', x0+w+1, y0-3, 2, h+6);
     for (let x = x0; x < x0 + w; x += 18) { B('#3e2a18', x, y0-4, 1, 4); B('#3e2a18', x, y0+h, 1, 4); }
     }
-    truck = { x: 2*G, y: (gr-1)*G + G/2 };                       // Pumpe steht unten links auf der Straße
-    tip = { x: truck.x + 8, y: truck.y - 20 }; target = null;
+    truck = { x: Math.min(W - 52, (pit.c0 + pit.w) * G + 22), y: (pit.r0 + pit.h - 1) * G + G / 2 };   // Pumpe steht rechts neben der Grube (unten)
+    tip = { x: truck.x - 8, y: truck.y - 30 }; target = null;
+    // Betonmischer: großes Haus braucht zwei (jeder reicht für die Hälfte)
+    nMix = houseFloors() > 1 ? 2 : 1; mixNo = 0; budget = total / nMix; poured = 0; newMixer();
     state = 'play'; show('bhud'); hud();
     setTimeout(() => sayWord('concrete'), 400);
   }
   $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; state = 'pause'; holding = false; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); state = 'play'; });
+  function newMixer() {                              // Mischer kommt von links und hält mit der Rutsche (hinten) unter der Pumpe
+    mixNo++; mixer = { x: -70, park: Math.round(truck.x - 8), y: Math.min((gr - 1) * G - 22, (pit.r0 + pit.h) * G + 6), state: 'arrive', left: 1, rot: 0 };   // Zeile unter der Pumpe, Rutsche unter dem Pumpenheck
+  }
+  const ready = () => mixer && mixer.state === 'park' && (mixer.left > 0 || mixNo >= nMix);   // der letzte Mischer reicht immer bis zum Schluss
   function hud() { $('bfill').style.width = (100 * filled / total) + '%'; }
   function cellCenter(i) { const cx = i % nx, cy = (i / nx) | 0; return [pit.c0*G + cx*T + T/2, pit.r0*G + cy*T + T/2]; }
   function onPointer(type, x, y) {
     if (state !== 'play') return true;
-    if (type === 'down' || type === 'move') { holding = true; target = { x, y }; if (type === 'down') sfx.pour(); }
+    if (type === 'down' || type === 'move') { holding = true; target = { x, y }; if (type === 'down') { if (ready()) sfx.pour(); else sfx.bonk(); } }
     if (type === 'up') holding = false;
     return true;
   }
@@ -126,11 +135,16 @@ const Pour = (() => {
     if (state !== 'play') { setEngine(false, false); return; }
     if (target) { tip.x = approach(tip.x, target.x, 160*dt); tip.y = approach(tip.y, target.y, 160*dt); }
     setEngine(true, holding, 30);
+    // Mischer: kommen, parken, leer → wegfahren, nächster kommt
+    if (mixer) { mixer.rot += dt * (ready() ? 6 : 2);
+      if (mixer.state === 'arrive') { mixer.x = approach(mixer.x, mixer.park, 100 * dt); if (mixer.x === mixer.park) { mixer.state = 'park'; sfx.honk(); if (mixNo > 1) sayWord('concrete'); } }
+      else if (mixer.state === 'leave') { mixer.x += 120 * dt; if (mixer.x > W + 10) { mixer = null; if (mixNo < nMix) newMixer(); } } }
+    const before = cells.reduce((a, v, i) => a + (mask[i] ? v : 0), 0);
     if (filled >= total * SPREAD) {           // Beton verläuft in die letzten Lücken
       for (let i = 0; i < cells.length; i++) if (mask[i] && cells[i] < 1) { cells[i] = Math.min(1, cells[i] + dt * 1.2); if (cells[i] >= 1) { filled++; hud(); } }
     }
-    if (filled >= total && state === 'play') { state = 'won'; holding = false; sfx.load(); finishStep(2, 'concrete', 'beton'); return; }
-    if (!holding) return;
+    if (filled >= total && state === 'play') { state = 'won'; holding = false; sfx.load(); if (mixer) mixer.state = 'leave'; finishStep(2, 'concrete', 'beton'); return; }
+    if (!holding || !ready()) { account(before); return; }
     let any = false;
     for (let i = 0; i < cells.length; i++) {
       if (cells[i] >= 1 || !mask[i]) continue;
@@ -138,7 +152,31 @@ const Pour = (() => {
       if (Math.hypot(cx - tip.x, cy - tip.y) < RADIUS) { cells[i] = Math.min(1, cells[i] + RATE*dt); any = true; if (cells[i] >= 1) { filled++; hud(); } }
     }
     if (Math.random() < .7) spawn(tip.x + rnd(-2, 2), tip.y + 2, rnd(-15, 15), rnd(-10, 15), .5, pick(['#8e959c', '#a8aeb4', '#c4c9ce']), 30);
+    if (Math.random() < .6) { const sx = mixer.x - 3, sy = mixer.y + 4, ex = truck.x - 12, ey = truck.y + 4; spawn(sx, sy, (ex - sx) / .3, (ey - sy) / .3, .3, pick(['#8e959c', '#a8aeb4'])); }   // Rutsche → Pumpe
     if (any && Math.random() < .04) sfx.pour();
+    account(before);
+  }
+  // so viel Beton ist gerade geflossen: aus dem Mischer abziehen; leer (bei 2 Mischern genau bei der Hälfte) → wegfahren
+  function account(before) {
+    const now = cells.reduce((a, v, i) => a + (mask[i] ? v : 0), 0), d = now - before; if (d <= 0 || !mixer) return;
+    poured += d; mixer.left = Math.max(0, 1 - (poured - (mixNo - 1) * budget) / budget);
+    if (mixer.left <= 0.001 && mixer.state === 'park' && mixNo < nMix) { mixer.left = 0; mixer.state = 'leave'; holding = false; sfx.honk(); }
+  }
+  // Betonmischer von oben, fährt nach rechts: Fahrerhaus vorne rechts, Trommel dreht sich (Streifen wandern), Rutsche hinten links
+  function drawMixer(time) {
+    if (!mixer) return;
+    const Q = snapF(R, 2), x = Math.round(mixer.x), y = mixer.y;
+    Q('rgba(0,0,0,.25)', x + 2, y + 3, 56, 18);
+    for (const wx of [6, 16, 40]) { Q('#1a1a1a', x + wx, y - 1, 6, 2); Q('#1a1a1a', x + wx, y + 17, 6, 2); }
+    Q('#444', x, y + 1, 44, 16);
+    Q('#9a5a00', x + 4, y, 34, 18); Q('#f08c00', x + 5, y + 1, 32, 16);          // Trommel
+    for (let i = 0; i < 6; i++) { const sx = x + 5 + ((i * 7 + Math.floor(mixer.rot * 4)) % 32); Q('#ffffff', sx, y + 2, 2, 14); }
+    Q('#c46a00', x + 5, y + 1, 32, 2); Q('#ffd08a', x + 5, y + 3, 32, 1);
+    Q('#2a6fdb', x + 44, y, 12, 18); Q('#173f80', x + 44, y, 12, 2); Q('#9fe3ff', x + 52, y + 2, 3, 14);   // Fahrerhaus
+    Q('#777', x - 6, y + 5, 7, 4); Q('#999', x - 6, y + 5, 7, 1);                                         // Rutsche
+    // Füllstand: Balken über dem Mischer
+    const bw = 36, bx = x + 4, by = y + 22;   // unter dem Mischer (darüber steht die Pumpe)
+    R('#222', bx - 1, by - 1, bw + 2, 6); R('#666', bx, by, bw, 4); R('#a2a8ae', bx, by, Math.round(bw * mixer.left), 4); R('#c4c9ce', bx, by, Math.round(bw * mixer.left), 1);
   }
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
@@ -150,10 +188,11 @@ const Pour = (() => {
       if (f >= 1 && ((i * 7) % 5 === 0)) R('#c4c9ce', cx - 3, cy - 2, 4, 1);
       ctx.globalAlpha = 1;
     }
+    drawMixer(time);
     // Betonpumpe mit ausgeklapptem Arm (Drehturm → Knick → Schlauchende am Finger)
     drawTipperLikePump(time);
     // Hinweis: zum ersten leeren Feld ziehen
-    if (state === 'play' && !holding) {
+    if (state === 'play' && !holding && ready()) {
       const i = cells.findIndex((f, j) => mask[j] && f < 1);
       if (i >= 0) { const [cx, cy] = cellCenter(i), b = Math.abs(Math.sin(time/220))*4; drawArrow(Math.round(cx - 3), Math.round(cy - 16 - b)); }
     }
@@ -177,7 +216,7 @@ const Pour = (() => {
   }
   function resize() { layout(false); }
   function exit() { setEngine(false, false); clearTimeout(winTimer); }
-  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, filled, total: cells && cells.length, pit, tip }) };
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, filled, total, pit, tip, mixer: mixer && { x: mixer.x, state: mixer.state, left: mixer.left }, mixNo, nMix, pump: truck }) };
 })();
 startLoop(Pour);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

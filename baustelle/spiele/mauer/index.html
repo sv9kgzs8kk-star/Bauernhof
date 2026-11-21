@@ -78,12 +78,13 @@ function finishStep(step, key, back) {
    Steine von der Palette in die leuchtenden Lücken der Hauswand ziehen. Reihe für Reihe von unten nach oben,
    Tür und Fenster bleiben frei. Nichts fliegt durch die Luft: Ein Stein hängt am Finger oder liegt auf der Palette.
    Hilfe: Eine leuchtende Lücke antippen legt dort direkt einen Stein hinein.
+   Bauarbeiter antippen: Er nimmt einen Stein von der Palette, trägt ihn zur nächsten freien Lücke, setzt ihn und geht zurück.
    ===================================================================== */
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('mauer')));
 
 const Wall = (() => {
   let ROWS = 3; const COLS = 7;   // 7 Spalten: Tür liegt genau in der Mitte einer Spalte; großes Haus (2 Stockwerke): 5 Reihen
-  let g, geo, cells, state, row, drag = null, pal, plops = [], paused = false;
+  let g, geo, cells, state, row, drag = null, pal, plops = [], paused = false, wk = null;   // wk = Bauarbeiter (läuft mit Stein)
   function siteGeo() {
     const hw = Math.min(6, gc - 6) * G, hh = Math.min(4, gr - 4) * G;
     const hx = Math.round((gc * G - hw) / 2) - G, hy = Math.max(G, Math.round(((gr - 1) * G - hh) / 2));
@@ -122,6 +123,8 @@ const Wall = (() => {
     }
     row = 0; while (row < ROWS && !free().length) row++;
     drag = null; plops = [];
+    const hx = Math.round(pal.x + pal.w / 2), hy = pal.y + pal.h + 12;   // Ausgangsstellung: unter der Palette
+    wk = { x: hx, y: hy, hx, hy, path: [], carry: false, k: null, a: Math.PI, t: 0 };
     pickColor();
   }
   // Farbe wählen: jede Karte zeigt das fertige Haus in dieser Farbe; danach geht das Mauern los
@@ -158,9 +161,33 @@ const Wall = (() => {
       if (row >= ROWS) { state = 'won'; finishStep(3, 'wall', 'mauer'); }
     }
   }
+  // Bauarbeiter: nimmt einen Stein, geht vor die nächste freie Lücke (erst nach unten vors Haus, dann seitlich), setzt ihn, geht zurück
+  const onWorker = (x, y) => Math.abs(x - wk.x) < 16 && Math.abs(y - wk.y) < 16;
+  function sendWorker() {
+    const k = free()[0]; if (!k) return;
+    const fy = g.hy + g.hh + 14, tx = Math.round(k.x + k.w / 2);
+    wk.carry = true; wk.k = k; wk.path = [{ x: wk.hx, y: fy }, { x: tx, y: fy, put: true }, { x: wk.hx, y: fy }, { x: wk.hx, y: wk.hy, home: true }];
+    sfx.click();
+  }
+  function updWorker(dt) {
+    const q = wk.path[0]; if (!q) return;
+    const dx = q.x - wk.x, dy = q.y - wk.y, d = Math.hypot(dx, dy), sp = 75 * dt;
+    if (d > 0.5) wk.a = Math.atan2(dy, dx);
+    wk.t += dt;
+    if (d > sp) { wk.x += dx / d * sp; wk.y += dy / d * sp; return; }
+    wk.x = q.x; wk.y = q.y; wk.path.shift();
+    if (q.put) {                                       // angekommen: Stein in die Lücke (wurde sie inzwischen gefüllt, die nächste freie in der Reihe)
+      let k = wk.k && !wk.k.done && wk.k.r === row ? wk.k : null;
+      if (!k) { const f = free(); k = f.sort((a, b) => Math.abs(a.x + a.w / 2 - wk.x) - Math.abs(b.x + b.w / 2 - wk.x))[0]; }
+      if (k && state === 'play') place(k);
+      wk.carry = false; wk.k = null;
+    }
+    if (q.home) wk.a = Math.PI;
+  }
   function onPointer(type, x, y) {
     if (state !== 'play' || paused) return true;
     if (type === 'down') {
+      if (onWorker(x, y)) { if (!wk.path.length) sendWorker(); return true; }
       if (inPal(x, y)) { drag = { x, y }; sfx.click(); return true; }
       const k = free().find(k => x > k.x - 3 && x < k.x + k.w + 3 && y > k.y - 3 && y < k.y + k.h + 3);
       if (k) place(k);                                 // Hilfe: Lücke antippen
@@ -173,7 +200,7 @@ const Wall = (() => {
     }
     return true;
   }
-  function update(dt) { for (const p of plops) p.t += dt; plops = plops.filter(p => p.t < 0.25); }
+  function update(dt) { for (const p of plops) p.t += dt; plops = plops.filter(p => p.t < 0.25); if (wk && !paused) updWorker(dt); }
   function brick(x, y, w, h) { const bc = houseColor().brick; R(bc[0], x, y, w, h); R(bc[1], x + 1, y + 1, w - 2, h - 3); R(bc[2], x + 1, y + 1, w - 2, 1); R('#d8c8a8', x, y + h - 1, w, 1); }   // Steine in der gewählten Hausfarbe
   function draw(time) {
     ctx.drawImage(bg, 0, 0);
@@ -195,7 +222,10 @@ const Wall = (() => {
     // Steine auf der Palette, Bauarbeiter daneben
     const cw = Math.round(g.hw / COLS), ch = Math.round(geo.fz / ROWS);
     for (let j = 0; j < 3; j++) for (let i = 0; i < 2; i++) brick(pal.x + 3 + i * (cw + 1), pal.y + 3 + j * (ch - 1), cw, ch);
-    ctx.drawImage(BUILDER.frames[16], pal.x + pal.w / 2 - 10, pal.y + pal.h + 2);
+    const fr = ((Math.round(wk.a / (Math.PI * 2) * 32) % 32) + 32) % 32, bob = wk.path.length && Math.floor(wk.t * 8) % 2 ? 1 : 0;
+    ctx.drawImage(BUILDER.shadows[fr], Math.round(wk.x - 17 + 2), Math.round(wk.y - 17 + 2)); ctx.drawImage(BUILDER.frames[fr], Math.round(wk.x - 17), Math.round(wk.y - 17 - bob));
+    if (wk.carry) brick(Math.round(wk.x - cw / 2), Math.round(wk.y - 17 - ch), cw, ch);   // Stein über dem Kopf
+    if (state === 'play' && !drag && !wk.path.length && Math.floor(time / 700) % 4 === 0) R('rgba(255,210,63,.6)', Math.round(wk.x - 11), Math.round(wk.y + 11), 22, 2);   // leiser Hinweis: man kann ihn antippen
     if (drag) brick(Math.round(drag.x - cw / 2), Math.round(drag.y - ch / 2), cw, ch);
     // Hinweis ohne fliegende Steine: gepunkteter Weg von der Palette zur ersten Lücke, Pfeil auf die Palette
     if (state === 'play' && !drag) {
@@ -210,7 +240,7 @@ const Wall = (() => {
   }
   function resize() { layout(false); }
   function exit() { clearTimeout(winTimer); }
-  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, pal, free: free().map(k => [k.x + k.w / 2, k.y + k.h / 2]) }) };
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, pal, wk: wk && { x: wk.x, y: wk.y, n: wk.path.length, carry: wk.carry }, free: free().map(k => [k.x + k.w / 2, k.y + k.h / 2]) }) };
 })();
 startLoop(Wall);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

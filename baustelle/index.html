@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261123a">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261123b">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261123a"></script>
-<script src="../gemeinsam/basis.js?v=20261123a"></script>
-<script src="../gemeinsam/bau.js?v=20261123a"></script>
+<script src="../gemeinsam/sterne.js?v=20261123b"></script>
+<script src="../gemeinsam/basis.js?v=20261123b"></script>
+<script src="../gemeinsam/bau.js?v=20261123b"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -285,8 +285,9 @@ const Hub = (() => {
         if (plotT > PLOT_WAIT) {
           plotT = 0; plotDone = t;
           if (pickHere) { openPick(); return; }
-          sayWord(homeHere ? 'house' : PLOTS[t].word);
-          if (homeHere) enterHome();
+          if (!(homeHere && houseType().shape === 'T')) sayWord(homeHere ? 'house' : PLOTS[t].word);
+          if (homeHere && houseType().shape === 'T') { sayWord('tower'); sfx.click(); }   // Hochhaus: Innenräume kommen später
+          else if (homeHere) enterHome();
           else if (PLOTS[t].page) { entering = true; sfx.enter(); setTimeout(() => { location.href = PLOTS[t].page; }, 900); }
           else { sfx.click(); plotShown = t; }
         }

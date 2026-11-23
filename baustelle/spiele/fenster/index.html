@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261123b">
+<title>Fenster</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="khud" class="hud gamehud hidden">
+  <div class="pill" data-say="window" style="pointer-events:auto"><span class="word">FENSTER</span> <span id="kcount">0/8</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261123b"></script>
+<script src="../../../gemeinsam/basis.js?v=20261123b"></script>
+<script src="../../../gemeinsam/bau.js?v=20261123b"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+let winTimer = null;
+// Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: FENSTER-PUZZLE (Baustelle, Hochhaus Schritt 5) – das Hochhaus von vorne, groß
+   Einige Fenster und die Haustür fehlen noch (dunkle Löcher, TOWER_WIN miss). Rechts (bzw. unten) liegen die Teile:
+   quadratisch, hoch, rund, breit und die Tür. Ein Teil in das Loch mit der GLEICHEN FORM ziehen → es rastet ein.
+   Passt die Form nicht, rutscht es zurück (kein Scheitern), und die passenden Löcher blinken kurz.
+   Antippen geht auch: erst Teil, dann Loch. Alles drin = Hochhaus fertig (house.step = 5).
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('kran')));
+const Q = snapF(R, 2);
+const Win = (() => {
+  let g, mw, holes, pieces, drag = null, sel = null, flash = null, paused = false, done = false, idle = 0, u, side;
+  function enter() {
+    Hof.load();
+    if (houseType().key !== 'tower' || house().step !== 4) { goHof('kran'); return; }
+    layout(true);
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+    }
+    // Hochhaus groß: so hoch wie möglich, Teile daneben (quer) oder darunter (hochkant)
+    side = W > H * 1.1;
+    const d = 10, fh = Math.floor(Math.min(side ? (H - 40) / 4.3 : (H - 140) / 4.3, (side ? W * 0.55 : W - 24) / 3 / 2.6, 46));
+    const w = Math.round(fh * 2.6) * 3; mw = Math.round(w / 3); u = fh / 16;
+    const x = side ? Math.round(W * 0.06) : Math.round((W - w) / 2), y = (side ? H - 16 : H - 120) - d;
+    g = { x, y, w, d, fh };
+    // Löcher (fehlende Fenster) und Teile
+    holes = [];
+    for (let k = 0; k < TOWER_FLOORS; k++) for (let m = 0; m < 3; m++) TOWER_WIN[k][m].forEach((wv, i) => {
+      if (!wv.miss) return;
+      const mx = g.x + m * mw, ww = m === 2 ? g.w - 2 * mw : mw, [cx, cy] = towerWinPos(mx, g.y, ww, d, fh, k, m, i);
+      holes.push({ k, m, i, s: wv.s, x: cx, y: cy, done: false });
+    });
+    const shapes = holes.map(h => h.s);
+    for (let i = shapes.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [shapes[i], shapes[j]] = [shapes[j], shapes[i]]; }
+    // Ablage: Gitter aus Feldern
+    const n = shapes.length, cols = side ? 2 : 4, rows = Math.ceil(n / cols);
+    const area = side ? { x: g.x + g.w + 24, y: 40, w: W - (g.x + g.w + 24) - 10, h: H - 56 } : { x: 10, y: H - 110, w: W - 20, h: 100 };
+    const cw = area.w / cols, ch = area.h / rows;
+    pieces = shapes.map((s, i) => { const hx = Math.round(area.x + cw * (i % cols) + cw / 2), hy = Math.round(area.y + ch * Math.floor(i / cols) + ch / 2);
+      return { s, x: hx, y: hy, hx, hy, done: false }; });
+    g.area = area;
+    drag = sel = flash = null; done = false; idle = 0;
+    show('khud'); hud();
+    setTimeout(() => sayWord('window'), 400);
+  }
+  const placedN = () => holes.filter(h => h.done).length;
+  function hud() { $('kcount').textContent = placedN() + '/' + holes.length; }
+  $('pausebtn').addEventListener('click', () => { if (done) return; paused = true; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+  const size = s => { const rs = towerWinRects(s, u); let a = 1e9, b = 1e9, c = -1e9, e = -1e9; for (const [x, y, w, h] of rs) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x + w); e = Math.max(e, y + h); } return { w: c - a, h: e - b }; };
+  const pieceAt = (x, y) => pieces.find(p => !p.done && Math.abs(x - p.x) < size(p.s).w / 2 + 10 && Math.abs(y - p.y) < size(p.s).h / 2 + 10);
+  const holeAt = (x, y, pad = 8) => holes.find(h => !h.done && Math.abs(x - h.x) < size(h.s).w / 2 + pad && Math.abs(y - h.y) < size(h.s).h / 2 + pad);
+  function tryPut(p, h) {
+    if (h.s !== p.s) {                                    // falsche Form: zurück, passende Löcher blinken
+      sfx.bonk(); flash = { s: p.s, t: 1.6 }; p.x = p.hx; p.y = p.hy; return false;
+    }
+    h.done = true; p.done = true; sfx.clod(); hud();
+    for (let i = 0; i < 8; i++) spawn(h.x + rnd(-6, 6), h.y + rnd(-6, 6), rnd(-20, 20), rnd(-25, 0), .4, '#ffffff', 30);
+    if (holes.every(q => q.done)) { done = true; sel = null; setTimeout(() => { hide('khud'); confetti(); finishStep(5, 'tower', 'kran'); }, 600); }
+    return true;
+  }
+  function onPointer(type, x, y) {
+    if (paused || done) return true;
+    idle = 0;
+    if (type === 'down') {
+      const p = pieceAt(x, y);
+      if (p) { drag = { p, ox: p.x - x, oy: p.y - y, sx: x, sy: y }; sel = p; sfx.click(); return true; }
+      const h = holeAt(x, y, 10);
+      if (h && sel && !sel.done) { tryPut(sel, h); sel = null; return true; }
+      return true;
+    }
+    if (type === 'move' && drag) { drag.p.x = x + drag.ox; drag.p.y = y + drag.oy; return true; }
+    if (type === 'up' && drag) {
+      const p = drag.p, moved = Math.hypot(x - drag.sx, y - drag.sy) > 8; drag = null;
+      if (!moved) { p.x = p.hx; p.y = p.hy; return true; }   // nur angetippt: bleibt ausgewählt, dann Loch antippen
+      const h = holeAt(p.x, p.y, 12);
+      if (h) { tryPut(p, h); sel = null; } else { p.x = p.hx; p.y = p.hy; }
+    }
+    return true;
+  }
+  function update(dt) { if (paused) return; idle += dt; if (flash) { flash.t -= dt; if (flash.t <= 0) flash = null; } }
+  function draw(time) {
+    if (!g) return;
+    ctx.drawImage(bg, 0, 0);
+    // Hochhaus von vorne: fertige Fenster sind drin, Löcher je nach Spielstand
+    drawTower(Q, g, { win: (k, m, i) => { const h = holes.find(q => q.k === k && q.m === m && q.i === i); return !h || h.done; }, helipad: true, time });
+    // Blinken: passende Löcher nach einem falschen Versuch, sonst ausgewähltes Teil
+    const blink = Math.abs(Math.sin(time / 180)) > .5, want = flash ? flash.s : (sel && !drag ? sel.s : null);
+    if (want && blink) for (const h of holes) if (!h.done && h.s === want) { const z = size(h.s); R('rgba(255,210,63,.9)', h.x - z.w / 2 - 2, h.y - z.h / 2 - 2, z.w + 4, 2); R('rgba(255,210,63,.9)', h.x - z.w / 2 - 2, h.y + z.h / 2, z.w + 4, 2);
+      R('rgba(255,210,63,.9)', h.x - z.w / 2 - 2, h.y - z.h / 2 - 2, 2, z.h + 4); R('rgba(255,210,63,.9)', h.x + z.w / 2, h.y - z.h / 2 - 2, 2, z.h + 4); }
+    // Ablage (Palette mit den Teilen)
+    const A = g.area; R('rgba(0,0,0,.2)', A.x + 3, A.y + 3, A.w, A.h); R('#7a4a22', A.x, A.y, A.w, A.h); R('#9a6436', A.x + 3, A.y + 3, A.w - 6, A.h - 6);
+    for (let yy = A.y + 3; yy < A.y + A.h - 3; yy += 12) R('#7a4a22', A.x + 3, yy, A.w - 6, 1);
+    for (const p of pieces) if (!p.done && p !== (drag && drag.p)) {
+      if (p === sel) { const z = size(p.s); R(blink ? '#ffd23f' : '#fff3b0', p.x - z.w / 2 - 4, p.y - z.h / 2 - 4, z.w + 8, z.h + 8); }
+      drawTowerWin(Q, p.x, p.y, p.s, u, 'glass');
+    }
+    if (drag) { const z = size(drag.p.s); R('rgba(0,0,0,.25)', drag.p.x - z.w / 2 + 3, drag.p.y - z.h / 2 + 4, z.w, z.h); drawTowerWin(Q, Math.round(drag.p.x), Math.round(drag.p.y), drag.p.s, u, 'glass'); }
+    if (!done && !drag && idle > 2.5) { const p = pieces.find(q => !q.done); if (p) drawArrow(p.x - 3, Math.round(p.y - size(p.s).h / 2 - 16 - Math.abs(Math.sin(time / 220)) * 4)); }
+  }
+  function resize() { layout(false); }
+  function exit() { clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ done, holes: holes.map(h => ({ s: h.s, x: h.x, y: h.y, done: h.done })), pieces: pieces.map(p => ({ s: p.s, x: p.x, y: p.y, done: p.done })) }) };
+})();
+startLoop(Win);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

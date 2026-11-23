@@ -20,7 +20,8 @@ const HOUSE_TYPES = [
   // ready: false = in der Hauswahl noch gesperrt, bis alle Schritte gebaut sind (Testlink ?haustyp=3 geht)
   { key: 'tower', word: 'tower', floors: 4, loads: 4, trusses: 0, shape: 'T', ready: false, steps: ['baggern', 'beton', 'turm', 'turm', 'fenster'] },
 ];
-Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'], tower: ['HOCHHAUS', 'Hochhaus'], towercrane: ['TURMKRAN', 'Turmkran'], storey: ['STOCKWERK', 'Stockwerk'] });
+Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'], tower: ['HOCHHAUS', 'Hochhaus'], towercrane: ['TURMKRAN', 'Turmkran'], storey: ['STOCKWERK', 'Stockwerk'],
+  window: ['FENSTER', 'Fenster'], helipad: ['LANDEPLATZ', 'Landeplatz'], heli: ['HUBSCHRAUBER', 'Hubschrauber'] });
 // L-Form im Grube-Rechteck (pit = { r0, c0, w, h }): links ganz, rechts nur die untere Hälfte
 const lShape = pit => { const cs = Math.ceil(pit.w / 2), hs = Math.floor(pit.h / 2); return { cs, hs, has: (r, c) => c < cs || r >= hs }; };
 // Punktfundament: Löcher an den Ecken der L-Form (relativ zur Grube)
@@ -509,17 +510,27 @@ function towerWinRects(s, u) {
   if (s === 'tall') return r(5, 9);
   if (s === 'wide') return r(12, 6);
   if (s === 'door') return [[-Math.round(4 * u), -Math.round(5 * u), Math.max(3, Math.round(8 * u)), Math.max(4, Math.round(11 * u))]];
-  if (s === 'round') { const a = Math.max(2, Math.round(7 * u)), b = Math.max(1, Math.round(2 * u)); return [[-a / 2 + b, -a / 2, a - 2 * b, a], [-a / 2, -a / 2 + b, a, a - 2 * b]].map(q => q.map(Math.round)); }
+  if (s === 'round') {                                // Kreis aus Pixelzeilen (bei kleinem Maßstab ein Plus)
+    const a = Math.max(3, Math.round(8 * u)), r = a / 2, out = [];
+    if (a < 6) return [[-1, -Math.floor(a / 2), 2, a], [-Math.floor(a / 2), -1, a, 2]];
+    for (let j = 0; j < a; j++) { const yy = j + 0.5 - r, hw = Math.round(Math.sqrt(Math.max(0, r * r - yy * yy))); if (hw > 0) out.push([-hw, Math.round(j - r), 2 * hw, 1]); }
+    out.sort((p, q) => q[2] - p[2]); return out;     // breiteste Zeile zuerst (für den Glanzpunkt)
+  }
   return r(7, 7);
 }
 function drawTowerWin(F, cx, cy, s, u, state) {      // state: 'glass' | 'hole' | 'ghost'
   const rs = towerWinRects(s, u);
-  if (state === 'hole') { for (const [x, y, w, h] of rs) F('#2a2a30', cx + x, cy + y, w, h); for (const [x, y, w] of rs) F('rgba(255,255,255,.35)', cx + x, cy + y, w, 1); return; }
+  if (state === 'hole') { for (const [x, y, w, h] of rs) F('#2a2a30', cx + x, cy + y, w, h); if (s !== 'round') F('rgba(255,255,255,.35)', cx + rs[0][0], cy + rs[0][1], rs[0][2], 1); return; }
   for (const [x, y, w, h] of rs) F(s === 'door' ? '#5a3b1c' : '#ffffff', cx + x - 1, cy + y - 1, w + 2, h + 2);
   for (const [x, y, w, h] of rs) F(s === 'door' ? '#8a5a2e' : '#9fd3f5', cx + x, cy + y, w, h);
   const [x, y, w, h] = rs[0];
   if (s === 'door') { F('#9fd3f5', cx + x + 1, cy + y + 1, w - 2, Math.round(h / 3)); F('#ffd23f', cx + x + w - 2, cy + y + Math.round(h / 2), 1, 1); }
   else { F('#d6efff', cx + x, cy + y, Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(h / 3))); if (w > 5 && s !== 'round') F('#ffffff', cx + x + Math.floor(w / 2), cy + y, 1, h); }
+}
+// Mitte von Fenster i in Modul (k, m), Modul links bei x, Grundfläche bei gy, auf Höhe e
+function towerWinPos(x, gy, w, d, fh, k, m, i, e = k * fh) {
+  const n = TOWER_WIN[k][m].length, fy = Math.round(gy - e - fh) + d, u = fh / 16;
+  return [Math.round(x + w * (i + 1) / (n + 1)), Math.round(fy + fh / 2 - (TOWER_WIN[k][m][i].s === 'door' ? -u : u))];
 }
 // ein Modul zeichnen. o: { win(i) → true = Fenster i ist drin, top: Dach (Brüstung), lift: Aufzugsaufbau }
 function drawTowerModule(F, x, gy, w, d, fh, k, m, e = 0, o = {}) {
@@ -527,9 +538,9 @@ function drawTowerModule(F, x, gy, w, d, fh, k, m, e = 0, o = {}) {
   F('rgba(0,0,0,.18)', x + w, fy, 2, fh);                                          // Schatten rechts
   F(c[0], x, fy, w, fh); F(c[1], x, fy, w, 1); F(c[2], x + w - 1, fy, 1, fh);      // Vorderwand
   F('#6d6a64', x, fy + fh - Math.max(1, Math.round(2 * u)), w, Math.max(1, Math.round(2 * u)));   // Geschossdecke
-  const wins = TOWER_WIN[k][m], n = wins.length;
+  const wins = TOWER_WIN[k][m];
   wins.forEach((wv, i) => {
-    const cx = Math.round(x + w * (i + 1) / (n + 1)), cy = Math.round(fy + fh / 2 - (wv.s === 'door' ? -u : u));
+    const [cx, cy] = towerWinPos(x, gy, w, d, fh, k, m, i, e);
     const inside = !wv.miss || (o.win ? o.win(i) : o.allWin);
     if (fh < 9) { F(inside ? '#9fd3f5' : '#2a2a30', cx - 1, cy - 1, 2, 2); return; }
     drawTowerWin(F, cx, cy, wv.s, u, inside ? 'glass' : 'hole');
@@ -626,4 +637,18 @@ function drawLowLoader(F, x, gy, len, d) {
   const cx = x + len + 2;                                                                       // Zugmaschine
   F('#1a1a1a', cx + 2, gy + 4, 5, 2); F('#1a1a1a', cx + 2, gy + d - 6, 5, 2);
   F('#173f80', cx, gy + 4, 16, d - 8); F('#2a6fdb', cx + 1, gy + 5, 14, d - 10); F('#9fe3ff', cx + 11, gy + 6, 3, d - 12); F('#ffffff', cx + 2, gy + 5, 8, 1);
+}
+
+// Hubschrauber von oben (Rotor dreht sich), Mitte x, y; a = Richtung (0 = nach rechts)
+function drawHelicopter(F, x, y, time, a = 0, spin = 1, k = 1.6) {
+  x = Math.round(x); y = Math.round(y);
+  const cx = Math.cos(a) * k, sx = Math.sin(a) * k, P = (dx, dy) => [Math.round(x + dx * cx - dy * sx), Math.round(y + dx * sx + dy * cx)];
+  F('rgba(0,0,0,.2)', x - 8 * k, y + 6 * k, 16 * k, 4 * k);                                       // Schatten
+  for (const d of [-5, 5]) { const [ax, ay] = P(-6, d), [bx, by] = P(6, d); pixLine(F, ax, ay, bx, by, 2, '#333'); }   // Kufen
+  for (let t = -15; t <= -4; t++) { const [qx, qy] = P(t, 0); F('#c0392b', qx - 1, qy - 1, 3, 3); }   // Heckausleger
+  { const [qx, qy] = P(-16, 0); F('#333', qx - 1, qy - 4, 3, 9); }
+  for (let dy = -4; dy <= 4; dy += 0.5) for (let dx = -6; dx <= 6; dx += 0.5) if (dx * dx / 36 + dy * dy / 16 <= 1) { const [qx, qy] = P(dx, dy); F(dx > 2.5 ? '#9fd3f5' : dy < -2 ? '#ff7b6b' : '#e74c3c', qx, qy, 2, 2); }
+  const r = (time || 0) / 1000 * 25 * spin, L = 14 * k;
+  for (const o of [0, Math.PI / 2]) { const ca = Math.cos(r + o), sa = Math.sin(r + o); pixLine(F, x - ca * L, y - sa * L, x + ca * L, y + sa * L, 2, 'rgba(30,30,30,.75)'); }
+  F('#222', x - 2, y - 2, 4, 4);
 }

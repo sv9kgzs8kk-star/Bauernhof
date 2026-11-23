@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261123a">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261123b">
 <title>Turmkran</title>
 </head>
 <body>
@@ -45,9 +45,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261123a"></script>
-<script src="../../../gemeinsam/basis.js?v=20261123a"></script>
-<script src="../../../gemeinsam/bau.js?v=20261123a"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261123b"></script>
+<script src="../../../gemeinsam/basis.js?v=20261123b"></script>
+<script src="../../../gemeinsam/bau.js?v=20261123b"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -79,7 +79,7 @@ function finishStep(step, key, back) {
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('kran')));
 const Q = snapF(R, 2);
 const Turm = (() => {
-  let g, part, floors, mw, crane, MH, MHgoal, fresh = 0, truck, hook, load, hq, follow, finger, idle = 0, paused = false, done = false, placed, total, L;
+  let g, part, floors, mw, crane, MH, MHgoal, fresh = 0, truck, hook, load, hq, follow, finger, idle = 0, paused = false, done = false, placed, total, L, heli = null, pad = false;
   const D = () => g.d, FH = () => g.fh;
   function enter() {
     Hof.load();
@@ -104,7 +104,7 @@ const Turm = (() => {
     B('#ffffff', fx, fy, fw + 2, 2); B('#ffffff', fx, fy, 2, fhh); B('#ffffff', fx + fw, fy, 2, fhh);
     crane = { x: x + w + 24, y: y + Math.round(d / 2) };
     placed = {}; for (let k = 0; k < floors[0]; k++) for (let m = 0; m < 3; m++) placed[k + ',' + m] = true;   // schon gebaut
-    total = floors.length * 3;
+    total = floors.length * 3 + part; pad = false; heli = null;   // Teil 2: zum Schluss der Landeplatz
     MH = MHgoal = mastFor(floors[0]);
     hook = { gx: crane.x - 30, gy: crane.y + 20, e: carryE(), vx: 0 }; load = null; hq = []; follow = null; finger = null; done = false; idle = 0;
     newTruck(floors[0]);
@@ -114,7 +114,7 @@ const Turm = (() => {
   const mastFor = n => n * FH() + 30;                  // Turm immer etwas höher als das Haus
   const carryE = () => Math.max(...floors.map(k => isDone(k) ? (k + 1) * FH() : 0), floors[0] * FH()) + 12;
   const isDone = k => [0, 1, 2].every(m => placed[k + ',' + m]);
-  const count = () => floors.reduce((a, k) => a + [0, 1, 2].filter(m => placed[k + ',' + m]).length, 0);
+  const count = () => floors.reduce((a, k) => a + [0, 1, 2].filter(m => placed[k + ',' + m]).length, 0) + (pad ? 1 : 0);
   function hud() { $('kcount').textContent = count() + '/' + total; }
   $('pausebtn').addEventListener('click', () => { if (done) return; paused = true; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
@@ -123,21 +123,21 @@ const Turm = (() => {
   const LEN = () => 3 * (mw + 2) + 6;
   function newTruck(k) {
     const len = LEN(), gy = H - 8 - D();
-    truck = { k, x: -len - 24, park: Math.round(clamp(crane.x - len / 2 - 8, 4, W - len - 22)), gy, mods: [0, 1, 2], state: 'arrive' };   // hält unter dem Kran: kurzer Ausleger
+    truck = { k, x: -len - 24, park: Math.round(clamp(crane.x - len / 2 - 8, 4, W - len - 22)), gy, mods: k === 'H' ? ['H'] : [0, 1, 2], state: 'arrive' };   // hält unter dem Kran: kurzer Ausleger; 'H' = Landeplatz
     reach();
   }
-  const truckMod = m => ({ gx: truck.x + 4 + m * (mw + 2) + mw / 2, gy: truck.gy + D() / 2 });   // Mitte eines Moduls auf der Ladefläche (Bodenpunkt)
-  const slot = (k, m) => ({ gx: g.x + m * mw + mw / 2, gy: g.y + D() / 2, e: k * FH() });
+  const truckMod = m => ({ gx: m === 'H' ? truck.x + LEN() / 2 : truck.x + 4 + m * (mw + 2) + mw / 2, gy: truck.gy + D() / 2 });   // Mitte eines Moduls auf der Ladefläche (Bodenpunkt)
+  const slot = (k, m) => k === 'H' ? { gx: g.x + g.w / 2, gy: g.y + D() / 2, e: TOWER_FLOORS * FH() - FH() + 3 } : { gx: g.x + m * mw + mw / 2, gy: g.y + D() / 2, e: k * FH() };   // Landeplatz liegt oben auf dem Dach
   function reach() {                                    // Auslegerlänge: bis zum weitesten Ziel
     const pts = [slot(0, 0), { gx: truck.park + 4 + mw / 2, gy: truck.gy + D() / 2 }, { gx: truck.park + LEN(), gy: truck.gy + D() / 2 }];
     L = Math.max(...pts.map(p => Math.hypot(p.gx - crane.x, p.gy - crane.y))) + 8;
   }
   // Bildschirm-Rechteck eines Moduls (Decke + Vorderwand) mit Mitte am Bodenpunkt (gx, gy) auf Höhe e
-  const modRect = (gx, gy, e) => ({ x: gx - mw / 2, y: gy - D() / 2 - e - FH(), w: mw, h: D() + FH() });
+  const modRect = (gx, gy, e, wide) => { const ww = wide ? g.w : mw; return { x: gx - ww / 2, y: gy - D() / 2 - e - FH(), w: ww, h: D() + FH() }; };
   const inRect = (r, x, y, pad = 2) => x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad;
   function truckModAt(x, y) {
     if (!truck || truck.state !== 'park') return null;
-    for (const m of truck.mods) { const p = truckMod(m); if (inRect(modRect(p.gx, p.gy, 4), x, y)) return m; }
+    for (const m of truck.mods) { const p = truckMod(m); if (inRect(modRect(p.gx, p.gy, 4, m === 'H'), x, y)) return m; }
     return null;
   }
   // ---------- Kran ----------
@@ -154,9 +154,9 @@ const Turm = (() => {
   function drop() {
     const s = slot(load.k, load.m), E = carryE(); follow = null;
     to(s.gx, s.gy, E); to(s.gx, s.gy, s.e, () => {
-      placed[load.k + ',' + load.m] = true; const k = load.k; load = null; sfx.load(); hud();
+      const k = load.k; if (k === 'H') pad = true; else placed[k + ',' + load.m] = true; load = null; sfx.load(); hud();
       for (let i = 0; i < 10; i++) spawn(s.gx + rnd(-mw / 2, mw / 2), s.gy - s.e - FH() + D() / 2 + rnd(-6, 6), rnd(-15, 15), rnd(-18, 2), .4, '#c4c9ce', 30);
-      if (isDone(k)) floorDone(k);
+      if (k === 'H') padDone(); else if (isDone(k)) floorDone(k);
     });
     to(s.gx, s.gy, carryE());
   }
@@ -164,10 +164,17 @@ const Turm = (() => {
     confetti(); sayWord('storey');
     MHgoal = mastFor(k + 1); fresh = 1.2; sfx.unlock();          // neues Turmstück
     truck.state = 'leave'; setTimeout(() => sfx.honk(), 300);
-    if (floors.every(isDone)) { done = true; setTimeout(() => { hide('khud'); finishStep(house().step + 1, part ? 'tower' : 'storey', 'kran'); }, 1800); }
+    if (floors.every(isDone) && !part) { done = true; setTimeout(() => { hide('khud'); finishStep(house().step + 1, 'storey', 'kran'); }, 1800); }
+  }
+  // Landeplatz liegt oben: Tieflader fährt weg, ein Hubschrauber fliegt ein und landet (Richtfest)
+  function padDone() {
+    confetti(); sayWord('helipad'); truck.state = 'leave'; done = true; follow = null;
+    const tx = g.x + g.w / 2, ty = g.y - TOWER_FLOORS * FH() + D() / 2;   // Mitte des Landeplatzes
+    heli = { x: W + 30, y: -20, tx, ty, t: 0, landed: false };
+    setTimeout(() => sayWord('heli'), 1600);
   }
   function setWord() {}
-  const nearSlot = () => { if (!load) return false; const s = slot(load.k, load.m); return Math.abs(hook.gx - s.gx) < mw / 2 + 6 && Math.abs(hook.gy - s.gy) < D() / 2 + 8; };
+  const nearSlot = () => { if (!load) return false; const s = slot(load.k, load.m); return Math.abs(hook.gx - s.gx) < (load.k === 'H' ? g.w / 2 : mw / 2) + 6 && Math.abs(hook.gy - s.gy) < D() / 2 + 8; };
   function onPointer(type, x, y) {
     if (paused || done) return true;
     idle = 0;
@@ -175,7 +182,7 @@ const Turm = (() => {
     if (type === 'down') {
       if (busy()) return true;
       if (!load) { const m = truckModAt(x, y); if (m !== null) { fetch(m); return true; } }
-      if (load) { const s = slot(load.k, load.m); if (inRect(modRect(s.gx, s.gy, s.e), x, y, 6)) { drop(); return true; } }
+      if (load) { const s = slot(load.k, load.m); if (inRect(modRect(s.gx, s.gy, s.e, load.k === 'H'), x, y, 6)) { drop(); return true; } }
       follow = { x, y }; return true;
     }
     if (type === 'move' && follow) { follow.x = x; follow.y = y; return true; }
@@ -203,7 +210,12 @@ const Turm = (() => {
     hook.vx = approach(hook.vx, (hook.gx - ox) / Math.max(dt, 1e-3), 600 * dt);
     if (truck) {
       if (truck.state === 'arrive') { truck.x = approach(truck.x, truck.park, 110 * dt); if (truck.x === truck.park) { truck.state = 'park'; sfx.honk(); } }
-      else if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 20) { const nk = floors.find(k => !isDone(k)); truck = null; if (nk !== undefined) newTruck(nk); } }
+      else if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 20) { const nk = floors.find(k => !isDone(k)); truck = null; if (nk !== undefined) newTruck(nk); else if (part && !pad) newTruck('H'); } }
+    }
+    if (heli && !heli.landed) {                         // Hubschrauber: anfliegen, über dem Landeplatz runtergehen
+      heli.t += dt; const dx = heli.tx - heli.x, dy = heli.ty - heli.y, dd = Math.hypot(dx, dy), sp = 70 * dt;
+      if (dd > sp) { heli.x += dx / dd * sp; heli.y += dy / dd * sp; } else { heli.x = heli.tx; heli.y = heli.ty; heli.landed = true; sfx.win(); confetti();
+        setTimeout(() => { hide('khud'); finishStep(house().step + 1, 'tower', 'kran'); }, 2200); }
     }
     setEngine(true, busy() || !!follow, 30);
   }
@@ -211,7 +223,7 @@ const Turm = (() => {
     if (!g) return;                                     // falscher Schritt: es geht gleich zurück
     ctx.drawImage(bg, 0, 0);
     // Haus: gesetzte Module
-    drawTower(Q, g, { has: (k, m) => !!placed[k + ',' + m], time });
+    drawTower(Q, g, { has: (k, m) => !!placed[k + ',' + m], helipad: pad, time });
     // leuchtende Stelle(n)
     const a = Math.abs(Math.sin(time / 260)) > .5, bob = Math.abs(Math.sin(time / 220)) * 4;
     if (!done) {
@@ -220,31 +232,41 @@ const Turm = (() => {
         if (strong) R('rgba(255,210,63,.15)', r.x + 2, r.y + 2, r.w - 4, r.h - 4); };
       const k = floors.find(f => !isDone(f));
       if (k !== undefined) for (let m = 0; m < 3; m++) if (!placed[k + ',' + m]) glow(k, m, load && load.m === m && load.k === k);
+      if (k === undefined && part && !pad) { const s = slot('H'), r = modRect(s.gx, s.gy, s.e, true), col = load ? (a ? 'rgba(255,210,63,.95)' : 'rgba(255,210,63,.5)') : 'rgba(255,255,255,.35)';
+        R(col, r.x, r.y, r.w, 2); R(col, r.x, r.y + D() - 2, r.w, 2); R(col, r.x, r.y, 2, D()); R(col, r.x + r.w - 2, r.y, 2, D()); }
     }
     // Tieflader mit Modulen
-    if (truck) { drawLowLoader(Q, truck.x, truck.gy, LEN(), D()); for (const m of truck.mods) { const p = truckMod(m); drawTowerModule(Q, Math.round(p.gx - mw / 2), truck.gy, mw, D(), FH(), truck.k, m, 4); } }
+    if (truck) { drawLowLoader(Q, truck.x, truck.gy, LEN(), D()); for (const m of truck.mods) { const p = truckMod(m); if (m === 'H') drawPadPiece(Math.round(p.gx), Math.round(p.gy), 4); else drawTowerModule(Q, Math.round(p.gx - mw / 2), truck.gy, mw, D(), FH(), truck.k, m, 4); } }
     // Kran: Turm, Last, Ausleger, Laufkatze
     drawTowerCraneMast(Q, crane.x, crane.y, Math.round(MH), fresh);
     const sway = clamp(-hook.vx * 0.03, -5, 5), lx = hook.gx + sway;
     let ropeTo;
     if (load) {
       Q('rgba(0,0,0,.2)', Math.round(hook.gx - mw / 2), Math.round(hook.gy - D() / 2), mw, D());   // Schatten am Boden: hier landet es
-      drawTowerModule(Q, Math.round(lx - mw / 2), Math.round(hook.gy - D() / 2), mw, D(), FH(), load.k, load.m, Math.round(hook.e));
-      ropeTo = Math.round(hook.gy - D() / 2 - hook.e - FH() + D() / 2);
+      if (load.k === 'H') { drawPadPiece(Math.round(lx), Math.round(hook.gy), Math.round(hook.e + FH() - 3)); ropeTo = Math.round(hook.gy - hook.e - FH() + 3 - 6); }
+      else { drawTowerModule(Q, Math.round(lx - mw / 2), Math.round(hook.gy - D() / 2), mw, D(), FH(), load.k, load.m, Math.round(hook.e));
+        ropeTo = Math.round(hook.gy - D() / 2 - hook.e - FH() + D() / 2); }
     } else { ropeTo = Math.round(hook.gy - hook.e); Q('#ffd23f', Math.round(lx) - 2, ropeTo, 5, 3); Q('#333', Math.round(lx), ropeTo + 3, 1, 2); }
     drawTowerCraneTop(Q, crane.x, crane.y, Math.round(MH), hook.gx, hook.gy, L, time);
     drawTowerTrolley(Q, lx, hook.gy, Math.round(MH), ropeTo);
+    if (heli) drawHelicopter(R, heli.x, heli.y, time, Math.atan2(heli.ty - heli.y, heli.tx - heli.x) * (heli.landed ? 0 : 1) + (heli.landed ? Math.PI : 0), heli.landed ? 0.3 : 1);
     // Hilfe-Pfeile
     if (!done && !busy() && !follow && idle > 1.5) {
       if (!load && truck && truck.state === 'park' && truck.mods.length) { const p = truckMod(truck.mods[0]), r = modRect(p.gx, p.gy, 4); drawArrow(Math.round(p.gx - 3), Math.round(r.y - 14 - bob)); }
       else if (load) { const s = slot(load.k, load.m), r = modRect(s.gx, s.gy, s.e); drawArrow(Math.round(s.gx - 3), Math.round(r.y - 14 - bob)); }
     }
   }
+  // Landeplatz als ein Teil (Platte mit H), Mitte am Bodenpunkt (gx, gy), Unterkante auf Höhe e
+  function drawPadPiece(gx, gy, e) {
+    const x = Math.round(gx - g.w / 2), y = Math.round(gy - D() / 2 - e);
+    Q('#5a5e62', x, y + D() - 1, g.w, 3); Q('#3a3d40', x, y, g.w, D());
+    drawHelipad(Q, x, y, g.w, D(), performance.now());
+  }
   function resize() { layout(false); }
   function exit() { clearTimeout(winTimer); setEngine(false, false); }
   return { enter, update, draw, resize, exit, onPointer,
     _dbg: () => ({ part, count: count(), total, done, load, busy: busy(), truck: truck && { x: truck.x, state: truck.state, k: truck.k, mods: truck.mods.slice(),
-      rects: truck.mods.map(m => { const p = truckMod(m); return modRect(p.gx, p.gy, 4); }) }, slots: floors.flatMap(k => [0, 1, 2].map(m => { const s = slot(k, m); return modRect(s.gx, s.gy, s.e); })), g, L }) };
+      rects: truck.mods.map(m => { const p = truckMod(m); return modRect(p.gx, p.gy, 4); }) }, slots: floors.flatMap(k => [0, 1, 2].map(m => { const s = slot(k, m); return modRect(s.gx, s.gy, s.e); })), g, L, padRect: (() => { const q = slot('H'); return modRect(q.gx, q.gy, q.e, true); })() }) };
 })();
 startLoop(Turm);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

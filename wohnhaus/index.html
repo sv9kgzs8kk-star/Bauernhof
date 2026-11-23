@@ -49,15 +49,18 @@ const BACK_TAG = FARM ? 'bauernhaus' : 'wohnhaus', WHERE = FARM ? 'farm' : 'home
 const save = Hof.save;
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof(BACK_TAG)));
 
-Object.assign(WORDS, { up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'], stairs: ['TREPPE', 'Treppe'] });
+Object.assign(WORDS, { up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'], stairs: ['TREPPE', 'Treppe'], lift: ['AUFZUG', 'Aufzug'],
+  fl0: ['ERDGESCHOSS', 'Erdgeschoss'], fl1: ['ERSTER STOCK', 'Erster Stock'], fl2: ['ZWEITER STOCK', 'Zweiter Stock'], fl3: ['DRITTER STOCK', 'Dritter Stock'] });
 // Großes Haus (2 Stockwerke): unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe
 // Holzhaus (L-Form): unten Wohnzimmer mit Kamin (linker Flügel), Küche und Bad (rechter Flügel); über die Leiter auf den Dachboden
 const WOOD = !FARM && houseType().shape === 'L';
-const TWO = !FARM && !WOOD && ((save.house && save.house.type) | 0) >= 1;
+const TOWER = !FARM && houseType().shape === 'T';   // Hochhaus: Etagen 0–3 (EG Eingangshalle, 1 Wohnen, 2 Kinder, 3 Schlafen), Aufzug statt Treppe
+const TWO = !FARM && !WOOD && !TOWER && ((save.house && save.house.type) | 0) >= 1;
+const TOWER_LEVELS = 4;
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
-  let lastTap = null, sit = null;          // sit = Kind sitzt im Schaukelstuhl { i, t }
-  let kid = null, night = null, grid = null, level = 0, stairs = null, swap = null;
+  let lastTap = null, sit = null, liftOpen = 0, atDoor = 0, calling = false;   // calling: Kind steht vor dem Aufzug, Türen gehen auf          // sit = Kind sitzt im Schaukelstuhl { i, t }
+  let kid = null, night = null, grid = null, level = 0, stairs = null, swap = null, panel = null, ride = null;   // Hochhaus: Aufzug-Bedienfeld, Fahrt
   const list = () => save[WHERE].items;
   const onLevel = it => ((it.f | 0) === level);
   const toScreen = (f, p) => ({ x: Math.round(floor.x + p.x * (floor.w - f.W)), y: Math.round(floor.y + p.y * (floor.h - f.H)) });
@@ -76,7 +79,7 @@ const Room = (() => {
     floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 };
     layoutBar();
     setupLevel();
-    if (!kid) kid = { x: floor.x + floor.w * 0.3, y: floor.y + floor.h - 2, path: [], t: 0, flip: false, still: 0 };
+    if (!kid) kid = { x: TOWER ? floor.x + floor.w / 2 : floor.x + floor.w * 0.3, y: floor.y + floor.h - 26, path: [], t: 0, flip: false, still: 0 };   // ein Stück hinter der Haustür (dort geht es raus)
     else { kid.x = clamp(kid.x, floor.x + 6, floor.x + floor.w - 6); kid.y = clamp(kid.y, floor.y + 14 * S, floor.y + floor.h); kid.path = []; }
     drag = null; sel = null;
     show('ihud');
@@ -84,7 +87,7 @@ const Room = (() => {
   // Wände, Treppe, Laufraster und Bild für die aktuelle Etage
   function setupLevel() {
     // Innenwände: links Wohnzimmer/Kinderzimmer, rechts oben Schlafzimmer/Bad, rechts unten Bad bzw. Flur mit Treppe (je mit Durchgang)
-    const t = 4 * S, vx = Math.round(floor.x + floor.w * 0.56), hy = Math.round(floor.y + floor.h * (WOOD ? 0.3 : 0.5)), gap = 26 * S;   // Holzhaus: Garten kleiner, rechter Flügel höher (Platz für die Veranda)
+    const t = 4 * S, vx = Math.round(floor.x + floor.w * (TOWER ? 0.64 : 0.56)), hy = Math.round(floor.y + floor.h * (WOOD ? 0.3 : 0.5)), gap = 26 * S;   // Holzhaus: Garten kleiner, rechter Flügel höher (Platz für die Veranda)
     const vGapY = floor.y + floor.h - gap - 6 * S;
     walls = [
       { x: vx, y: room.y + WH - 2, w: t, h: vGapY - room.y - WH + 2 },                      // senkrecht, Durchgang unten
@@ -109,11 +112,22 @@ const Room = (() => {
       const gx = Math.round(floor.x + (vx - floor.x) / 2 - gap / 2);
       walls.push({ x: floor.x - 4, y: hy, w: gx - floor.x + 4, h: t }, { x: gx + gap, y: hy, w: vx - gx - gap, h: t });
     }
+    if (TOWER && level === 0) walls = [                // Eingangshalle: offen, Pförtnertresen rechts, Pflanzkübel
+      { kind: 'desk', x: Math.round(floor.x + floor.w * 0.72), y: Math.round(floor.y + floor.h * 0.35), w: 44, h: 14 },
+      { kind: 'pot', x: floor.x + 4, y: floor.y + floor.h - 22, w: 14, h: 14 }, { kind: 'pot', x: floor.x + floor.w - 18, y: floor.y + floor.h - 22, w: 14, h: 14 }];
     room.vx = vx; room.hy = hy;
+    if (TOWER) {                                       // Aufzug hinten in der Mitte: Schacht ragt aus der Wand, davor die Haltestelle
+      const lx = Math.round(floor.x + floor.w / 2 - 20);
+      walls.push({ kind: 'shaft', x: lx - 6, y: room.y + WH - 10, w: 52, h: floor.y - room.y - WH + 38 });
+      stairs = { x: lx, y: floor.y + 28, w: 40, h: 20, lift: true };
+      buildGrid(); paint(); fixItems(); return; }
     stairs = TWO ? { x: floor.x + floor.w - 30, y: floor.y + floor.h - 44, w: 28, h: 42 } : null;   // Treppe unten rechts im Flur
     if (WOOD) stairs = { x: vx - 30, y: floor.y + 6, w: 24, h: 40, ladder: true };                  // Leiter hinten rechts im Wohnzimmer
     buildGrid();
     paint();
+    fixItems();
+  }
+  function fixItems() {
     const fixed = list().filter(it => { const f = rotF(BY[it.k], it.r); return !f || !onLevel(it) || !lost(f, it); })   // Möbel an Stellen, die es hier nicht gibt: weg
       .map(it => { const f = rotF(BY[it.k], it.r); if (!f || !onLevel(it)) return it; const p = toScreen(f, it); return Object.assign({}, it, fit(f, p.x, p.y)); });
     if (fixed.length !== list().length || fixed.some((it, i) => Math.abs(it.x - list()[i].x) > 0.002 || Math.abs(it.y - list()[i].y) > 0.002)) Hof.setHome(fixed, WHERE);   // Möbel nicht in Innenwänden
@@ -142,6 +156,7 @@ const Room = (() => {
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(tiles.grass), c*G+i*T, r*G+j*T);
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
     if (WOOD) { paintWood(B); paintBar(B); return; }
+    if (TOWER) { paintTower(B); paintBar(B); return; }
     const { x, y, w, h, vx, hy } = room;
     B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
     // Böden je Zimmer: Holz (Wohnzimmer), Teppich (Schlafzimmer), Fliesen (Bad), Steinplatten (Flur), bunter Teppich (Kinderzimmer)
@@ -182,12 +197,99 @@ const Room = (() => {
     B(WD, x - 4, y - 4, 4, h + 8); B(WC, x - 4, y - 4, 2, h + 8);
     B(WD, x + w, y - 4, 4, h + 8); B(WC, x + w + 2, y - 4, 2, h + 8);
     const dw = level === 0 ? 2 * G : 0, dx = x + Math.round((vx - x - dw) / 2);   // oben: keine Haustür
+    room.door = dw ? { x: dx, w: dw } : null;
     B(WD, x - 4, y + h, dx - x + 4, 4); B(WD, dx + dw, y + h, x + w - dx - dw + 4, 4);
     B(WC, x - 4, y + h, dx - x + 4, 2); B(WC, dx + dw, y + h, x + w - dx - dw + 4, 2);
     if (dw) B('#c9b48a', dx + 4, y + h, dw - 8, 4);
     // Innenwände (von oben, wie die Außenmauern) mit Schatten
     for (const r of walls) { B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2)); }
     paintBar(B);
+  }
+  // Hochhaus innen: Wände in der Farbe der Etage (wie die Fassade), Aufzug hinten, vorne große Fenster (EG: Glastür)
+  function paintTower(B) {
+    const { x, y, w, h, vx, hy } = room, col = TOWER_COLS[level];
+    B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
+    const tileF = (x1, y1, x2, y2, c1, c2, n) => { for (let yy = y1, k = 0; yy < y2; yy += n, k++) for (let xx = x1, j = 0; xx < x2; xx += n, j++) B((k + j) % 2 ? c1 : c2, xx, yy, Math.min(n, x2 - xx), Math.min(n, y2 - yy)); };
+    const wood = (x1, y1, x2, y2) => { for (let yy = y1, k = 0; yy < y2; yy += 6, k++) { B(k % 2 ? '#c58a4f' : '#b97f45', x1, yy, x2 - x1, Math.min(6, y2 - yy)); B('#8e5a2e', x1, yy + 5, x2 - x1, 1);
+      for (let xx = x1 + (k * 17) % 34; xx < x2; xx += 34) B('#8e5a2e', xx, yy, 1, 5); } };
+    const carpet = (x1, y1, x2, y2, c1, c2) => { B(c1, x1, y1, x2 - x1, y2 - y1); for (let i = 0; i < 40; i++) B(c2, x1 + ((i * 37) % Math.max(1, x2 - x1 - 2)), y1 + ((i * 23) % Math.max(1, y2 - y1 - 1)), 2, 1); };
+    const left = [x, y + WH, vx, y + h], rt = [vx, y + WH, x + w, hy], rb = [vx, hy, x + w, y + h];
+    if (level === 0) {                                  // Eingangshalle: heller Steinboden, Läufer zum Aufzug
+      tileF(x, y + WH, x + w, y + h, '#e6e0d4', '#d8d0c0', 12);
+      const lx = stairs.x + 4, lw = stairs.w - 8; B('#b03a2e', lx, stairs.y + stairs.h, lw, y + h - stairs.y - stairs.h); B('#d4574a', lx + 2, stairs.y + stairs.h, lw - 4, y + h - stairs.y - stairs.h);
+      B('#ffd23f', lx, stairs.y + stairs.h, 1, y + h - stairs.y - stairs.h); B('#ffd23f', lx + lw - 1, stairs.y + stairs.h, 1, y + h - stairs.y - stairs.h);
+    } else if (level === 1) { wood(...left); tileF(...rt, '#fff8e8', '#d9534f', 8); tileF(...rb, '#e6dcc8', '#d4c8ae', 10); }   // Wohnen: Wohnzimmer, Küche, Flur
+    else if (level === 2) {                             // Kinder: Kinderzimmer (grün, Punkte), Spielzimmer (bunter Teppich), Flur
+      carpet(...left, '#9fd68a', '#c6e9b6');
+      for (let i = 0; i < 6; i++) B(['#ffd23f', '#ff6b8a', '#3fa9f5'][i % 3], Math.round(x + 14 + i * (vx - x - 34) / 5), Math.round(y + WH + 20 + (i % 2) * Math.max(10, h - WH - 50)), 6, 6);
+      tileF(...rt, '#ffd23f', '#ff9f43', 10); tileF(...rb, '#e6dcc8', '#d4c8ae', 10);
+    } else { carpet(...left, '#a9c8e8', '#bcd6f0'); tileF(...rt, '#e8f2f8', '#cfe0ec', 6 * S); tileF(...rb, '#e6dcc8', '#d4c8ae', 10); }   // Schlafen: Schlafzimmer, Bad, Flur
+    // Rückwand in der Etagenfarbe, Fenster
+    B(col[1], x, y, w, WH + 2); for (let xx = x + 3; xx < x + w; xx += 10) B(col[0], xx, y, 4, WH + 2);
+    B(col[2], x, y + WH, w, 2); B('#6d6a64', x, y + WH + 1, w, 2);
+    const win = wx => { B('#ffffff', wx - 1, y + 3, 24, 14); B('#9fd3f5', wx, y + 4, 22, 12); B('#d6efff', wx, y + 4, 6, 12); B('#ffffff', wx + 11, y + 4, 1, 12); };
+    win(x + Math.round((vx - x) * 0.12)); win(vx + Math.round((x + w - vx) * 0.45));
+    if (level === 0) {                                  // Briefkästen an der Wand
+      const mx = x + Math.round((vx - x) * 0.12) + 34; if (mx + 38 < stairs.x - 6) for (let i = 0; i < 4; i++) { B('#5a5e62', mx + i * 9, y + 6, 8, 10); B(['#c0392b', '#3f6fa8', '#5c8a3a', '#e08a2c'][i], mx + i * 9 + 1, y + 7, 6, 3); B('#222', mx + i * 9 + 2, y + 12, 4, 1); }
+    }
+    // Aufzugschacht: ragt als Kasten aus der Rückwand; Türen werden in draw() gezeichnet (gehen auf, wenn das Kind davor steht)
+    const sh = walls.find(r => r.kind === 'shaft');
+    const fh = 30;                                    // Höhe der Vorderseite (mit Türen)
+    B('rgba(0,0,0,.25)', sh.x + 4, sh.y + 4, sh.w, sh.h); B('#4a4d50', sh.x, sh.y, sh.w, sh.h);
+    B('#9da1a5', sh.x + 1, sh.y + 1, sh.w - 2, sh.h - fh - 2); B('#b8bcc0', sh.x + 1, sh.y + 1, sh.w - 2, 2);   // Oberseite des Schachts
+    B('#7d8185', sh.x + 1, sh.y + sh.h - fh, sh.w - 2, fh - 1); B('#8d9196', sh.x + 2, sh.y + sh.h - fh, sh.w - 4, 2);   // Vorderseite (Edelstahl)
+    B('#222', sh.x + sh.w / 2 - 8, sh.y + sh.h - fh + 3, 16, 7); B(col[0], sh.x + sh.w / 2 - 7, sh.y + sh.h - fh + 4, 14, 5);   // Anzeige
+    drawDigit(B, level, sh.x + sh.w / 2 - 1, sh.y + sh.h - fh + 4, '#ffffff', 1);
+    B('#3a3d40', stairs.x + 2, stairs.y, stairs.w - 4, stairs.h); B('#4a4d50', stairs.x + 3, stairs.y + 1, stairs.w - 6, stairs.h - 2);   // Fußmatte vor dem Aufzug
+    for (let yy = stairs.y + 3; yy < stairs.y + stairs.h - 1; yy += 4) B('#55595d', stairs.x + 4, yy, stairs.w - 8, 1);
+    // Außenmauern, vorne Fensterband (EG: Glastür)
+    const WC = '#c4c7ca', WD = '#8d9196';
+    B(WD, x - 4, y - 4, w + 8, 4); B(WC, x - 4, y - 4, w + 8, 2);
+    B(WD, x - 4, y - 4, 4, h + 8); B(WC, x - 4, y - 4, 2, h + 8);
+    B(WD, x + w, y - 4, 4, h + 8); B(WC, x + w + 2, y - 4, 2, h + 8);
+    B(WD, x - 4, y + h, w + 8, 4); B(WC, x - 4, y + h, w + 8, 2);
+    for (let xx = x + 10; xx < x + w - 24; xx += 34) B('#9fd3f5', xx, y + h + 1, 24, 2);   // Fensterband
+    room.door = null;
+    if (level === 0) { const dw = 2 * G, dx = Math.round(stairs.x + stairs.w / 2 - dw / 2); room.door = { x: dx, w: dw };   // Glastür genau gegenüber dem Aufzug
+      B('#e6e0d4', dx, y + h - 1, dw, 6); B('#9fd3f5', dx, y + h, 3, 4); B('#9fd3f5', dx + dw - 3, y + h, 3, 4); }
+    // Innenwände
+    for (const r of walls) {
+      if (r.kind === 'desk') { B('rgba(0,0,0,.2)', r.x + 2, r.y + 3, r.w, r.h); B('#5a3418', r.x, r.y, r.w, r.h); B('#9a6436', r.x + 1, r.y + 1, r.w - 2, 5); B('#7a4a22', r.x + 1, r.y + 6, r.w - 2, r.h - 7);
+        B('#222', r.x + 6, r.y + 1, 8, 4); B('#3fa9f5', r.x + 7, r.y + 2, 6, 2); B('#ffd23f', r.x + r.w - 10, r.y + 2, 4, 3); continue; }   // Pförtnertresen mit Bildschirm und Klingel
+      if (r.kind === 'shaft') continue;
+      if (r.kind === 'pot') { B('rgba(0,0,0,.2)', r.x + 2, r.y + 3, r.w, r.h); B('#8a8078', r.x, r.y + 4, r.w, r.h - 4); B('#a8a098', r.x + 1, r.y + 5, r.w - 2, 2);
+        B('#2f7d32', r.x - 2, r.y - 6, r.w + 4, 10); B('#4caf50', r.x, r.y - 4, r.w - 2, 6); B('#7cc576', r.x + 3, r.y - 5, 4, 3); continue; }   // Pflanzkübel
+      B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2));
+    }
+  }
+  // kleine Pixelziffern 0–4 (3×5), Maßstab k
+  const DIGITS = { 0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'], 2: ['111', '001', '111', '100', '111'], 3: ['111', '001', '011', '001', '111'], 4: ['101', '101', '111', '001', '001'] };
+  function drawDigit(B, n, x, y, col, k) { (DIGITS[n] || DIGITS[0]).forEach((row, j) => [...row].forEach((c, i) => { if (c === '1') B(col, x + i * k, y + j * k, k, k); })); }
+  // Aufzug-Bedienfeld (über dem Spielfeld): ein großer Knopf je Etage in der Farbe der Fassade, mit Zahl (EG: Tür)
+  function panelGeo() {
+    const bs = Math.min(40, Math.floor((W - 60) / TOWER_LEVELS) - 8), pw = TOWER_LEVELS * (bs + 8) + 16, ph = bs + 34;
+    const px = Math.round((W - pw) / 2), py = Math.round(Math.max(G + 4, floor.y + 10));
+    return { x: px, y: py, w: pw, h: ph, bs, btn: [...Array(TOWER_LEVELS)].map((_, i) => ({ i, x: px + 12 + i * (bs + 8), y: py + 24, w: bs, h: bs })) };
+  }
+  function drawPanel(time) {
+    const P = panelGeo();
+    R('rgba(0,0,0,.35)', P.x + 4, P.y + 5, P.w, P.h); R('#5a5e62', P.x, P.y, P.w, P.h); R('#8d9196', P.x + 2, P.y + 2, P.w - 4, P.h - 4);
+    R('#222', P.x + P.w / 2 - 12, P.y + 5, 24, 14); drawDigit(R, level, P.x + P.w / 2 - 3, P.y + 7, '#ff9f43', 2);   // Anzeige: hier bin ich
+    for (const b of P.btn) {
+      const c = TOWER_COLS[b.i], here = b.i === level, on = here && Math.abs(Math.sin(time / 250)) > .5;
+      R(here ? (on ? '#ffd23f' : '#c48a00') : '#3a3d40', b.x - 2, b.y - 2, b.w + 4, b.h + 4);
+      R(c[2], b.x, b.y, b.w, b.h); R(c[0], b.x + 2, b.y + 2, b.w - 4, b.h - 5); R(c[1], b.x + 2, b.y + 2, b.w - 4, 2);
+      const k = Math.max(2, Math.floor(b.w / 9));
+      if (b.i === 0) { const dw = 3 * k, dh = 5 * k; R('#5a3b1c', b.x + b.w / 2 - dw / 2, b.y + b.h / 2 - dh / 2, dw, dh); R('#ffd23f', b.x + b.w / 2 + dw / 2 - k, b.y + b.h / 2, k, k); }   // EG: Tür
+      else drawDigit(R, b.i, Math.round(b.x + b.w / 2 - 1.5 * k), Math.round(b.y + b.h / 2 - 2.5 * k), '#ffffff', k);
+    }
+  }
+  function drawRide() {                               // Fahrt: Türen zu, Anzeige zählt, Pling, Türen auf
+    const t = ride.t, T = ride.dur, close = t < 0.3 ? t / 0.3 : t > T - 0.3 ? Math.max(0, (T - t) / 0.3) : 1;
+    const half = Math.round(W / 2 * close);
+    R('#8d9196', 0, 0, half, H); R('#b8bcc0', half - 3, 0, 3, H); R('#8d9196', W - half, 0, half, H); R('#b8bcc0', W - half, 0, 3, H);
+    if (close > 0.9) { const k = 6, n = ride.show; R('#222', W / 2 - 30, H / 2 - 30, 60, 50); drawDigit(R, n, Math.round(W / 2 - 1.5 * k), Math.round(H / 2 - 22), '#ff9f43', k);
+      const up = ride.to > ride.from, ay = H / 2 + 12; for (let i = 0; i < 5; i++) R('#ff9f43', Math.round(W / 2 - i), Math.round(up ? ay - 2 + i : ay + 2 - i), 2 * i + 1, 1); }
   }
   function paintBar(B) {                             // Leiste
     B('rgba(0,0,0,.25)', bar.x + 3, bar.y + 4, bar.w, bar.h);
@@ -256,6 +358,7 @@ const Room = (() => {
     wall(x - 4, y - 4, vx - x + 8, 4); wall(vx, y - 4, 4, hy - y + 4); wall(vx, hy - 4, x + w - vx + 4, 4);
     wall(x - 4, y - 4, 4, h + 8); wall(x + w, hy - 4, 4, yb - hy + 8);
     const dw = level === 0 ? 2 * G : 0, dx = x + Math.round((vx - x - dw) / 2);
+    room.door = dw ? { x: dx, w: dw } : null;
     wall(x - 4, y + h, dx - x + 4, 4); wall(dx + dw, y + h, vx + 4 - dx - dw, 4);
     if (level === 0) {                                // Veranda: Geländer vorne und rechts, Pfosten
       const rail = (a, b, ww, hh) => { B('rgba(0,0,0,.2)', a + 2, b + 2, ww, hh); B('#5a3418', a, b, ww, hh); B('#c98a4f', a + (ww > hh ? 0 : 1), b + (ww > hh ? 1 : 0), ww > hh ? ww : 1, ww > hh ? 1 : hh); };
@@ -374,7 +477,14 @@ const Room = (() => {
 
   function onPointer(type, x, y) {
     idle = 0;
-    if (!room || night || swap) return true;
+    if (!room || night || swap || ride) return true;
+    if (panel && type === 'down') {                    // Aufzug: Knopf drücken
+      const P = panelGeo(), b = P.btn.find(q => x > q.x - 3 && x < q.x + q.w + 3 && y > q.y - 3 && y < q.y + q.h + 3);
+      if (b) { if (b.i === level) { sfx.click(); sayWord('fl' + level); return true; }
+        panel = null; sfx.click(); ride = { from: level, to: b.i, t: 0, dur: 1.2 + 0.4 * Math.abs(b.i - level), show: level }; return true; }
+      if (x > P.x && x < P.x + P.w && y > P.y && y < P.y + P.h) return true;
+      panel = null;                                    // daneben getippt: Bedienfeld zu, Kind läuft los
+    }
     if (type === 'down') {
       const a = arrowAt(x, y);
       if (a) { page = (page + a.dir + pages.length) % pages.length; layoutSlots(); sfx.click(); sel = null; return true; }
@@ -417,6 +527,10 @@ const Room = (() => {
   }
   function update(dt) {
     idle += dt;
+    liftOpen = approach(liftOpen, calling || panel || ride ? 1 : 0, 2.5 * dt);
+    if (calling && liftOpen >= 1 && !panel) { calling = false; panel = { t: 0 }; setWord('lift'); sayWord('lift'); }   // erst wenn die Türen offen sind: Bedienfeld
+    if (kid && room && room.door && level === 0 && !night && !ride && !swap && !kid.path.length && kid.y > floor.y + floor.h - 8 && kid.x > room.door.x + 2 && kid.x < room.door.x + room.door.w - 2) {
+      atDoor += dt; if (atDoor > 0.6) { atDoor = -99; sfx.enter(); goHof(BACK_TAG); return; } } else if (atDoor > 0) atDoor = 0;   // durch die Haustür nach draußen
     for (const [k, v] of wob) { if (v + dt > 0.35) wob.delete(k); else wob.set(k, v + dt); }
     if (!kid) return;
     if (night) {                                       // Schlafen: dunkler werden, schlafen, wieder hell
@@ -424,6 +538,14 @@ const Room = (() => {
       if (night.t > 1.2 && !night.zz) { night.zz = true; }
       if (night.t > 4.2 && !night.morning) { night.morning = true; tone(523, .15, 'triangle', .08); tone(659, .15, 'triangle', .08, .15); tone(784, .25, 'triangle', .08, .3); setTimeout(() => say('Guten Morgen'), 400); }
       if (night.t > 5.4) { kid.y = night.bed.p.y + night.bed.f.H + 8 * S; kid.x = night.bed.p.x + night.bed.f.W / 2; night = null; kid.still = 0; }
+      return;
+    }
+    if (ride) {                                         // Aufzug fährt
+      ride.t += dt; const mid = ride.dur / 2;
+      ride.show = ride.t < 0.3 ? ride.from : ride.t > ride.dur - 0.3 ? ride.to : Math.round(ride.from + (ride.to - ride.from) * clamp((ride.t - 0.3) / (ride.dur - 0.6), 0, 1));
+      if (ride.t > mid && !ride.done) { ride.done = true; level = ride.to; setupLevel(); kid.x = stairs.x + stairs.w / 2; kid.y = stairs.y + stairs.h + 10; kid.path = []; kid.still = 0; kid.flip = false; }
+      if (ride.t > ride.dur - 0.3 && !ride.pling) { ride.pling = true; tone(1046, .25, 'sine', .08); tone(784, .35, 'sine', .07, .18); }
+      if (ride.t >= ride.dur) { const w = 'fl' + level; ride = null; setWord(w); sayWord(w); }
       return;
     }
     if (swap) {                                         // Etage wechseln: kurz dunkel, dann die andere Etage
@@ -436,6 +558,7 @@ const Room = (() => {
     }
     if (sit) { if (kid.path.length || !order().some(e => e.i === sit.i && e.f.key === 'rocker')) sit = null; else { sit.t += dt; return; } }   // Weglaufen = aufstehen
     if (kid.path.length) {
+      calling = false;
       const tgt = kid.path[0], dx = tgt.x - kid.x, dy = tgt.y - kid.y, d = Math.hypot(dx, dy), sp = 70 * S * dt;
       if (Math.abs(dx) > 0.5) kid.flip = dx < 0;
       if (d <= sp) { kid.x = tgt.x; kid.y = tgt.y; kid.path.shift(); } else { kid.x += dx / d * sp; kid.y += dy / d * sp; }
@@ -443,7 +566,9 @@ const Room = (() => {
     } else {
       kid.still += dt;
       if (stairs && kid.still > 0.3 && kid.x > stairs.x - 2 && kid.x < stairs.x + stairs.w + 2 && kid.y > stairs.y && kid.y < stairs.y + stairs.h + 4) {
-        swap = { t: 0 }; sfx.enter(); return; }
+        if (stairs.lift) { if (!panel && !calling) { calling = true; tone(880, .08, 'sine', .06); } }   // vor dem Aufzug: Türen gehen auf, dann Bedienfeld
+        else { swap = { t: 0 }; sfx.enter(); return; } }
+      else { panel = null; calling = false; }
       const rk = rockerUnderKid();
       if (rk && kid.still > 0.5) { sit = { i: rk.i, t: 0 }; setWord('rock'); sayWord('rock'); tone(330, .12, 'triangle', .06); return; }
       const bed = bedUnderKid();
@@ -480,7 +605,15 @@ const Room = (() => {
       const p = toScreen(e.f, e.it), cx = p.x + 8 * S, cy = p.y + 7 * S;
       for (const [r, a] of [[30 * S, .08], [22 * S, .1], [14 * S, .12]]) { ctx.fillStyle = `rgba(255,230,120,${a})`; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); }
     }
-    // Möbel und Kind nach unten sortiert (wer weiter unten steht, ist vorne)
+    if (TOWER) {                                       // Aufzugtüren: silbern, gehen auf, wenn das Kind davor steht
+      const sh = walls.find(r => r.kind === 'shaft'), dy = sh.y + sh.h - 19, dh = 18, half = 15, op = Math.round(liftOpen * (half - 2));
+      R('#1f2124', sh.x + sh.w / 2 - half, dy, half * 2, dh);                                     // dunkle Kabine dahinter
+      R('#d8dcdf', sh.x + sh.w / 2 - half - op, dy, half, dh); R('#aeb3b8', sh.x + sh.w / 2 - 1 - op, dy, 1, dh); R('#ffffff', sh.x + sh.w / 2 - half - op, dy, 1, dh);
+      R('#d8dcdf', sh.x + sh.w / 2 + op, dy, half, dh); R('#aeb3b8', sh.x + sh.w / 2 + op, dy, 1, dh); R('#ffffff', sh.x + sh.w / 2 + half - 1 + op, dy, 1, dh);
+      R('#5a5e62', sh.x + sh.w / 2 - half - 2, dy - 1, 2, dh + 1); R('#5a5e62', sh.x + sh.w / 2 + half, dy - 1, 2, dh + 1);   // Rahmen
+      R(panel ? '#ffd23f' : '#c4c7ca', sh.x + sh.w / 2 + half + 3, dy + 4, 3, 4);                                            // Rufknopf
+    }
+    // Möbel und Kind nach unten sortiert (wer weiter unten steht, ist vorne; das Kind steht vor den Aufzugtüren)
     const things = order().filter(e => !(drag && drag.from === 'room' && drag.i === e.i)).map(e => ({ y: e.f.flat ? -1e9 : toScreen(e.f, e.it).y + e.f.H, e }));
     things.sort((a, b) => a.y - b.y);
     if (!night) things.push({ kid: true });          // Kind immer vor den Möbeln
@@ -534,11 +667,15 @@ const Room = (() => {
       }
     }
     if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`; ctx.fillRect(0, 0, W, H); }
+    if (room.door && level === 0 && !drag && idle > 3 && Math.floor(time / 600) % 2 === 0) {   // Ausgang: kleiner Pfeil an der Tür
+      const cx = room.door.x + room.door.w / 2, cy = room.y + room.h - 10; for (let i = 0; i < 4; i++) R('rgba(255,255,255,.8)', Math.round(cx - i), cy + i, 2 * i + 1, 1); }
+    if (panel && !ride) drawPanel(time);
+    if (ride) drawRide();
     // Hinweis bei leerem Haus: Pfeil auf das erste Möbel
     if (!drag && !sel && !list().length && idle > 1.5) { const s = slots[0]; drawArrow(Math.round(s.x + s.w / 2 - 3), Math.round(s.y - 14 - Math.abs(Math.sin(time / 220)) * 4)); }
   }
   function resize() { enter(); }
-  return { enter, setWord, update, draw, resize, onPointer, _dbg: () => ({ level, stairs, floor, slots, arrows, page, items: list(), kid: kid && { x: kid.x, y: kid.y, path: kid.path.length }, night: !!night, walls }) };
+  return { enter, setWord, update, draw, resize, onPointer, _dbg: () => ({ door: room && room.door, level, panel: !!panel, ride: !!ride, panelBtns: room && TOWER ? panelGeo().btn : null, stairs, floor, slots, arrows, page, items: list(), kid: kid && { x: kid.x, y: kid.y, path: kid.path.length }, night: !!night, walls }) };
 })();
 startLoop(Room);
 Room.setWord('house'); setTimeout(() => sayWord('house'), 400);

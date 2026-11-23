@@ -18,7 +18,7 @@ baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): b
                               nur das vorderste in ein Loch gleicher Form ziehen (oder antippen, dann Loch); falsche Form → zurück aufs Gestell, passende Löcher blinken.
                               Bauarbeiter auf der Scherenbühne antippen: nimmt das vorderste, fährt hin, Bühne hoch, setzt ein, zurück. Hochkant: Gestell/Bühne vorne auf dem Gehweg.
                               Nach dem Landeplatz dreht der Kranausleger nach rechts, der Hubschrauber kommt von links. `towerWinPos()`, `towerWinRects()`.
-                              Hochhaus hat `ready: false` bis Sprengung (PR 3) fertig ist, Test mit `?haustyp=3`; fertiges Hochhaus kann man noch nicht betreten.)
+                              Hochhaus hat `ready: false` bis Sprengung fertig ist, Test mit `?haustyp=3`.)
                               (Holzabriss, nur Holzhaus: Umzug → Schindeln wegwischen, fliegen in den Container → Autokran hebt 4 Binder auf einen Lastwagen →
                               Veranda und 6 Wände (je ganze Wand) auf Lastwagen mit 4 Plätzen, voll fährt er weg → Betonsockel mit dem Bagger zum Kipper.
                               `drawWoodHouse` kennt dafür `logs(e,r)`, `truss(i)`, `vroof`, `floor`.)
@@ -31,6 +31,9 @@ wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.ht
                               hinten rechts Garten; Leiter im Wohnzimmer = Dachboden (Etage `f: 1`, wie beim großen Haus)
                               Rustikal: Rundholz-Wände mit Stammköpfen, raue Dielen, Terrakotta (Küche), Schiefer (Bad), Natursteinkamin, Geweih, Pfannen, karierte Vorhänge.
                               Veranda vor dem rechten Flügel (`room.yb`, Tür vom Wohnzimmer, Geländer; oben sieht man ihr Vordach), Möbel darf man draufstellen. Kamin nur unten.
+                              Hochhaus (`TOWER`): 4 Etagen (`f` 0–3): EG Eingangshalle (Steinboden, Briefkästen, Pförtnertresen, Pflanzkübel), 1 Wohnen, 2 Kinder (Spielzimmer),
+                              3 Schlafen/Bad; Rückwand in der Fassadenfarbe der Etage (`TOWER_COLS`). Aufzug hinten (`stairs.lift`): Kind 0,3 s darin = Bedienfeld
+                              mit Knöpfen in Etagenfarbe (EG Tür, sonst Zahl), Fahrt mit Türen, Anzeige und Pling (`panel`, `ride`). Dachterrasse kommt als Etage 4.
                               **Schaukelstuhl** (alle Innenräume): Kind 0,5 s darauf stehen = setzt sich und schaukelt (`sit`), bis es woanders hinläuft.
                               **Möbel drehen** (alle Innenräume): zweimal schnell antippen = 90° drehen (`it.r` 0–3, `rotF()`/`rotRect()` in moebel.js, Pixel bleiben scharf).
                               (`save.home.items` = Liste `[{k,x,y}]`, mehrfach möglich; `Hof.unlockHome`, `Hof.setHome`). Drei Zimmer mit Innenwänden (großes Haus `TWO`: unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe; Kind kurz auf der Treppe = Etage wechseln, Möbel mit `f: 1` stehen oben), Kind läuft per Antippen und ist immer vor den Möbeln, 0,8 s auf dem Bett = schlafen; Möbel und Kind in einfacher Größe (S = 1)

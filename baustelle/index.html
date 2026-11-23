@@ -285,9 +285,8 @@ const Hub = (() => {
         if (plotT > PLOT_WAIT) {
           plotT = 0; plotDone = t;
           if (pickHere) { openPick(); return; }
-          if (!(homeHere && houseType().shape === 'T')) sayWord(homeHere ? 'house' : PLOTS[t].word);
-          if (homeHere && houseType().shape === 'T') { sayWord('tower'); sfx.click(); }   // Hochhaus: Innenräume kommen später
-          else if (homeHere) enterHome();
+          sayWord(homeHere ? 'house' : PLOTS[t].word);
+          if (homeHere) enterHome();
           else if (PLOTS[t].page) { entering = true; sfx.enter(); setTimeout(() => { location.href = PLOTS[t].page; }, 900); }
           else { sfx.click(); plotShown = t; }
         }

@@ -33,7 +33,9 @@ wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.ht
                               Veranda vor dem rechten Flügel (`room.yb`, Tür vom Wohnzimmer, Geländer; oben sieht man ihr Vordach), Möbel darf man draufstellen. Kamin nur unten.
                               Hochhaus (`TOWER`): 4 Etagen (`f` 0–3): EG Eingangshalle (Steinboden, Briefkästen, Pförtnertresen, Pflanzkübel), 1 Wohnen, 2 Kinder (Spielzimmer),
                               3 Schlafen/Bad; Rückwand in der Fassadenfarbe der Etage (`TOWER_COLS`). Aufzug hinten in der Mitte (Schacht `kind: 'shaft'` ragt aus der Wand, silberne Türen gehen auf, `liftOpen`; davor die Haltestelle `stairs.lift`): Kind 0,3 s davor = Türen gehen auf (`calling`), erst dann Bedienfeld; Kind wird immer vor den Türen gezeichnet
-                              mit Knöpfen in Etagenfarbe (EG Tür, sonst Zahl), Fahrt mit Türen, Anzeige und Pling (`panel`, `ride`). Dachterrasse kommt als Etage 4.
+                              mit Knöpfen in Etagenfarbe (EG Tür, sonst Zahl), Fahrt mit Türen, Anzeige und Pling (`panel`, `ride`). Dachterrasse = Etage 4 (`f: 4`, Knopf mit Sonne, `SKY_COLS`): Holzdeck, Himmel mit Stadt, Glasgeländer, Landeplatz rechts (`kind: 'pad'`, keine Möbel);
+                              Hubschrauber antippen = steigt auf, fliegt eine Runde, landet (`heli`, `heliPos()`). Gartenmöbel in moebel.js: Liegestuhl, Sonnenschirm, Grill, Blumenkasten, Planschbecken.
+                              Bedienfeld auf schmalen Bildschirmen zweireihig.
                               **Haustür** (alle Innenräume, unten): Kind 0,6 s in der Türöffnung stehen = raus in die Stadt (`room.door`); Hochhaus: Glastür genau gegenüber dem Aufzug, roter Läufer dazwischen.
                               **Schaukelstuhl** (alle Innenräume): Kind 0,5 s darauf stehen = setzt sich und schaukelt (`sit`), bis es woanders hinläuft.
                               **Möbel drehen** (alle Innenräume): zweimal schnell antippen = 90° drehen (`it.r` 0–3, `rotF()`/`rotRect()` in moebel.js, Pixel bleiben scharf).

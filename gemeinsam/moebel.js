@@ -6,7 +6,8 @@ Object.assign(WORDS, {
   fridge: ['KÜHLSCHRANK', 'Kühlschrank'], stove: ['HERD', 'Herd'], tub: ['BADEWANNE', 'Badewanne'], toilet: ['KLO', 'Klo'],
   closet: ['SCHRANK', 'Schrank'], plant: ['PFLANZE', 'Pflanze'], tv: ['FERNSEHER', 'Fernseher'], rug: ['TEPPICH', 'Teppich'],
   train: ['EISENBAHN', 'Eisenbahn'], sleep: ['SCHLAFEN', 'Schlafen'],
-  rocker: ['SCHAUKELSTUHL', 'Schaukelstuhl'], chest: ['TRUHE', 'Truhe'], woodpile: ['HOLZSTAPEL', 'Holzstapel'], fur: ['FELL', 'Fell'], rock: ['SCHAUKELN', 'Schaukeln']
+  rocker: ['SCHAUKELSTUHL', 'Schaukelstuhl'], chest: ['TRUHE', 'Truhe'], woodpile: ['HOLZSTAPEL', 'Holzstapel'], fur: ['FELL', 'Fell'], rock: ['SCHAUKELN', 'Schaukeln'],
+  lounger: ['LIEGESTUHL', 'Liegestuhl'], parasol: ['SONNENSCHIRM', 'Sonnenschirm'], grill: ['GRILL', 'Grill'], planter: ['BLUMENKASTEN', 'Blumenkasten'], pool: ['PLANSCHBECKEN', 'Planschbecken']
 });
 // Möbel von schräg oben: Breite/Höhe in Pixeln (vor der Vergrößerung S), Zeichnen ab linker oberer Ecke. flat = liegt am Boden (wird zuerst gezeichnet)
 const FURN = [
@@ -92,6 +93,32 @@ const FURN = [
     } },
   { key: 'woodpile', w: 24, h: 18, draw(F, x, y) {
       for (const [a, b] of [[0, 10], [8, 10], [16, 10], [4, 4], [12, 4], [8, -2]]) { F('#5a3418', x + a, y + b + 2, 8, 8); F('#c9a067', x + a + 1, y + b + 3, 6, 6); F('#a8803c', x + a + 3, y + b + 5, 2, 2); }
+    } },
+  // Gartenmöbel (Dachterrasse, passen aber überall)
+  { key: 'lounger', w: 16, h: 34, draw(F, x, y) {
+      F('#8a8078', x, y + 2, 16, 32); F('#ffffff', x + 1, y + 1, 14, 12); F('#3fa9f5', x + 1, y + 3, 14, 3); F('#3fa9f5', x + 1, y + 8, 14, 3);   // Rückenteil
+      for (let i = 0; i < 4; i++) { F(i % 2 ? '#3fa9f5' : '#ffffff', x + 1, y + 14 + i * 5, 14, 5); }
+      F('#5a5e62', x + 1, y + 33, 3, 1); F('#5a5e62', x + 12, y + 33, 3, 1);
+    } },
+  { key: 'parasol', w: 34, h: 34, draw(F, x, y) {
+      for (let j = 0; j < 34; j++) { const hw = Math.round(Math.sqrt(Math.max(0, 17 * 17 - (j - 16.5) ** 2))); if (hw) for (let s = -hw; s < hw; s += 4) F(((s + 40) >> 2) % 2 ? '#e74c3c' : '#ffffff', x + 17 + s, y + j, Math.min(4, hw - s), 1); }
+      F('#c0392b', x + 15, y + 15, 4, 4); F('#ffd23f', x + 16, y + 16, 2, 2);
+    } },
+  { key: 'grill', w: 18, h: 20, draw(F, x, y, on, t) {
+      F('#333', x + 3, y + 16, 2, 4); F('#333', x + 13, y + 16, 2, 4);
+      F('#1a1a1a', x, y + 2, 18, 14); F('#333', x + 1, y + 3, 16, 12);
+      for (let i = 0; i < 4; i++) F('#888', x + 2, y + 5 + i * 3, 14, 1);
+      F('#c0392b', x + 3, y + 6, 5, 2); F('#c0392b', x + 10, y + 9, 5, 2); F('#8a5a2e', x + 5, y + 11, 6, 2);   // Würstchen
+      if (Math.floor((t || 0) / 300) % 2) { F('rgba(220,220,220,.6)', x + 6, y - 2, 2, 3); F('rgba(220,220,220,.5)', x + 10, y - 4, 2, 3); }
+    } },
+  { key: 'planter', w: 30, h: 14, draw(F, x, y) {
+      F('#7a4a22', x, y + 6, 30, 8); F('#9a6436', x + 1, y + 7, 28, 2);
+      for (let i = 0; i < 6; i++) { F('#3f8f37', x + 2 + i * 5, y + 2, 4, 5); F(['#ff6b8a', '#ffd23f', '#a06bff'][i % 3], x + 3 + i * 5, y, 3, 3); }
+    } },
+  { key: 'pool', w: 36, h: 28, flat: true, draw(F, x, y, on, t) {
+      F('#3f6fa8', x, y, 36, 28); F('#ff6b8a', x + 1, y + 1, 34, 26); F('#ffffff', x + 3, y + 3, 30, 22); F('#5cc8f0', x + 4, y + 4, 28, 20);
+      const k = Math.floor((t || 0) / 400) % 2; F('#9fe3ff', x + 7 + k * 2, y + 8, 8, 1); F('#9fe3ff', x + 18 - k * 2, y + 15, 9, 1);
+      F('#ffd23f', x + 22, y + 6, 5, 4); F('#e08a2c', x + 26, y + 7, 2, 1);   // Gummiente
     } },
   { key: 'fur', w: 40, h: 26, flat: true, draw(F, x, y) {
       F('#5a3418', x + 6, y + 4, 28, 18); F('#5a3418', x, y + 2, 8, 6); F('#5a3418', x + 32, y + 2, 8, 6); F('#5a3418', x, y + 18, 8, 6); F('#5a3418', x + 32, y + 18, 8, 6);   // Pfoten

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261123b">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261123c">
 <title>Wohnhaus</title>
 </head>
 <body>
@@ -30,10 +30,10 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="house" style="pointer-events:auto"><span class="word">HAUS</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261123b"></script>
-<script src="../gemeinsam/basis.js?v=20261123b"></script>
-<script src="../gemeinsam/moebel.js?v=20261123b"></script>
-<script src="../gemeinsam/bau.js?v=20261123b"></script>
+<script src="../gemeinsam/sterne.js?v=20261123c"></script>
+<script src="../gemeinsam/basis.js?v=20261123c"></script>
+<script src="../gemeinsam/moebel.js?v=20261123c"></script>
+<script src="../gemeinsam/bau.js?v=20261123c"></script>
 <script>
 /* =====================================================================
    WOHNHAUS EINRICHTEN – drei Zimmer von schräg oben (wie der Hof)
@@ -50,16 +50,18 @@ const save = Hof.save;
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof(BACK_TAG)));
 
 Object.assign(WORDS, { up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'], stairs: ['TREPPE', 'Treppe'], lift: ['AUFZUG', 'Aufzug'],
-  fl0: ['ERDGESCHOSS', 'Erdgeschoss'], fl1: ['ERSTER STOCK', 'Erster Stock'], fl2: ['ZWEITER STOCK', 'Zweiter Stock'], fl3: ['DRITTER STOCK', 'Dritter Stock'] });
+  fl0: ['ERDGESCHOSS', 'Erdgeschoss'], fl1: ['ERSTER STOCK', 'Erster Stock'], fl2: ['ZWEITER STOCK', 'Zweiter Stock'], fl3: ['DRITTER STOCK', 'Dritter Stock'], fl4: ['DACHTERRASSE', 'Dachterrasse'] });
 // Großes Haus (2 Stockwerke): unten Wohnzimmer, Küche, Flur mit Treppe; oben Kinderzimmer, Schlafzimmer, Bad, Flur mit Treppe
 // Holzhaus (L-Form): unten Wohnzimmer mit Kamin (linker Flügel), Küche und Bad (rechter Flügel); über die Leiter auf den Dachboden
 const WOOD = !FARM && houseType().shape === 'L';
 const TOWER = !FARM && houseType().shape === 'T';   // Hochhaus: Etagen 0–3 (EG Eingangshalle, 1 Wohnen, 2 Kinder, 3 Schlafen), Aufzug statt Treppe
 const TWO = !FARM && !WOOD && !TOWER && ((save.house && save.house.type) | 0) >= 1;
-const TOWER_LEVELS = 4;
+const TOWER_LEVELS = 5;                                // 0–3 Etagen, 4 = Dachterrasse
+const SKY_COLS = ['#7ec8e3', '#a8dcf0', '#4a9cc0'];   // Farbe des Dach-Knopfs (Himmel)
+const levelCols = l => l >= 4 ? SKY_COLS : TOWER_COLS[l];
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
-  let lastTap = null, sit = null, liftOpen = 0, atDoor = 0, calling = false;   // calling: Kind steht vor dem Aufzug, Türen gehen auf          // sit = Kind sitzt im Schaukelstuhl { i, t }
+  let lastTap = null, sit = null, liftOpen = 0, atDoor = 0, calling = false, heli = { ph: 'idle', t: 0 };   // heli: Hubschrauber auf dem Dach   // calling: Kind steht vor dem Aufzug, Türen gehen auf          // sit = Kind sitzt im Schaukelstuhl { i, t }
   let kid = null, night = null, grid = null, level = 0, stairs = null, swap = null, panel = null, ride = null;   // Hochhaus: Aufzug-Bedienfeld, Fahrt
   const list = () => save[WHERE].items;
   const onLevel = it => ((it.f | 0) === level);
@@ -115,6 +117,10 @@ const Room = (() => {
     if (TOWER && level === 0) walls = [                // Eingangshalle: offen, Pförtnertresen rechts, Pflanzkübel
       { kind: 'desk', x: Math.round(floor.x + floor.w * 0.72), y: Math.round(floor.y + floor.h * 0.35), w: 44, h: 14 },
       { kind: 'pot', x: floor.x + 4, y: floor.y + floor.h - 22, w: 14, h: 14 }, { kind: 'pot', x: floor.x + floor.w - 18, y: floor.y + floor.h - 22, w: 14, h: 14 }];
+    if (TOWER && level === 4) {                         // Dachterrasse: frei, rechts der Landeplatz (dort keine Möbel)
+      const ps = Math.min(Math.round(floor.h * 0.62), Math.round(floor.w * 0.36));
+      walls = [{ kind: 'pad', x: floor.x + floor.w - ps - 10, y: Math.round(floor.y + (floor.h - ps) / 2), w: ps, h: ps }];
+    }
     room.vx = vx; room.hy = hy;
     if (TOWER) {                                       // Aufzug hinten in der Mitte: Schacht ragt aus der Wand, davor die Haltestelle
       const lx = Math.round(floor.x + floor.w / 2 - 20);
@@ -207,7 +213,7 @@ const Room = (() => {
   }
   // Hochhaus innen: Wände in der Farbe der Etage (wie die Fassade), Aufzug hinten, vorne große Fenster (EG: Glastür)
   function paintTower(B) {
-    const { x, y, w, h, vx, hy } = room, col = TOWER_COLS[level];
+    const { x, y, w, h, vx, hy } = room, col = levelCols(level);
     B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
     const tileF = (x1, y1, x2, y2, c1, c2, n) => { for (let yy = y1, k = 0; yy < y2; yy += n, k++) for (let xx = x1, j = 0; xx < x2; xx += n, j++) B((k + j) % 2 ? c1 : c2, xx, yy, Math.min(n, x2 - xx), Math.min(n, y2 - yy)); };
     const wood = (x1, y1, x2, y2) => { for (let yy = y1, k = 0; yy < y2; yy += 6, k++) { B(k % 2 ? '#c58a4f' : '#b97f45', x1, yy, x2 - x1, Math.min(6, y2 - yy)); B('#8e5a2e', x1, yy + 5, x2 - x1, 1);
@@ -223,7 +229,8 @@ const Room = (() => {
       carpet(...left, '#9fd68a', '#c6e9b6');
       for (let i = 0; i < 6; i++) B(['#ffd23f', '#ff6b8a', '#3fa9f5'][i % 3], Math.round(x + 14 + i * (vx - x - 34) / 5), Math.round(y + WH + 20 + (i % 2) * Math.max(10, h - WH - 50)), 6, 6);
       tileF(...rt, '#ffd23f', '#ff9f43', 10); tileF(...rb, '#e6dcc8', '#d4c8ae', 10);
-    } else { carpet(...left, '#a9c8e8', '#bcd6f0'); tileF(...rt, '#e8f2f8', '#cfe0ec', 6 * S); tileF(...rb, '#e6dcc8', '#d4c8ae', 10); }   // Schlafen: Schlafzimmer, Bad, Flur
+    } else if (level === 3) { carpet(...left, '#a9c8e8', '#bcd6f0'); tileF(...rt, '#e8f2f8', '#cfe0ec', 6 * S); tileF(...rb, '#e6dcc8', '#d4c8ae', 10); }   // Schlafen: Schlafzimmer, Bad, Flur
+    if (level === 4) { paintRoof(B); return; }
     // Rückwand in der Etagenfarbe, Fenster
     B(col[1], x, y, w, WH + 2); for (let xx = x + 3; xx < x + w; xx += 10) B(col[0], xx, y, 4, WH + 2);
     B(col[2], x, y + WH, w, 2); B('#6d6a64', x, y + WH + 1, w, 2);
@@ -262,25 +269,66 @@ const Room = (() => {
       B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2));
     }
   }
+  // Dachterrasse: Holzdeck, Rasenstreifen mit Blumen, Glasgeländer, hinten Himmel mit Wolken und Stadt; rechts der Landeplatz
+  function paintRoof(B) {
+    const { x, y, w, h } = room, pad = walls.find(r => r.kind === 'pad');
+    for (let yy = y + WH, k = 0; yy < y + h; yy += 8, k++) { B(k % 2 ? '#c49a6c' : '#b88d5e', x, yy, w, Math.min(8, y + h - yy)); B('#8e6a44', x, yy + 7, w, 1);
+      for (let xx = x + (k * 23) % 46; xx < x + w; xx += 46) B('#8e6a44', xx, yy, 1, 7); }                       // Holzdeck
+    B('#5cb64f', x, y + h - 12, Math.round(w * 0.45), 12); B('#7cc576', x, y + h - 12, Math.round(w * 0.45), 2);  // Rasenstreifen vorne links
+    for (let i = 0; i < 9; i++) B(['#ff6b8a', '#ffd23f', '#ffffff'][i % 3], x + 8 + i * Math.round(w * 0.45 / 10), y + h - 8 + (i % 2) * 3, 3, 3);
+    // Himmel statt Rückwand: Wolken, ferne Häuser
+    B('#a8dcf0', x, y, w, WH + 2); B('#c8ecf8', x, y, w, 6);
+    for (const [cx, cw] of [[0.15, 26], [0.55, 34], [0.85, 22]]) { const qx = x + Math.round(w * cx); B('#ffffff', qx, y + 6, cw, 5); B('#ffffff', qx + 5, y + 3, cw - 12, 4); }
+    for (let i = 0, xx = x; xx < x + w; i++) { const bw = 14 + (i * 7) % 12, bh = 8 + (i * 5) % 10; B(i % 2 ? '#8aa4b8' : '#9db4c6', xx, y + WH + 2 - bh, bw, bh);
+      for (let wy = y + WH + 4 - bh; wy < y + WH; wy += 4) for (let wx = xx + 2; wx < xx + bw - 2; wx += 4) B('#d6efff', wx, wy, 2, 2); xx += bw + 2; }
+    B('#6d7175', x, y + WH, w, 2);
+    // Landeplatz
+    B('rgba(0,0,0,.25)', pad.x + 3, pad.y + 4, pad.w, pad.h); drawHelipad(B, pad.x, pad.y, pad.w, pad.h, 0);
+    // Aufzugsaufbau (Häuschen auf dem Dach) mit der gleichen Vorderseite wie unten
+    const sh = walls.find(r => r.kind === 'shaft'), fh = 30;
+    B('rgba(0,0,0,.25)', sh.x + 4, sh.y + 4, sh.w, sh.h); B('#4a4d50', sh.x, sh.y, sh.w, sh.h);
+    B('#9da1a5', sh.x + 1, sh.y + 1, sh.w - 2, sh.h - fh - 2); B('#b8bcc0', sh.x + 1, sh.y + 1, sh.w - 2, 2);
+    B('#7d8185', sh.x + 1, sh.y + sh.h - fh, sh.w - 2, fh - 1);
+    B('#222', sh.x + sh.w / 2 - 8, sh.y + sh.h - fh + 3, 16, 7); B(SKY_COLS[0], sh.x + sh.w / 2 - 7, sh.y + sh.h - fh + 4, 14, 5); drawDigit(B, 4, sh.x + sh.w / 2 - 1, sh.y + sh.h - fh + 4, '#ffffff', 1);
+    B('#3a3d40', stairs.x + 2, stairs.y, stairs.w - 4, stairs.h); B('#4a4d50', stairs.x + 3, stairs.y + 1, stairs.w - 6, stairs.h - 2);
+    // Glasgeländer rundherum (oben am Himmel offen)
+    const G1 = 'rgba(180,225,245,.75)', GE = '#8d9196';
+    B(G1, x - 4, y + WH, 4, h - WH + 4); B(G1, x + w, y + WH, 4, h - WH + 4); B(G1, x - 4, y + h, w + 8, 4);
+    B(GE, x - 4, y + WH, 1, h - WH + 4); B(GE, x + w + 3, y + WH, 1, h - WH + 4); B(GE, x - 4, y + h + 3, w + 8, 1);
+    for (let xx = x; xx < x + w; xx += 24) B(GE, xx, y + h, 1, 4);
+    room.door = null;
+  }
+  // Hubschrauber: steht auf dem Landeplatz; antippen = steigt auf, fliegt eine Runde ums Dach, landet wieder
+  function heliPos() {
+    const pad = walls.find(r => r.kind === 'pad'), hx = pad.x + pad.w / 2, hy = pad.y + pad.h / 2;
+    if (heli.ph === 'idle') return { x: hx, y: hy, z: 0, a: Math.PI, spin: 0.15 };
+    if (heli.ph === 'up') return { x: hx, y: hy, z: heli.t / 1.2 * 30, a: Math.PI, spin: 0.3 + heli.t };
+    if (heli.ph === 'down') { const u = heli.t / 1.4; return { x: hx, y: hy, z: (1 - u) * 30, a: Math.PI, spin: 1.5 - u }; }
+    const u = heli.t / 6, ang = u * Math.PI * 2, cx = room.x + room.w / 2, cy = room.y + room.h / 2, rx = room.w * 0.38, ry = room.h * 0.32;
+    const sx = cx + Math.cos(ang) * rx, sy = cy + Math.sin(ang) * ry, k = Math.min(1, u * 6, (1 - u) * 6);   // vom Landeplatz weg und wieder hin
+    return { x: hx + (sx - hx) * k, y: hy + (sy - hy) * k, z: 30, a: ang + Math.PI / 2, spin: 1.5 };
+  }
   // kleine Pixelziffern 0–4 (3×5), Maßstab k
   const DIGITS = { 0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'], 2: ['111', '001', '111', '100', '111'], 3: ['111', '001', '011', '001', '111'], 4: ['101', '101', '111', '001', '001'] };
   function drawDigit(B, n, x, y, col, k) { (DIGITS[n] || DIGITS[0]).forEach((row, j) => [...row].forEach((c, i) => { if (c === '1') B(col, x + i * k, y + j * k, k, k); })); }
   // Aufzug-Bedienfeld (über dem Spielfeld): ein großer Knopf je Etage in der Farbe der Fassade, mit Zahl (EG: Tür)
   function panelGeo() {
-    const bs = Math.min(40, Math.floor((W - 60) / TOWER_LEVELS) - 8), pw = TOWER_LEVELS * (bs + 8) + 16, ph = bs + 34;
+    const cols = W < 260 ? 3 : TOWER_LEVELS, rows = Math.ceil(TOWER_LEVELS / cols);   // schmaler Bildschirm: zwei Reihen, größere Knöpfe
+    const bs = Math.min(40, Math.floor((W - 50) / cols) - 8), pw = cols * (bs + 8) + 16, ph = rows * (bs + 8) + 26;
     const px = Math.round((W - pw) / 2), py = Math.round(Math.max(G + 4, floor.y + 10));
-    return { x: px, y: py, w: pw, h: ph, bs, btn: [...Array(TOWER_LEVELS)].map((_, i) => ({ i, x: px + 12 + i * (bs + 8), y: py + 24, w: bs, h: bs })) };
+    return { x: px, y: py, w: pw, h: ph, bs, btn: [...Array(TOWER_LEVELS)].map((_, i) => ({ i, x: px + 12 + (i % cols) * (bs + 8), y: py + 24 + Math.floor(i / cols) * (bs + 8), w: bs, h: bs })) };
   }
   function drawPanel(time) {
     const P = panelGeo();
     R('rgba(0,0,0,.35)', P.x + 4, P.y + 5, P.w, P.h); R('#5a5e62', P.x, P.y, P.w, P.h); R('#8d9196', P.x + 2, P.y + 2, P.w - 4, P.h - 4);
     R('#222', P.x + P.w / 2 - 12, P.y + 5, 24, 14); drawDigit(R, level, P.x + P.w / 2 - 3, P.y + 7, '#ff9f43', 2);   // Anzeige: hier bin ich
     for (const b of P.btn) {
-      const c = TOWER_COLS[b.i], here = b.i === level, on = here && Math.abs(Math.sin(time / 250)) > .5;
+      const c = levelCols(b.i), here = b.i === level, on = here && Math.abs(Math.sin(time / 250)) > .5;
       R(here ? (on ? '#ffd23f' : '#c48a00') : '#3a3d40', b.x - 2, b.y - 2, b.w + 4, b.h + 4);
       R(c[2], b.x, b.y, b.w, b.h); R(c[0], b.x + 2, b.y + 2, b.w - 4, b.h - 5); R(c[1], b.x + 2, b.y + 2, b.w - 4, 2);
       const k = Math.max(2, Math.floor(b.w / 9));
       if (b.i === 0) { const dw = 3 * k, dh = 5 * k; R('#5a3b1c', b.x + b.w / 2 - dw / 2, b.y + b.h / 2 - dh / 2, dw, dh); R('#ffd23f', b.x + b.w / 2 + dw / 2 - k, b.y + b.h / 2, k, k); }   // EG: Tür
+      else if (b.i === 4) { const r = 2 * k; R('#ffd23f', b.x + b.w / 2 - r, b.y + b.h / 2 - r, 2 * r, 2 * r); R('#ffd23f', b.x + b.w / 2 - r - k, b.y + b.h / 2 - k / 2, 2 * r + 2 * k, k); R('#ffd23f', b.x + b.w / 2 - k / 2, b.y + b.h / 2 - r - k, k, 2 * r + 2 * k); R('#fff3a8', b.x + b.w / 2 - r + k, b.y + b.h / 2 - r + k, k, k); }   // Dach: Sonne
       else drawDigit(R, b.i, Math.round(b.x + b.w / 2 - 1.5 * k), Math.round(b.y + b.h / 2 - 2.5 * k), '#ffffff', k);
     }
   }
@@ -491,6 +539,7 @@ const Room = (() => {
       const s = slotAt(x, y);
       if (s) { drag = { f: BY[s.key], x, y, dx: 0, dy: 0, sx: x, sy: y, from: 'bar' }; setWord(s.key); sayWord(s.key); sfx.click(); return true; }
       if (inBar(x, y)) return true;
+      if (TOWER && level === 4 && heli.ph === 'idle') { const p = heliPos(); if (Math.abs(x - p.x) < 28 && Math.abs(y - p.y) < 22) { heli = { ph: 'up', t: 0 }; sfx.honk(); setWord('heli'); sayWord('heli'); return true; } }
       const h = itemAt(x, y);
       if (h) { drag = { f: h.f, i: h.i, x, y, dx: h.p.x + h.f.W / 2 - x, dy: h.p.y + h.f.H / 2 - y, sx: x, sy: y, from: 'room' }; sel = null; setWord(h.f.key); sayWord(h.f.key); sfx.click(); return true; }
       if (sel && inFloor(x, y)) { put(BY[sel], x, y); sel = null; return true; }
@@ -527,6 +576,7 @@ const Room = (() => {
   }
   function update(dt) {
     idle += dt;
+    if (heli.ph !== 'idle') { heli.t += dt; const T = { up: 1.2, fly: 6, down: 1.4 }[heli.ph]; if (heli.t >= T) { heli.t = 0; heli.ph = { up: 'fly', fly: 'down', down: 'idle' }[heli.ph]; if (heli.ph === 'idle') tone(523, .2, 'triangle', .06); } }
     liftOpen = approach(liftOpen, calling || panel || ride ? 1 : 0, 2.5 * dt);
     if (calling && liftOpen >= 1 && !panel) { calling = false; panel = { t: 0 }; setWord('lift'); sayWord('lift'); }   // erst wenn die Türen offen sind: Bedienfeld
     if (kid && room && room.door && level === 0 && !night && !ride && !swap && !kid.path.length && kid.y > floor.y + floor.h - 8 && kid.x > room.door.x + 2 && kid.x < room.door.x + room.door.w - 2) {
@@ -667,6 +717,10 @@ const Room = (() => {
       }
     }
     if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`; ctx.fillRect(0, 0, W, H); }
+    if (TOWER && level === 4) {                       // Hubschrauber über allem (fliegt auch über die Möbel)
+      const p = heliPos(); if (p.z > 1) R('rgba(0,0,0,.22)', Math.round(p.x - 18), Math.round(p.y + 8), 36, 8);
+      drawHelicopter(R, p.x, p.y - p.z, time, p.a, p.spin, 2);
+    }
     if (room.door && level === 0 && !drag && idle > 3 && Math.floor(time / 600) % 2 === 0) {   // Ausgang: kleiner Pfeil an der Tür
       const cx = room.door.x + room.door.w / 2, cy = room.y + room.h - 10; for (let i = 0; i < 4; i++) R('rgba(255,255,255,.8)', Math.round(cx - i), cy + i, 2 * i + 1, 1); }
     if (panel && !ride) drawPanel(time);
@@ -675,7 +729,7 @@ const Room = (() => {
     if (!drag && !sel && !list().length && idle > 1.5) { const s = slots[0]; drawArrow(Math.round(s.x + s.w / 2 - 3), Math.round(s.y - 14 - Math.abs(Math.sin(time / 220)) * 4)); }
   }
   function resize() { enter(); }
-  return { enter, setWord, update, draw, resize, onPointer, _dbg: () => ({ door: room && room.door, level, panel: !!panel, ride: !!ride, panelBtns: room && TOWER ? panelGeo().btn : null, stairs, floor, slots, arrows, page, items: list(), kid: kid && { x: kid.x, y: kid.y, path: kid.path.length }, night: !!night, walls }) };
+  return { enter, setWord, update, draw, resize, onPointer, _dbg: () => ({ heli: heli.ph, pad: walls.find(r => r.kind === 'pad') || null, door: room && room.door, level, panel: !!panel, ride: !!ride, panelBtns: room && TOWER ? panelGeo().btn : null, stairs, floor, slots, arrows, page, items: list(), kid: kid && { x: kid.x, y: kid.y, path: kid.path.length }, night: !!night, walls }) };
 })();
 startLoop(Room);
 Room.setWord('house'); setTimeout(() => sayWord('house'), 400);

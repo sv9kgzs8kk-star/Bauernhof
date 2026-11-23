@@ -59,7 +59,7 @@ const TWO = !FARM && !WOOD && !TOWER && ((save.house && save.house.type) | 0) >=
 const TOWER_LEVELS = 4;
 const Room = (() => {
   let S = 1, BS = 1, WH = G, room, floor, bar, slots, arrows, page = 0, pages = [], walls = [], drag = null, sel = null, wob = new Map(), lampOn = true, idle = 0;
-  let lastTap = null, sit = null, liftOpen = 0, atDoor = 0;          // sit = Kind sitzt im Schaukelstuhl { i, t }
+  let lastTap = null, sit = null, liftOpen = 0, atDoor = 0, calling = false;   // calling: Kind steht vor dem Aufzug, Türen gehen auf          // sit = Kind sitzt im Schaukelstuhl { i, t }
   let kid = null, night = null, grid = null, level = 0, stairs = null, swap = null, panel = null, ride = null;   // Hochhaus: Aufzug-Bedienfeld, Fahrt
   const list = () => save[WHERE].items;
   const onLevel = it => ((it.f | 0) === level);
@@ -527,7 +527,8 @@ const Room = (() => {
   }
   function update(dt) {
     idle += dt;
-    liftOpen = approach(liftOpen, panel || ride ? 1 : 0, 3 * dt);
+    liftOpen = approach(liftOpen, calling || panel || ride ? 1 : 0, 2.5 * dt);
+    if (calling && liftOpen >= 1 && !panel) { calling = false; panel = { t: 0 }; setWord('lift'); sayWord('lift'); }   // erst wenn die Türen offen sind: Bedienfeld
     if (kid && room && room.door && level === 0 && !night && !ride && !swap && !kid.path.length && kid.y > floor.y + floor.h - 8 && kid.x > room.door.x + 2 && kid.x < room.door.x + room.door.w - 2) {
       atDoor += dt; if (atDoor > 0.6) { atDoor = -99; sfx.enter(); goHof(BACK_TAG); return; } } else if (atDoor > 0) atDoor = 0;   // durch die Haustür nach draußen
     for (const [k, v] of wob) { if (v + dt > 0.35) wob.delete(k); else wob.set(k, v + dt); }
@@ -557,6 +558,7 @@ const Room = (() => {
     }
     if (sit) { if (kid.path.length || !order().some(e => e.i === sit.i && e.f.key === 'rocker')) sit = null; else { sit.t += dt; return; } }   // Weglaufen = aufstehen
     if (kid.path.length) {
+      calling = false;
       const tgt = kid.path[0], dx = tgt.x - kid.x, dy = tgt.y - kid.y, d = Math.hypot(dx, dy), sp = 70 * S * dt;
       if (Math.abs(dx) > 0.5) kid.flip = dx < 0;
       if (d <= sp) { kid.x = tgt.x; kid.y = tgt.y; kid.path.shift(); } else { kid.x += dx / d * sp; kid.y += dy / d * sp; }
@@ -564,9 +566,9 @@ const Room = (() => {
     } else {
       kid.still += dt;
       if (stairs && kid.still > 0.3 && kid.x > stairs.x - 2 && kid.x < stairs.x + stairs.w + 2 && kid.y > stairs.y && kid.y < stairs.y + stairs.h + 4) {
-        if (stairs.lift) { if (!panel) { panel = { t: 0 }; tone(880, .08, 'sine', .06); setWord('lift'); sayWord('lift'); } }   // im Aufzug: Bedienfeld
+        if (stairs.lift) { if (!panel && !calling) { calling = true; tone(880, .08, 'sine', .06); } }   // vor dem Aufzug: Türen gehen auf, dann Bedienfeld
         else { swap = { t: 0 }; sfx.enter(); return; } }
-      else if (panel) panel = null;
+      else { panel = null; calling = false; }
       const rk = rockerUnderKid();
       if (rk && kid.still > 0.5) { sit = { i: rk.i, t: 0 }; setWord('rock'); sayWord('rock'); tone(330, .12, 'triangle', .06); return; }
       const bed = bedUnderKid();
@@ -603,7 +605,15 @@ const Room = (() => {
       const p = toScreen(e.f, e.it), cx = p.x + 8 * S, cy = p.y + 7 * S;
       for (const [r, a] of [[30 * S, .08], [22 * S, .1], [14 * S, .12]]) { ctx.fillStyle = `rgba(255,230,120,${a})`; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); }
     }
-    // Möbel und Kind nach unten sortiert (wer weiter unten steht, ist vorne)
+    if (TOWER) {                                       // Aufzugtüren: silbern, gehen auf, wenn das Kind davor steht
+      const sh = walls.find(r => r.kind === 'shaft'), dy = sh.y + sh.h - 19, dh = 18, half = 15, op = Math.round(liftOpen * (half - 2));
+      R('#1f2124', sh.x + sh.w / 2 - half, dy, half * 2, dh);                                     // dunkle Kabine dahinter
+      R('#d8dcdf', sh.x + sh.w / 2 - half - op, dy, half, dh); R('#aeb3b8', sh.x + sh.w / 2 - 1 - op, dy, 1, dh); R('#ffffff', sh.x + sh.w / 2 - half - op, dy, 1, dh);
+      R('#d8dcdf', sh.x + sh.w / 2 + op, dy, half, dh); R('#aeb3b8', sh.x + sh.w / 2 + op, dy, 1, dh); R('#ffffff', sh.x + sh.w / 2 + half - 1 + op, dy, 1, dh);
+      R('#5a5e62', sh.x + sh.w / 2 - half - 2, dy - 1, 2, dh + 1); R('#5a5e62', sh.x + sh.w / 2 + half, dy - 1, 2, dh + 1);   // Rahmen
+      R(panel ? '#ffd23f' : '#c4c7ca', sh.x + sh.w / 2 + half + 3, dy + 4, 3, 4);                                            // Rufknopf
+    }
+    // Möbel und Kind nach unten sortiert (wer weiter unten steht, ist vorne; das Kind steht vor den Aufzugtüren)
     const things = order().filter(e => !(drag && drag.from === 'room' && drag.i === e.i)).map(e => ({ y: e.f.flat ? -1e9 : toScreen(e.f, e.it).y + e.f.H, e }));
     things.sort((a, b) => a.y - b.y);
     if (!night) things.push({ kid: true });          // Kind immer vor den Möbeln
@@ -657,14 +667,6 @@ const Room = (() => {
       }
     }
     if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`; ctx.fillRect(0, 0, W, H); }
-    if (TOWER) {                                       // Aufzugtüren: silbern, gehen auf, wenn das Kind davor steht
-      const sh = walls.find(r => r.kind === 'shaft'), dy = sh.y + sh.h - 19, dh = 18, half = 15, op = Math.round(liftOpen * (half - 2));
-      R('#1f2124', sh.x + sh.w / 2 - half, dy, half * 2, dh);                                     // dunkle Kabine dahinter
-      R('#d8dcdf', sh.x + sh.w / 2 - half - op, dy, half, dh); R('#aeb3b8', sh.x + sh.w / 2 - 1 - op, dy, 1, dh); R('#ffffff', sh.x + sh.w / 2 - half - op, dy, 1, dh);
-      R('#d8dcdf', sh.x + sh.w / 2 + op, dy, half, dh); R('#aeb3b8', sh.x + sh.w / 2 + op, dy, 1, dh); R('#ffffff', sh.x + sh.w / 2 + half - 1 + op, dy, 1, dh);
-      R('#5a5e62', sh.x + sh.w / 2 - half - 2, dy - 1, 2, dh + 1); R('#5a5e62', sh.x + sh.w / 2 + half, dy - 1, 2, dh + 1);   // Rahmen
-      R(panel ? '#ffd23f' : '#c4c7ca', sh.x + sh.w / 2 + half + 3, dy + 4, 3, 4);                                            // Rufknopf
-    }
     if (room.door && level === 0 && !drag && idle > 3 && Math.floor(time / 600) % 2 === 0) {   // Ausgang: kleiner Pfeil an der Tür
       const cx = room.door.x + room.door.w / 2, cy = room.y + room.h - 10; for (let i = 0; i < 4; i++) R('rgba(255,255,255,.8)', Math.round(cx - i), cy + i, 2 * i + 1, 1); }
     if (panel && !ride) drawPanel(time);

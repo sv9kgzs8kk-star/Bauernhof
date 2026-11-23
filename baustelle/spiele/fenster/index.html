@@ -70,15 +70,25 @@ function finishStep(step, key, back) {
 <script>
 /* =====================================================================
    MINISPIEL: FENSTER-PUZZLE (Baustelle, Hochhaus Schritt 5) – das Hochhaus von vorne, groß
-   Einige Fenster und die Haustür fehlen noch (dunkle Löcher, TOWER_WIN miss). Rechts (bzw. unten) liegen die Teile:
-   quadratisch, hoch, rund, breit und die Tür. Ein Teil in das Loch mit der GLEICHEN FORM ziehen → es rastet ein.
-   Passt die Form nicht, rutscht es zurück (kein Scheitern), und die passenden Löcher blinken kurz.
-   Antippen geht auch: erst Teil, dann Loch. Alles drin = Hochhaus fertig (house.step = 5).
+   Einige Fenster und die Haustür fehlen noch (dunkle Löcher, TOWER_WIN miss). Rechts neben dem Haus steht ein Glasgestell auf dem Boden,
+   darauf stehen die Teile hintereinander (quadratisch, hoch, rund, breit, Tür). Nur das VORDERSTE kann man nehmen und
+   in das Loch mit der GLEICHEN FORM ziehen (oder antippen, dann Loch antippen). Passt die Form nicht, kommt es zurück aufs Gestell,
+   und die passenden Löcher blinken kurz (kein Scheitern).
+   Bauarbeiter auf der Hebebühne antippen: er nimmt das vorderste Teil, fährt unter das passende Loch, die Bühne fährt hoch,
+   er setzt es ein und fährt zurück. Alles drin = Hochhaus fertig (house.step = 5).
    ===================================================================== */
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('kran')));
 const Q = snapF(R, 2);
+function drawWorker(x, y, step) {                     // Bauarbeiter von vorne, Füße bei (x, y)
+  x = Math.round(x); y = Math.round(y);
+  BUILDER_FRONT.px.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (ch === '.') return;
+    let yy = y - 24 + j * 2; if (j >= 10 && step && (i < 5) === (step > 0)) yy -= 1;
+    R(BUILDER_FRONT.pal[ch], x - 10 + i * 2, yy, 2, 2);
+  }));
+}
 const Win = (() => {
-  let g, mw, holes, pieces, drag = null, sel = null, flash = null, paused = false, done = false, idle = 0, u, side;
+  let g, mw, holes, rack, drag = null, sel = false, flash = null, paused = false, done = false, idle = 0, u, ground, rx, lift;
   function enter() {
     Hof.load();
     if (houseType().key !== 'tower' || house().step !== 4) { goHof('kran'); return; }
@@ -87,29 +97,28 @@ const Win = (() => {
       const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
     }
-    // Hochhaus groß: so hoch wie möglich, Teile daneben (quer) oder darunter (hochkant)
-    side = W > H * 1.1;
-    const d = 10, fh = Math.floor(Math.min(side ? (H - 40) / 4.3 : (H - 140) / 4.3, (side ? W * 0.55 : W - 24) / 3 / 2.6, 46));
-    const w = Math.round(fh * 2.6) * 3; mw = Math.round(w / 3); u = fh / 16;
-    const x = side ? Math.round(W * 0.06) : Math.round((W - w) / 2), y = (side ? H - 16 : H - 120) - d;
-    g = { x, y, w, d, fh };
-    // Löcher (fehlende Fenster) und Teile
+    // Hochhaus groß von vorne, rechts daneben Gestell und Hebebühne – passt quer und hochkant
+    // quer: Gestell und Hebebühne rechts neben dem Haus; hochkant: Haus über die ganze Breite, Gestell und Bühne davor auf dem Gehweg
+    const wide = W > H, wf = wide ? 2.6 : 2.0, d = 10;
+    const fh = Math.floor(wide ? Math.min((H - 70) / 4.3, (W - 100) / (3 * wf + 0.6), 46) : Math.min((H - 160) / 4.3, (W - 16) / (3 * wf), 46));
+    const w = Math.round(fh * wf) * 3; mw = Math.round(w / 3); u = fh / 16;
+    const gb = wide ? H - 14 : H - 80;                         // Boden unter dem Haus
+    ground = wide ? gb : H - 14;                               // Boden, auf dem Gestell und Bühne stehen
+    const x = wide ? Math.max(6, Math.round((W - w - Math.max(70, 1.2 * fh + 50)) / 2)) : Math.round((W - w) / 2);
+    g = { x, y: gb - d, w, d, fh, gb };
+    // Löcher (fehlende Fenster) und Teile auf dem Gestell (gemischt, vorne = Index 0)
     holes = [];
     for (let k = 0; k < TOWER_FLOORS; k++) for (let m = 0; m < 3; m++) TOWER_WIN[k][m].forEach((wv, i) => {
       if (!wv.miss) return;
       const mx = g.x + m * mw, ww = m === 2 ? g.w - 2 * mw : mw, [cx, cy] = towerWinPos(mx, g.y, ww, d, fh, k, m, i);
       holes.push({ k, m, i, s: wv.s, x: cx, y: cy, done: false });
     });
-    const shapes = holes.map(h => h.s);
-    for (let i = shapes.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [shapes[i], shapes[j]] = [shapes[j], shapes[i]]; }
-    // Ablage: Gitter aus Feldern
-    const n = shapes.length, cols = side ? 2 : 4, rows = Math.ceil(n / cols);
-    const area = side ? { x: g.x + g.w + 24, y: 40, w: W - (g.x + g.w + 24) - 10, h: H - 56 } : { x: 10, y: H - 110, w: W - 20, h: 100 };
-    const cw = area.w / cols, ch = area.h / rows;
-    pieces = shapes.map((s, i) => { const hx = Math.round(area.x + cw * (i % cols) + cw / 2), hy = Math.round(area.y + ch * Math.floor(i / cols) + ch / 2);
-      return { s, x: hx, y: hy, hx, hy, done: false }; });
-    g.area = area;
-    drag = sel = flash = null; done = false; idle = 0;
+    rack = holes.map(h => h.s);
+    for (let i = rack.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [rack[i], rack[j]] = [rack[j], rack[i]]; }
+    rx = wide ? g.x + g.w + 44 + Math.round(0.4 * fh) : W - 34 - Math.round(0.6 * fh);   // Mitte des vordersten Teils auf dem Gestell
+    const lh = wide ? g.x + g.w + 18 : Math.round(rx - 0.6 * fh - 36);
+    lift = { x: lh, home: lh, h: 0, path: [], carry: null, t: 0 };
+    drag = null; sel = false; flash = null; done = false; idle = 0;
     show('khud'); hud();
     setTimeout(() => sayWord('window'), 400);
   }
@@ -118,59 +127,97 @@ const Win = (() => {
   $('pausebtn').addEventListener('click', () => { if (done) return; paused = true; show('gpause'); });
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
   const size = s => { const rs = towerWinRects(s, u); let a = 1e9, b = 1e9, c = -1e9, e = -1e9; for (const [x, y, w, h] of rs) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x + w); e = Math.max(e, y + h); } return { w: c - a, h: e - b }; };
-  const pieceAt = (x, y) => pieces.find(p => !p.done && Math.abs(x - p.x) < size(p.s).w / 2 + 10 && Math.abs(y - p.y) < size(p.s).h / 2 + 10);
+  const front = () => rack[0];
+  const frontPos = () => { const z = size(front()); return { x: rx, y: ground - 5 - z.h / 2 - 1 }; };
+  const onFront = (x, y) => { if (!rack.length) return false; const p = frontPos(), z = size(front()); return Math.abs(x - p.x) < z.w / 2 + 12 && Math.abs(y - p.y) < z.h / 2 + 12; };
   const holeAt = (x, y, pad = 8) => holes.find(h => !h.done && Math.abs(x - h.x) < size(h.s).w / 2 + pad && Math.abs(y - h.y) < size(h.s).h / 2 + pad);
-  function tryPut(p, h) {
-    if (h.s !== p.s) {                                    // falsche Form: zurück, passende Löcher blinken
-      sfx.bonk(); flash = { s: p.s, t: 1.6 }; p.x = p.hx; p.y = p.hy; return false;
-    }
-    h.done = true; p.done = true; sfx.clod(); hud();
+  const onLift = (x, y) => Math.abs(x - lift.x) < 16 && y > ground - lift.h - 40 && y < ground + 4;
+  function put(s, h) {                                   // Teil s ins Loch h: passt → rastet ein; sonst zurück nach vorne aufs Gestell
+    if (h.s !== s) { sfx.bonk(); flash = { s, t: 1.6 }; rack.unshift(s); return false; }
+    h.done = true; sfx.clod(); hud();
     for (let i = 0; i < 8; i++) spawn(h.x + rnd(-6, 6), h.y + rnd(-6, 6), rnd(-20, 20), rnd(-25, 0), .4, '#ffffff', 30);
-    if (holes.every(q => q.done)) { done = true; sel = null; setTimeout(() => { hide('khud'); confetti(); finishStep(5, 'tower', 'kran'); }, 600); }
+    if (holes.every(q => q.done)) { done = true; setTimeout(() => { hide('khud'); confetti(); finishStep(5, 'tower', 'kran'); }, 900); }
     return true;
+  }
+  // Hebebühne: hin unter das passende Loch, hochfahren, einsetzen, runter, zurück
+  function sendLift() {
+    if (!rack.length || lift.path.length || drag) return;
+    const s = rack.shift(), h = holes.find(q => !q.done && q.s === s); sel = false;
+    if (!h) { rack.unshift(s); return; }
+    const z = size(s), up = Math.max(0, ground - (h.y + z.h / 2 + 30));   // Bühne so hoch, dass das Teil vor dem Loch ist
+    lift.carry = { s, h }; sfx.click();
+    lift.path = [{ x: h.x }, { h: up }, { put: true }, { h: 0 }, { x: lift.home }];
+  }
+  function updLift(dt) {
+    const q = lift.path[0]; if (!q) return;
+    lift.t += dt;
+    if (q.x !== undefined) { lift.x = approach(lift.x, q.x, 70 * dt); if (lift.x === q.x) lift.path.shift(); }
+    else if (q.h !== undefined) { lift.h = approach(lift.h, q.h, 60 * dt); if (lift.h === q.h) lift.path.shift(); }
+    else if (q.put) { const c = lift.carry; lift.carry = null; put(c.s, c.h.done ? holes.find(o => !o.done && o.s === c.s) || c.h : c.h); lift.path.shift(); }
+    setEngine(true, lift.path.length > 0, 25);
   }
   function onPointer(type, x, y) {
     if (paused || done) return true;
     idle = 0;
     if (type === 'down') {
-      const p = pieceAt(x, y);
-      if (p) { drag = { p, ox: p.x - x, oy: p.y - y, sx: x, sy: y }; sel = p; sfx.click(); return true; }
+      if (onLift(x, y)) { sendLift(); return true; }
+      if (onFront(x, y)) { const p = frontPos(); drag = { s: rack.shift(), x: p.x, y: p.y, ox: p.x - x, oy: p.y - y, sx: x, sy: y }; sfx.click(); return true; }
       const h = holeAt(x, y, 10);
-      if (h && sel && !sel.done) { tryPut(sel, h); sel = null; return true; }
-      return true;
+      if (h && sel && rack.length) { const s = rack.shift(); sel = false; put(s, h); return true; }
+      sel = false; return true;
     }
-    if (type === 'move' && drag) { drag.p.x = x + drag.ox; drag.p.y = y + drag.oy; return true; }
+    if (type === 'move' && drag) { drag.x = x + drag.ox; drag.y = y + drag.oy; return true; }
     if (type === 'up' && drag) {
-      const p = drag.p, moved = Math.hypot(x - drag.sx, y - drag.sy) > 8; drag = null;
-      if (!moved) { p.x = p.hx; p.y = p.hy; return true; }   // nur angetippt: bleibt ausgewählt, dann Loch antippen
-      const h = holeAt(p.x, p.y, 12);
-      if (h) { tryPut(p, h); sel = null; } else { p.x = p.hx; p.y = p.hy; }
+      const dd = drag, moved = Math.hypot(x - dd.sx, y - dd.sy) > 8; drag = null;
+      if (!moved) { rack.unshift(dd.s); sel = true; return true; }   // nur angetippt: vorderstes Teil leuchtet, dann Loch antippen
+      const h = holeAt(dd.x, dd.y, 12);
+      if (h) put(dd.s, h); else rack.unshift(dd.s);
     }
     return true;
   }
-  function update(dt) { if (paused) return; idle += dt; if (flash) { flash.t -= dt; if (flash.t <= 0) flash = null; } }
+  function update(dt) { if (paused) return; idle += dt; if (flash) { flash.t -= dt; if (flash.t <= 0) flash = null; } updLift(dt); }
+  function drawLift(time) {                              // Scherenbühne mit Bauarbeiter (und Teil in den Händen)
+    const x = Math.round(lift.x), top = Math.round(ground - 10 - lift.h);
+    R('rgba(0,0,0,.25)', x - 14, ground - 2, 30, 3);
+    R('#1a1a1a', x - 12, ground - 4, 5, 4); R('#1a1a1a', x + 7, ground - 4, 5, 4);
+    R('#c48a00', x - 14, ground - 9, 28, 5); R('#f5b700', x - 13, ground - 8, 26, 3);
+    const hgt = top - (ground - 9), n = Math.max(1, Math.round(-hgt / 10));   // Scheren
+    for (let i = 0; i < n; i++) { const y0 = ground - 9 + (hgt * i) / n, y1 = ground - 9 + (hgt * (i + 1)) / n;
+      pixLine(R, x - 11, y0, x + 11, y1, 2, '#555'); pixLine(R, x + 11, y0, x - 11, y1, 2, '#777'); }
+    R('#c48a00', x - 15, top - 3, 30, 4); R('#f5b700', x - 14, top - 2, 28, 2);   // Plattform mit Geländer
+    R('#f5b700', x - 15, top - 14, 2, 11); R('#f5b700', x + 13, top - 14, 2, 11); R('#f5b700', x - 15, top - 14, 30, 2);
+    drawWorker(x, top - 3, lift.path.length && lift.path[0].x !== undefined ? (Math.floor(time / 140) % 2 ? 1 : -1) : 0);
+    if (lift.carry) drawTowerWin(Q, x - 16 - Math.round(size(lift.carry.s).w / 2), Math.round(top - 14), lift.carry.s, u, 'glass');
+    else if (!lift.path.length && !done && Math.floor(time / 700) % 4 === 0) R('rgba(255,210,63,.6)', x - 14, ground + 1, 28, 2);   // leiser Hinweis: antippbar
+  }
   function draw(time) {
     if (!g) return;
     ctx.drawImage(bg, 0, 0);
-    // Hochhaus von vorne: fertige Fenster sind drin, Löcher je nach Spielstand
+    R('#8a7a66', 0, g.gb, W, H - g.gb); R('#a8957c', 0, g.gb, W, 2);   // Boden vorne (hochkant: breiter Gehweg)
+    if (ground > g.gb) for (let xx = 0; xx < W; xx += 16) R('#7d6e5c', xx, g.gb + 2, 1, H - g.gb);
     drawTower(Q, g, { win: (k, m, i) => { const h = holes.find(q => q.k === k && q.m === m && q.i === i); return !h || h.done; }, helipad: true, time });
-    // Blinken: passende Löcher nach einem falschen Versuch, sonst ausgewähltes Teil
-    const blink = Math.abs(Math.sin(time / 180)) > .5, want = flash ? flash.s : (sel && !drag ? sel.s : null);
+    // Blinken: passende Löcher nach einem falschen Versuch bzw. für das ausgewählte Teil
+    const blink = Math.abs(Math.sin(time / 180)) > .5, want = flash ? flash.s : (sel && rack.length ? front() : null);
     if (want && blink) for (const h of holes) if (!h.done && h.s === want) { const z = size(h.s); R('rgba(255,210,63,.9)', h.x - z.w / 2 - 2, h.y - z.h / 2 - 2, z.w + 4, 2); R('rgba(255,210,63,.9)', h.x - z.w / 2 - 2, h.y + z.h / 2, z.w + 4, 2);
       R('rgba(255,210,63,.9)', h.x - z.w / 2 - 2, h.y - z.h / 2 - 2, 2, z.h + 4); R('rgba(255,210,63,.9)', h.x + z.w / 2, h.y - z.h / 2 - 2, 2, z.h + 4); }
-    // Ablage (Palette mit den Teilen)
-    const A = g.area; R('rgba(0,0,0,.2)', A.x + 3, A.y + 3, A.w, A.h); R('#7a4a22', A.x, A.y, A.w, A.h); R('#9a6436', A.x + 3, A.y + 3, A.w - 6, A.h - 6);
-    for (let yy = A.y + 3; yy < A.y + A.h - 3; yy += 12) R('#7a4a22', A.x + 3, yy, A.w - 6, 1);
-    for (const p of pieces) if (!p.done && p !== (drag && drag.p)) {
-      if (p === sel) { const z = size(p.s); R(blink ? '#ffd23f' : '#fff3b0', p.x - z.w / 2 - 4, p.y - z.h / 2 - 4, z.w + 8, z.h + 8); }
-      drawTowerWin(Q, p.x, p.y, p.s, u, 'glass');
+    // Glasgestell: Teile stehen hintereinander (hinten etwas höher und versetzt), das vorderste ganz vorne
+    const bw = Math.round(1.2 * g.fh) + 18;
+    R('#3e2410', rx - bw / 2, ground - 5, bw + rack.length * 3, 5); R('#7a4a22', rx - bw / 2 + 1, ground - 4, bw + rack.length * 3 - 2, 2);
+    R('#5a5e62', rx + bw / 2 + rack.length * 3 - 2, ground - Math.round(2.2 * g.fh), 3, Math.round(2.2 * g.fh) - 5);   // Rückenstütze
+    for (let i = rack.length - 1; i >= 0; i--) {
+      const z = size(rack[i]), px = rx + i * 3, py = ground - 5 - z.h / 2 - 1 - i * 2;
+      if (i === 0 && sel) R(blink ? '#ffd23f' : '#fff3b0', px - z.w / 2 - 4, py - z.h / 2 - 4, z.w + 8, z.h + 8);
+      drawTowerWin(Q, Math.round(px), Math.round(py), rack[i], u, 'glass');
+      if (i > 0) R('rgba(0,0,0,.18)', px - z.w / 2 - 1, py - z.h / 2 - 1, z.w + 2, z.h + 2);   // hintere etwas dunkler
     }
-    if (drag) { const z = size(drag.p.s); R('rgba(0,0,0,.25)', drag.p.x - z.w / 2 + 3, drag.p.y - z.h / 2 + 4, z.w, z.h); drawTowerWin(Q, Math.round(drag.p.x), Math.round(drag.p.y), drag.p.s, u, 'glass'); }
-    if (!done && !drag && idle > 2.5) { const p = pieces.find(q => !q.done); if (p) drawArrow(p.x - 3, Math.round(p.y - size(p.s).h / 2 - 16 - Math.abs(Math.sin(time / 220)) * 4)); }
+    drawLift(time);
+    if (drag) { const z = size(drag.s); R('rgba(0,0,0,.25)', drag.x - z.w / 2 + 3, drag.y - z.h / 2 + 4, z.w, z.h); drawTowerWin(Q, Math.round(drag.x), Math.round(drag.y), drag.s, u, 'glass'); }
+    if (!done && !drag && !lift.path.length && idle > 2.5 && rack.length) { const p = frontPos(), z = size(front()); drawArrow(Math.round(p.x - 3), Math.round(p.y - z.h / 2 - 16 - Math.abs(Math.sin(time / 220)) * 4)); }
   }
   function resize() { layout(false); }
-  function exit() { clearTimeout(winTimer); }
-  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ done, holes: holes.map(h => ({ s: h.s, x: h.x, y: h.y, done: h.done })), pieces: pieces.map(p => ({ s: p.s, x: p.x, y: p.y, done: p.done })) }) };
+  function exit() { clearTimeout(winTimer); setEngine(false, false); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ done, rack: rack.slice(), front: rack.length ? frontPos() : null, lift: { x: lift.x, h: lift.h, n: lift.path.length, home: lift.home, ground },
+    holes: holes.map(h => ({ s: h.s, x: h.x, y: h.y, done: h.done })) }) };
 })();
 startLoop(Win);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

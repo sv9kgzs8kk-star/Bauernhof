@@ -169,8 +169,9 @@ const Turm = (() => {
   // Landeplatz liegt oben: Tieflader fährt weg, ein Hubschrauber fliegt ein und landet (Richtfest)
   function padDone() {
     confetti(); sayWord('helipad'); truck.state = 'leave'; done = true; follow = null;
+    to(Math.min(W - 10, crane.x + 50), crane.y + 4, carryE());   // Ausleger dreht nach rechts weg, damit der Hubschrauber Platz hat
     const tx = g.x + g.w / 2, ty = g.y - TOWER_FLOORS * FH() + D() / 2;   // Mitte des Landeplatzes
-    heli = { x: W + 30, y: -20, tx, ty, t: 0, landed: false };
+    heli = { x: -40, y: -20, tx, ty, t: 0, landed: false };   // kommt von links
     setTimeout(() => sayWord('heli'), 1600);
   }
   function setWord() {}

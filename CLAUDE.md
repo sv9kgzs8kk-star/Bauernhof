@@ -14,8 +14,10 @@ baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): b
                               (Turm, nur Hochhaus `shape: 'T'`: Turmdrehkran hebt Fertigteil-Module (3 je Stockwerk) vom Tieflader; ein Tieflader = ein Stockwerk;
                               house.step 2 → EG + 1. OG, step 3 → 2. + 3. OG, dann bringt ein Tieflader den Landeplatz (`drawHelipad`), ein Hubschrauber landet (`drawHelicopter`). Zeichnen: `drawTower()`, `drawTowerModule()`, `drawTowerCraneMast/Top()`,
                               `drawLowLoader()`, Fenster-Plan `TOWER_WIN` (miss = fehlt noch).
-                              Fenster/ (step 4 → 5): Hochhaus groß von vorne, 8 Teile (quadratisch, hoch, rund, breit, Tür) in Löcher gleicher Form ziehen
-                              (oder Teil, dann Loch antippen); falsche Form rutscht zurück, passende Löcher blinken. `towerWinPos()`, `towerWinRects()`.
+                              Fenster/ (step 4 → 5): Hochhaus groß von vorne, 8 Teile (quadratisch, hoch, rund, breit, Tür) stehen hintereinander auf einem Glasgestell am Boden;
+                              nur das vorderste in ein Loch gleicher Form ziehen (oder antippen, dann Loch); falsche Form → zurück aufs Gestell, passende Löcher blinken.
+                              Bauarbeiter auf der Scherenbühne antippen: nimmt das vorderste, fährt hin, Bühne hoch, setzt ein, zurück. Hochkant: Gestell/Bühne vorne auf dem Gehweg.
+                              Nach dem Landeplatz dreht der Kranausleger nach rechts, der Hubschrauber kommt von links. `towerWinPos()`, `towerWinRects()`.
                               Hochhaus hat `ready: false` bis Sprengung (PR 3) fertig ist, Test mit `?haustyp=3`; fertiges Hochhaus kann man noch nicht betreten.)
                               (Holzabriss, nur Holzhaus: Umzug → Schindeln wegwischen, fliegen in den Container → Autokran hebt 4 Binder auf einen Lastwagen →
                               Veranda und 6 Wände (je ganze Wand) auf Lastwagen mit 4 Plätzen, voll fährt er weg → Betonsockel mit dem Bagger zum Kipper.

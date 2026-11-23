@@ -16,8 +16,11 @@ const HOUSE_TYPES = [
   { key: 'big',   word: 'bighouse', floors: 2, loads: 4, trusses: 6, steps: ['baggern', 'beton', 'mauer', 'kran', 'dach'] },
   // Holzhaus (Blockhaus in L-Form): Punktfundament, Bohlen, 4 Binder mit dem Autokran, Schindeldach und Veranda (#39–#41)
   { key: 'wood',  word: 'woodhouse', floors: 1, loads: 2, trusses: 4, shape: 'L', steps: ['baggern', 'beton', 'holz', 'kran', 'holzdach'] },
+  // Hochhaus: 4 Stockwerke aus je 3 Fertigteil-Modulen, Turmdrehkran (Schritt 2: EG + 1. OG, Schritt 3: 2. + 3. OG + Landeplatz), dann Fenster/Tür
+  // ready: false = in der Hauswahl noch gesperrt, bis alle Schritte gebaut sind (Testlink ?haustyp=3 geht)
+  { key: 'tower', word: 'tower', floors: 4, loads: 4, trusses: 0, shape: 'T', ready: false, steps: ['baggern', 'beton', 'turm', 'turm', 'fenster'] },
 ];
-Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'] });
+Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'], tower: ['HOCHHAUS', 'Hochhaus'], towercrane: ['TURMKRAN', 'Turmkran'], storey: ['STOCKWERK', 'Stockwerk'] });
 // L-Form im Grube-Rechteck (pit = { r0, c0, w, h }): links ganz, rechts nur die untere Hälfte
 const lShape = pit => { const cs = Math.ceil(pit.w / 2), hs = Math.floor(pit.h / 2); return { cs, hs, has: (r, c) => c < cs || r >= hs }; };
 // Punktfundament: Löcher an den Ecken der L-Form (relativ zur Grube)
@@ -480,4 +483,147 @@ function drawWoodHouse(F, g, o = {}) {
 function drawWoodPile(F, x, y, n = 3) {
   F('rgba(0,0,0,.2)', x + 1, y + 2, n * 4 + 2, 9);
   for (let r = 0; r < 2; r++) for (let i = 0; i < n - r; i++) { const xx = x + i * 4 + r * 2, yy = y + 4 - r * 4; F('#5a3418', xx, yy, 4, 4); F('#c98a4f', xx + 1, yy + 1, 2, 2); }
+}
+
+
+/* ---------- Hochhaus (Haustyp 4): 4 Stockwerke × 3 Fertigteil-Module, von schräg oben ----------
+   Ein Modul: Grundfläche w × d am Boden (x, gy), Höhe fh, liegt auf Höhe e (so viel weiter oben gezeichnet).
+   Oben die Deckenplatte, darunter die Vorderwand mit Fenstern. Stockwerk k (0 = EG), Modul m (0 links, 1 Mitte, 2 rechts). */
+const TOWER_FLOORS = 4, TOWER_MODS = 3;
+const TOWER_COLS = [                                   // Fassade je Stockwerk: Grund, hell, dunkel
+  ['#b8b2a6', '#d0cbc0', '#8f897e'],                   // EG: Naturstein
+  ['#7fb2e0', '#a8cdf0', '#5a8cbc'],                   // 1. OG blau
+  ['#8cc66e', '#b0dc96', '#6aa04e'],                   // 2. OG grün
+  ['#f2b25c', '#f8cc88', '#c98a3a'],                   // 3. OG orange
+];
+// Fenster je Modul: Form (sq, tall, round, wide; EG Mitte: door) und ob es beim Fenster-Einbauen noch fehlt (miss)
+const TOWER_WIN = [
+  [[{ s: 'wide', miss: true }], [{ s: 'door', miss: true }], [{ s: 'wide' }]],
+  [[{ s: 'sq' }, { s: 'tall', miss: true }], [{ s: 'sq' }, { s: 'sq' }], [{ s: 'round', miss: true }, { s: 'sq' }]],
+  [[{ s: 'tall' }, { s: 'tall' }], [{ s: 'round', miss: true }, { s: 'round' }], [{ s: 'sq' }, { s: 'wide', miss: true }]],
+  [[{ s: 'round' }, { s: 'sq', miss: true }], [{ s: 'tall', miss: true }, { s: 'tall' }], [{ s: 'sq' }, { s: 'round' }]],
+];
+// Form eines Fensters (Rechtecke relativ zur Mitte, u = Maßstab), für Fassade und später für die Fenster-Teile
+function towerWinRects(s, u) {
+  const r = (w, h) => [[-Math.round(w * u / 2), -Math.round(h * u / 2), Math.max(2, Math.round(w * u)), Math.max(2, Math.round(h * u))]];
+  if (s === 'tall') return r(5, 9);
+  if (s === 'wide') return r(12, 6);
+  if (s === 'door') return [[-Math.round(4 * u), -Math.round(5 * u), Math.max(3, Math.round(8 * u)), Math.max(4, Math.round(11 * u))]];
+  if (s === 'round') { const a = Math.max(2, Math.round(7 * u)), b = Math.max(1, Math.round(2 * u)); return [[-a / 2 + b, -a / 2, a - 2 * b, a], [-a / 2, -a / 2 + b, a, a - 2 * b]].map(q => q.map(Math.round)); }
+  return r(7, 7);
+}
+function drawTowerWin(F, cx, cy, s, u, state) {      // state: 'glass' | 'hole' | 'ghost'
+  const rs = towerWinRects(s, u);
+  if (state === 'hole') { for (const [x, y, w, h] of rs) F('#2a2a30', cx + x, cy + y, w, h); for (const [x, y, w] of rs) F('rgba(255,255,255,.35)', cx + x, cy + y, w, 1); return; }
+  for (const [x, y, w, h] of rs) F(s === 'door' ? '#5a3b1c' : '#ffffff', cx + x - 1, cy + y - 1, w + 2, h + 2);
+  for (const [x, y, w, h] of rs) F(s === 'door' ? '#8a5a2e' : '#9fd3f5', cx + x, cy + y, w, h);
+  const [x, y, w, h] = rs[0];
+  if (s === 'door') { F('#9fd3f5', cx + x + 1, cy + y + 1, w - 2, Math.round(h / 3)); F('#ffd23f', cx + x + w - 2, cy + y + Math.round(h / 2), 1, 1); }
+  else { F('#d6efff', cx + x, cy + y, Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(h / 3))); if (w > 5 && s !== 'round') F('#ffffff', cx + x + Math.floor(w / 2), cy + y, 1, h); }
+}
+// ein Modul zeichnen. o: { win(i) → true = Fenster i ist drin, top: Dach (Brüstung), lift: Aufzugsaufbau }
+function drawTowerModule(F, x, gy, w, d, fh, k, m, e = 0, o = {}) {
+  const c = TOWER_COLS[k], ty = Math.round(gy - e - fh), fy = ty + d, u = fh / 16;
+  F('rgba(0,0,0,.18)', x + w, fy, 2, fh);                                          // Schatten rechts
+  F(c[0], x, fy, w, fh); F(c[1], x, fy, w, 1); F(c[2], x + w - 1, fy, 1, fh);      // Vorderwand
+  F('#6d6a64', x, fy + fh - Math.max(1, Math.round(2 * u)), w, Math.max(1, Math.round(2 * u)));   // Geschossdecke
+  const wins = TOWER_WIN[k][m], n = wins.length;
+  wins.forEach((wv, i) => {
+    const cx = Math.round(x + w * (i + 1) / (n + 1)), cy = Math.round(fy + fh / 2 - (wv.s === 'door' ? -u : u));
+    const inside = !wv.miss || (o.win ? o.win(i) : o.allWin);
+    if (fh < 9) { F(inside ? '#9fd3f5' : '#2a2a30', cx - 1, cy - 1, 2, 2); return; }
+    drawTowerWin(F, cx, cy, wv.s, u, inside ? 'glass' : 'hole');
+  });
+  if (k > 0 && m === 1 && fh >= 9) {                                              // Balkon in der Mitte
+    const bw = w - Math.round(8 * u), bx = x + Math.round(4 * u), by = fy + fh - Math.round(5 * u);
+    F(c[2], bx, by, bw, Math.max(2, Math.round(3 * u))); F('#ffffff', bx, by, bw, 1);
+  }
+  F(c[2], x, ty, w, d); F('#a9adb1', x + 2, ty + 2, w - 4, d - 4);                // Deckenplatte mit Rand in der Stockwerksfarbe
+  F('rgba(0,0,0,.12)', x + Math.round(w / 2), ty + 1, 1, d - 2);
+  if (o.top) { F('#c4c7ca', x, ty, w, 2); F('#c4c7ca', x, ty, 2, d); F('#c4c7ca', x + w - 2, ty, 2, d); F('#7a7e82', x, ty + d - 2, w, 2); }   // Brüstung
+  if (o.lift) { const lw = Math.round(w * 0.5), lh = Math.round(d * 0.4), lx = x + Math.round((w - lw) / 2), ly = ty + Math.round(d * 0.2), up = Math.max(2, Math.round(fh * 0.4));
+    F('#7a7e82', lx, ly - up + lh, lw, up); F('#9da1a5', lx, ly - up, lw, lh); F('#5a5e62', lx + 2, ly - up + lh + 1, lw - 4, up - 2); }
+}
+// ganzes (oder halb gebautes) Hochhaus: g = { x, y, w, d, fh } (Grundfläche), o.has(k, m) = Modul steht, o.win(k, m, i), o.allWin, o.slab
+function drawTower(F, g, o = {}) {
+  const mw = Math.round(g.w / TOWER_MODS), has = o.has || (() => true);
+  if (o.slab !== false) { F('#7d8185', g.x - 2, g.y - 2, g.w + 4, g.d + 4); F('#a2a8ae', g.x - 1, g.y - 1, g.w + 2, g.d + 2); }   // Bodenplatte
+  for (let k = 0; k < TOWER_FLOORS; k++) for (let m = 0; m < TOWER_MODS; m++) {
+    if (!has(k, m)) continue;
+    const top = k === TOWER_FLOORS - 1 || !has(k + 1, m);
+    drawTowerModule(F, g.x + m * mw, g.y, m === TOWER_MODS - 1 ? g.w - 2 * mw : mw, g.d, g.fh, k, m, k * g.fh,
+      { win: o.win ? i => o.win(k, m, i) : null, allWin: o.allWin, top: top && k === TOWER_FLOORS - 1, lift: top && k === TOWER_FLOORS - 1 && m === 1 && !o.helipad });
+  }
+  if (o.helipad) drawHelipad(F, g.x, g.y - TOWER_FLOORS * g.fh, g.w, g.d, o.time);
+}
+// Hubschrauber-Landeplatz (liegt oben auf dem Dach): dunkle Platte, weißer Kreis, gelbes H
+function drawHelipad(F, x, y, w, d, time) {
+  const s = Math.min(w, d) - 4, px = Math.round(x + (w - s) / 2), py = Math.round(y + (d - s) / 2);
+  F('#3a3d40', px, py, s, s); F('#4a4d50', px + 1, py + 1, s - 2, s - 2);
+  const r = s / 2 - 3, cx = px + s / 2, cy = py + s / 2;
+  for (let a = 0; a < 32; a++) { const t = a / 32 * Math.PI * 2; F('#ffffff', Math.round(cx + Math.cos(t) * r), Math.round(cy + Math.sin(t) * r), 1, 1); }
+  const hh = Math.round(s * 0.42), hw = Math.round(s * 0.3), bw = Math.max(1, Math.round(s / 14));
+  F('#ffd23f', Math.round(cx - hw / 2), Math.round(cy - hh / 2), bw, hh); F('#ffd23f', Math.round(cx + hw / 2) - bw, Math.round(cy - hh / 2), bw, hh); F('#ffd23f', Math.round(cx - hw / 2), Math.round(cy) - Math.floor(bw / 2), hw, bw);
+  if (time && Math.floor(time / 500) % 2) for (const [qx, qy] of [[px, py], [px + s - 2, py], [px, py + s - 2], [px + s - 2, py + s - 2]]) F('#ff4040', qx, qy, 2, 2);   // Lichter blinken
+}
+// kleines Hochhaus-Bild (Hauswahl, Schild, Stadt): Grundfläche unten bei (x, y + h)
+function drawTowerIcon(F, x, y, w, h, o = {}) {
+  const d = Math.round(w * 0.36), fh = Math.max(4, Math.floor((h - d) / TOWER_FLOORS));
+  drawTower(F, { x, y: y + h - d, w, d, fh }, Object.assign({ allWin: true, slab: false }, o));
+}
+
+/* ---------- Turmdrehkran (Hochhaus), von schräg oben ----------
+   Fuß am Boden (mx, my), Turm MH hoch, Ausleger dreht sich zur Laufkatze über dem Bodenpunkt (hx, hy).
+   Alles in grober Pixel-Optik: gelbe Gitterstücke, Führerhaus, Gegenausleger mit Betongewichten, Spitze mit Abspannseilen. */
+function drawTowerCraneMast(F, mx, my, MH, fresh = 0) {
+  F('rgba(0,0,0,.25)', mx - 9, my - 3, 22, 10);
+  F('#7d8185', mx - 10, my - 5, 20, 10); F('#a2a8ae', mx - 9, my - 4, 18, 8);   // Betonfundament
+  for (const [fx, fy] of [[-8, -4], [5, -4], [-8, 2], [5, 2]]) F('#5a5e62', mx + fx, my + fy, 3, 3);
+  const top = my - MH, x0 = mx - 4;
+  for (let y = my - 1, i = 0; y > top; y -= 6, i++) {                            // Gitterstücke (Turmstücke)
+    const hgt = Math.min(6, y - top), hi = fresh > 0 && y - 6 <= top + 6;
+    const col = hi ? '#fff3b0' : '#f5b700', dk = '#8a6a00';
+    F(dk, x0, y - hgt, 1, hgt); F(dk, x0 + 7, y - hgt, 1, hgt);
+    F(col, x0 + 1, y - hgt, 1, hgt); F(col, x0 + 6, y - hgt, 1, hgt);
+    F(col, x0 + 1, y - 1, 6, 1);
+    for (let j = 0; j < hgt; j++) F(col, x0 + 1 + Math.round((i % 2 ? j : hgt - 1 - j) * 5 / 6), y - 1 - j, 1, 1);   // Diagonale
+  }
+}
+function drawTowerCraneTop(F, mx, my, MH, hx, hy, L, time) {
+  const tx = mx, ty = my - MH, dx = hx - mx, dy = hy - my, dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl;
+  const ex = tx + ux * L, ey = ty + uy * L, cx = tx - ux * 20, cy = ty - uy * 20;   // Auslegerende, Gegenausleger
+  const px = -uy, py = ux;                                                            // quer zum Ausleger
+  // Schatten des Auslegers am Boden (zeigt, wohin er zeigt)
+  pixLine(F, mx, my, mx + ux * L, my + uy * L, 2, 'rgba(0,0,0,.10)');
+  // Gegenausleger mit Betongewichten
+  pixLine(F, tx, ty, cx, cy, 4, '#8a6a00'); pixLine(F, tx, ty, cx, cy, 2, '#f5b700');
+  F('#4a4e52', Math.round(cx - 6), Math.round(cy - 5), 12, 10); F('#7a7e82', Math.round(cx - 5), Math.round(cy - 4), 10, 8); F('#9da1a5', Math.round(cx - 5), Math.round(cy - 4), 10, 2); F('#4a4e52', Math.round(cx - 1), Math.round(cy - 4), 1, 8);
+  // Ausleger: kräftiger gelber Gitterträger (dunkler Rand, helle Mitte, Querstreben)
+  pixLine(F, tx, ty, ex, ey, 4, '#8a6a00'); pixLine(F, tx, ty, ex, ey, 2, '#f5b700');
+  for (let t = 5; t < L - 2; t += 5) { const qx = tx + ux * t, qy = ty + uy * t; F('#8a6a00', Math.round(qx), Math.round(qy), 1, 1); }
+  F('#8a6a00', Math.round(ex) - 2, Math.round(ey) - 2, 4, 4); F('#f5b700', Math.round(ex) - 1, Math.round(ey) - 1, 2, 2);
+  // Spitze mit Abspannung
+  F('#8a6a00', tx - 1, ty - 12, 3, 12); F('#f5b700', tx, ty - 12, 1, 12);
+  pixLine(F, tx, ty - 12, tx + ux * L * 0.6, ty + uy * L * 0.6, 1, '#555'); pixLine(F, tx, ty - 12, cx, cy, 1, '#555');
+  // Führerhaus
+  F('#8a6a00', tx - 5, ty - 3, 10, 7); F('#f5b700', tx - 4, ty - 2, 8, 5); F('#9fd3f5', tx + (ux > 0 ? 1 : -3), ty - 1, 3, 2);
+  if (time && Math.floor(time / 600) % 2) F('#ff4040', Math.round(ex) - 1, Math.round(ey) - 1, 2, 2);   // Warnlicht am Auslegerende
+}
+// Laufkatze am Ausleger (über dem Bodenpunkt), Seil nach unten zur Last
+function drawTowerTrolley(F, hx, hy, MH, ropeTo) {
+  const x = Math.round(hx), y = Math.round(hy - MH);
+  for (let yy = y + 3; yy < ropeTo - 1; yy += 2) F('#333', x, yy, 1, 1);
+  F('#333', x - 3, y - 1, 7, 4); F('#777', x - 2, y, 5, 2);
+}
+// Tieflader (Sattelzug) mit Platz für 3 Module, Fahrerhaus rechts (fährt nach rechts). Ladefläche: Bodenfläche x, gy, len × d
+function drawLowLoader(F, x, gy, len, d) {
+  x = Math.round(x);
+  F('rgba(0,0,0,.25)', x + 2, gy + 3, len + 18, d);
+  for (const wx of [4, 12, len - 16, len - 8]) { F('#1a1a1a', x + wx, gy - 2, 6, 2); F('#1a1a1a', x + wx, gy + d, 6, 2); }
+  F('#3a3d40', x, gy, len, d); F('#55595d', x + 1, gy + 1, len - 2, d - 2);
+  for (let i = 4; i < len - 2; i += 8) F('#4a4d50', x + i, gy + 1, 1, d - 2);
+  F('#d35400', x, gy, 2, d); F('#ffd23f', x, gy + 2, 2, 3); F('#ffd23f', x, gy + d - 5, 2, 3);   // Heck mit Warnstreifen
+  const cx = x + len + 2;                                                                       // Zugmaschine
+  F('#1a1a1a', cx + 2, gy + 4, 5, 2); F('#1a1a1a', cx + 2, gy + d - 6, 5, 2);
+  F('#173f80', cx, gy + 4, 16, d - 8); F('#2a6fdb', cx + 1, gy + 5, 14, d - 10); F('#9fe3ff', cx + 11, gy + 6, 3, d - 12); F('#ffffff', cx + 2, gy + 5, 8, 1);
 }

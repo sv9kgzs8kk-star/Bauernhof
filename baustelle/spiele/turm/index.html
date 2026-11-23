@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261123a">
+<title>Turmkran</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="khud" class="hud gamehud hidden">
+  <div class="pill" data-say="storey" style="pointer-events:auto"><span class="word">STOCKWERK</span> <span id="kcount">0/6</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261123a"></script>
+<script src="../../../gemeinsam/basis.js?v=20261123a"></script>
+<script src="../../../gemeinsam/bau.js?v=20261123a"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => { if (!save.house || typeof save.house !== 'object') save.house = { step: 0 }; return save.house; };
+let winTimer = null;
+// Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: HOCHHAUS MIT DEM TURMDREHKRAN (Baustelle, Hochhaus Schritt 3 und 4) – schräg von oben wie der Hof
+   Ein Tieflader bringt ein ganzes Stockwerk als 3 Fertigteil-Module. Modul antippen (oder den Haken drüberziehen) → der Kran hebt es an.
+   Dann mit dem Finger ziehen und über der leuchtenden Stelle loslassen, oder die leuchtende Stelle antippen → das Modul wird abgesetzt.
+   Jedes Modul hat seinen eigenen Platz (leuchtet, sobald es am Haken hängt). Stockwerk fertig → der Turm des Krans wächst ein Stück,
+   der leere Tieflader fährt nach rechts weg, ein neuer kommt von links.
+   Schritt 3 (house.step = 2): EG und 1. OG. Schritt 4 (house.step = 3): 2. und 3. OG. Danach Fenster (house.step = 4).
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('kran')));
+const Q = snapF(R, 2);
+const Turm = (() => {
+  let g, part, floors, mw, crane, MH, MHgoal, fresh = 0, truck, hook, load, hq, follow, finger, idle = 0, paused = false, done = false, placed, total, L;
+  const D = () => g.d, FH = () => g.fh;
+  function enter() {
+    Hof.load();
+    const st = house().step;
+    if (houseType().key !== 'tower' || (st !== 2 && st !== 3)) { goHof('kran'); return; }
+    layout(true);
+    part = st === 2 ? 0 : 1; floors = part ? [2, 3] : [0, 1];
+    // Platz: unten der Tieflader, darüber das Haus, rechts daneben der Kran
+    const fh = H < 230 ? 13 : 16, d = 36, w = Math.min(96, Math.max(72, W - 110)); mw = Math.round(w / 3);
+    const loaderTop = H - 8 - d - fh - 6;
+    const y = Math.max(TOWER_FLOORS * fh + 18, loaderTop - d - 14);   // Haus direkt über dem Tieflader (kurzer Weg für den Kran, auch hochkant)
+    const x = Math.max(8, Math.round((W - w - 40) / 2));
+    g = { x, y, w, d, fh };
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+    }
+    const B = (col, x1, y1, w1, h1) => { bctx.fillStyle = col; bctx.fillRect(x1, y1, w1, h1); };   // Bauzaun
+    const fx = x - 10, fy = y - 8, fw = w + 54, fhh = d + 14;
+    for (let xx = fx; xx <= fx + fw; xx += 9) B('#d35400', xx, fy - 2, 2, 7);
+    for (let yy = fy; yy <= fy + fhh; yy += 9) { B('#d35400', fx, yy, 2, 6); B('#d35400', fx + fw, yy, 2, 6); }
+    B('#ffffff', fx, fy, fw + 2, 2); B('#ffffff', fx, fy, 2, fhh); B('#ffffff', fx + fw, fy, 2, fhh);
+    crane = { x: x + w + 24, y: y + Math.round(d / 2) };
+    placed = {}; for (let k = 0; k < floors[0]; k++) for (let m = 0; m < 3; m++) placed[k + ',' + m] = true;   // schon gebaut
+    total = floors.length * 3;
+    MH = MHgoal = mastFor(floors[0]);
+    hook = { gx: crane.x - 30, gy: crane.y + 20, e: carryE(), vx: 0 }; load = null; hq = []; follow = null; finger = null; done = false; idle = 0;
+    newTruck(floors[0]);
+    show('khud'); hud();
+    setTimeout(() => sayWord('towercrane'), 400);
+  }
+  const mastFor = n => n * FH() + 30;                  // Turm immer etwas höher als das Haus
+  const carryE = () => Math.max(...floors.map(k => isDone(k) ? (k + 1) * FH() : 0), floors[0] * FH()) + 12;
+  const isDone = k => [0, 1, 2].every(m => placed[k + ',' + m]);
+  const count = () => floors.reduce((a, k) => a + [0, 1, 2].filter(m => placed[k + ',' + m]).length, 0);
+  function hud() { $('kcount').textContent = count() + '/' + total; }
+  $('pausebtn').addEventListener('click', () => { if (done) return; paused = true; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+
+  // ---------- Tieflader ----------
+  const LEN = () => 3 * (mw + 2) + 6;
+  function newTruck(k) {
+    const len = LEN(), gy = H - 8 - D();
+    truck = { k, x: -len - 24, park: Math.round(clamp(crane.x - len / 2 - 8, 4, W - len - 22)), gy, mods: [0, 1, 2], state: 'arrive' };   // hält unter dem Kran: kurzer Ausleger
+    reach();
+  }
+  const truckMod = m => ({ gx: truck.x + 4 + m * (mw + 2) + mw / 2, gy: truck.gy + D() / 2 });   // Mitte eines Moduls auf der Ladefläche (Bodenpunkt)
+  const slot = (k, m) => ({ gx: g.x + m * mw + mw / 2, gy: g.y + D() / 2, e: k * FH() });
+  function reach() {                                    // Auslegerlänge: bis zum weitesten Ziel
+    const pts = [slot(0, 0), { gx: truck.park + 4 + mw / 2, gy: truck.gy + D() / 2 }, { gx: truck.park + LEN(), gy: truck.gy + D() / 2 }];
+    L = Math.max(...pts.map(p => Math.hypot(p.gx - crane.x, p.gy - crane.y))) + 8;
+  }
+  // Bildschirm-Rechteck eines Moduls (Decke + Vorderwand) mit Mitte am Bodenpunkt (gx, gy) auf Höhe e
+  const modRect = (gx, gy, e) => ({ x: gx - mw / 2, y: gy - D() / 2 - e - FH(), w: mw, h: D() + FH() });
+  const inRect = (r, x, y, pad = 2) => x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad;
+  function truckModAt(x, y) {
+    if (!truck || truck.state !== 'park') return null;
+    for (const m of truck.mods) { const p = truckMod(m); if (inRect(modRect(p.gx, p.gy, 4), x, y)) return m; }
+    return null;
+  }
+  // ---------- Kran ----------
+  const busy = () => hq.length > 0;
+  const to = (gx, gy, e, then) => hq.push({ gx, gy, e, then });
+  function fetch(m) {
+    const p = truckMod(m), E = carryE(); follow = null; sfx.click();
+    to(p.gx, p.gy, E); to(p.gx, p.gy, 4, () => {
+      truck.mods = truck.mods.filter(q => q !== m); load = { k: truck.k, m }; sfx.clod();
+      setWord('storey');
+    });
+    to(p.gx, p.gy, E, () => { if (finger) follow = { x: finger.x, y: finger.y }; });
+  }
+  function drop() {
+    const s = slot(load.k, load.m), E = carryE(); follow = null;
+    to(s.gx, s.gy, E); to(s.gx, s.gy, s.e, () => {
+      placed[load.k + ',' + load.m] = true; const k = load.k; load = null; sfx.load(); hud();
+      for (let i = 0; i < 10; i++) spawn(s.gx + rnd(-mw / 2, mw / 2), s.gy - s.e - FH() + D() / 2 + rnd(-6, 6), rnd(-15, 15), rnd(-18, 2), .4, '#c4c9ce', 30);
+      if (isDone(k)) floorDone(k);
+    });
+    to(s.gx, s.gy, carryE());
+  }
+  function floorDone(k) {
+    confetti(); sayWord('storey');
+    MHgoal = mastFor(k + 1); fresh = 1.2; sfx.unlock();          // neues Turmstück
+    truck.state = 'leave'; setTimeout(() => sfx.honk(), 300);
+    if (floors.every(isDone)) { done = true; setTimeout(() => { hide('khud'); finishStep(house().step + 1, part ? 'tower' : 'storey', 'kran'); }, 1800); }
+  }
+  function setWord() {}
+  const nearSlot = () => { if (!load) return false; const s = slot(load.k, load.m); return Math.abs(hook.gx - s.gx) < mw / 2 + 6 && Math.abs(hook.gy - s.gy) < D() / 2 + 8; };
+  function onPointer(type, x, y) {
+    if (paused || done) return true;
+    idle = 0;
+    if (type === 'down' || type === 'move') finger = { x, y }; else if (type === 'up') finger = null;
+    if (type === 'down') {
+      if (busy()) return true;
+      if (!load) { const m = truckModAt(x, y); if (m !== null) { fetch(m); return true; } }
+      if (load) { const s = slot(load.k, load.m); if (inRect(modRect(s.gx, s.gy, s.e), x, y, 6)) { drop(); return true; } }
+      follow = { x, y }; return true;
+    }
+    if (type === 'move' && follow) { follow.x = x; follow.y = y; return true; }
+    if (type === 'up' && follow) { follow = null; if (nearSlot()) drop(); }
+    return true;
+  }
+  function update(dt) {
+    if (paused) return;
+    idle += dt; if (fresh > 0) fresh -= dt;
+    MH = approach(MH, MHgoal, 20 * dt);
+    const ox = hook.gx, q = hq[0];
+    if (q) {
+      const d = Math.hypot(q.gx - hook.gx, q.gy - hook.gy), sp = 150 * dt;
+      if (d > sp) { hook.gx += (q.gx - hook.gx) / d * sp; hook.gy += (q.gy - hook.gy) / d * sp; hook.e = approach(hook.e, Math.max(hook.e, carryE()), 80 * dt); }
+      else { hook.gx = q.gx; hook.gy = q.gy; hook.e = approach(hook.e, q.e, 70 * dt); if (hook.e === q.e) { hq.shift(); if (q.then) q.then(); } }
+    } else if (follow) {
+      // Finger zeigt auf die Last (bzw. den Haken): Bodenpunkt = Fingerpunkt + Höhe
+      const tx = follow.x, ty = follow.y + hook.e + (load ? Math.round(FH() / 2) : 0);
+      const d = Math.hypot(tx - hook.gx, ty - hook.gy), sp = 240 * dt;
+      if (d > sp) { hook.gx += (tx - hook.gx) / d * sp; hook.gy += (ty - hook.gy) / d * sp; } else { hook.gx = tx; hook.gy = ty; }
+      hook.gx = clamp(hook.gx, 8, W - 8); hook.gy = clamp(hook.gy, 20, H - 4);
+      const md = Math.hypot(hook.gx - crane.x, hook.gy - crane.y); if (md > L - 4) { hook.gx = crane.x + (hook.gx - crane.x) * (L - 4) / md; hook.gy = crane.y + (hook.gy - crane.y) * (L - 4) / md; }
+      if (!load) { const m = truckModAt(hook.gx, hook.gy - hook.e); if (m !== null) fetch(m); }   // Haken über ein Modul gezogen: nimmt es
+    }
+    hook.vx = approach(hook.vx, (hook.gx - ox) / Math.max(dt, 1e-3), 600 * dt);
+    if (truck) {
+      if (truck.state === 'arrive') { truck.x = approach(truck.x, truck.park, 110 * dt); if (truck.x === truck.park) { truck.state = 'park'; sfx.honk(); } }
+      else if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 20) { const nk = floors.find(k => !isDone(k)); truck = null; if (nk !== undefined) newTruck(nk); } }
+    }
+    setEngine(true, busy() || !!follow, 30);
+  }
+  function draw(time) {
+    if (!g) return;                                     // falscher Schritt: es geht gleich zurück
+    ctx.drawImage(bg, 0, 0);
+    // Haus: gesetzte Module
+    drawTower(Q, g, { has: (k, m) => !!placed[k + ',' + m], time });
+    // leuchtende Stelle(n)
+    const a = Math.abs(Math.sin(time / 260)) > .5, bob = Math.abs(Math.sin(time / 220)) * 4;
+    if (!done) {
+      const glow = (k, m, strong) => { const s = slot(k, m), r = modRect(s.gx, s.gy, s.e), col = strong ? (a ? 'rgba(255,210,63,.95)' : 'rgba(255,210,63,.5)') : 'rgba(255,255,255,.35)';
+        R(col, r.x, r.y, r.w, 2); R(col, r.x, r.y + r.h - 2, r.w, 2); R(col, r.x, r.y, 2, r.h); R(col, r.x + r.w - 2, r.y, 2, r.h);
+        if (strong) R('rgba(255,210,63,.15)', r.x + 2, r.y + 2, r.w - 4, r.h - 4); };
+      const k = floors.find(f => !isDone(f));
+      if (k !== undefined) for (let m = 0; m < 3; m++) if (!placed[k + ',' + m]) glow(k, m, load && load.m === m && load.k === k);
+    }
+    // Tieflader mit Modulen
+    if (truck) { drawLowLoader(Q, truck.x, truck.gy, LEN(), D()); for (const m of truck.mods) { const p = truckMod(m); drawTowerModule(Q, Math.round(p.gx - mw / 2), truck.gy, mw, D(), FH(), truck.k, m, 4); } }
+    // Kran: Turm, Last, Ausleger, Laufkatze
+    drawTowerCraneMast(Q, crane.x, crane.y, Math.round(MH), fresh);
+    const sway = clamp(-hook.vx * 0.03, -5, 5), lx = hook.gx + sway;
+    let ropeTo;
+    if (load) {
+      Q('rgba(0,0,0,.2)', Math.round(hook.gx - mw / 2), Math.round(hook.gy - D() / 2), mw, D());   // Schatten am Boden: hier landet es
+      drawTowerModule(Q, Math.round(lx - mw / 2), Math.round(hook.gy - D() / 2), mw, D(), FH(), load.k, load.m, Math.round(hook.e));
+      ropeTo = Math.round(hook.gy - D() / 2 - hook.e - FH() + D() / 2);
+    } else { ropeTo = Math.round(hook.gy - hook.e); Q('#ffd23f', Math.round(lx) - 2, ropeTo, 5, 3); Q('#333', Math.round(lx), ropeTo + 3, 1, 2); }
+    drawTowerCraneTop(Q, crane.x, crane.y, Math.round(MH), hook.gx, hook.gy, L, time);
+    drawTowerTrolley(Q, lx, hook.gy, Math.round(MH), ropeTo);
+    // Hilfe-Pfeile
+    if (!done && !busy() && !follow && idle > 1.5) {
+      if (!load && truck && truck.state === 'park' && truck.mods.length) { const p = truckMod(truck.mods[0]), r = modRect(p.gx, p.gy, 4); drawArrow(Math.round(p.gx - 3), Math.round(r.y - 14 - bob)); }
+      else if (load) { const s = slot(load.k, load.m), r = modRect(s.gx, s.gy, s.e); drawArrow(Math.round(s.gx - 3), Math.round(r.y - 14 - bob)); }
+    }
+  }
+  function resize() { layout(false); }
+  function exit() { clearTimeout(winTimer); setEngine(false, false); }
+  return { enter, update, draw, resize, exit, onPointer,
+    _dbg: () => ({ part, count: count(), total, done, load, busy: busy(), truck: truck && { x: truck.x, state: truck.state, k: truck.k, mods: truck.mods.slice(),
+      rects: truck.mods.map(m => { const p = truckMod(m); return modRect(p.gx, p.gy, 4); }) }, slots: floors.flatMap(k => [0, 1, 2].map(m => { const s = slot(k, m); return modRect(s.gx, s.gy, s.e); })), g, L }) };
+})();
+startLoop(Turm);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

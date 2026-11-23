@@ -10,7 +10,10 @@ hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-L
 baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte, **nur zu Fuß** (Bauarbeiter; Bagger und Kipper stehen geparkt als Deko; Bauplatz `S` → Bau-Spiel des aktuellen Schritts)
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
                               Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
-baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, holz/, kran/, dach/, holzdach/, abriss/, holzabriss/
+baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, holz/, kran/, dach/, holzdach/, abriss/, holzabriss/, turm/
+                              (Turm, nur Hochhaus `shape: 'T'`: Turmdrehkran hebt Fertigteil-Module (3 je Stockwerk) vom Tieflader; ein Tieflader = ein Stockwerk;
+                              house.step 2 → EG + 1. OG, step 3 → 2. + 3. OG (+ Landeplatz, PR 2). Zeichnen: `drawTower()`, `drawTowerModule()`, `drawTowerCraneMast/Top()`,
+                              `drawLowLoader()`, Fenster-Plan `TOWER_WIN` (miss = wird im Schritt `fenster` eingebaut, PR 2). Hochhaus hat `ready: false`, Test mit `?haustyp=3`.)
                               (Holzabriss, nur Holzhaus: Umzug → Schindeln wegwischen, fliegen in den Container → Autokran hebt 4 Binder auf einen Lastwagen →
                               Veranda und 6 Wände (je ganze Wand) auf Lastwagen mit 4 Plätzen, voll fährt er weg → Betonsockel mit dem Bagger zum Kipper.
                               `drawWoodHouse` kennt dafür `logs(e,r)`, `truss(i)`, `vroof`, `floor`.)

@@ -17,8 +17,8 @@ const HOUSE_TYPES = [
   // Holzhaus (Blockhaus in L-Form): Punktfundament, Bohlen, 4 Binder mit dem Autokran, Schindeldach und Veranda (#39–#41)
   { key: 'wood',  word: 'woodhouse', floors: 1, loads: 2, trusses: 4, shape: 'L', steps: ['baggern', 'beton', 'holz', 'kran', 'holzdach'] },
   // Hochhaus: 4 Stockwerke aus je 3 Fertigteil-Modulen, Turmdrehkran (Schritt 2: EG + 1. OG, Schritt 3: 2. + 3. OG + Landeplatz), dann Fenster/Tür
-  // ready: false = in der Hauswahl noch gesperrt, bis alle Schritte gebaut sind (Testlink ?haustyp=3 geht)
-  { key: 'tower', word: 'tower', floors: 4, loads: 4, trusses: 0, shape: 'T', ready: false, steps: ['baggern', 'beton', 'turm', 'turm', 'fenster'] },
+  // (ready: false würde einen Haustyp in der Hauswahl sperren)
+  { key: 'tower', word: 'tower', floors: 4, loads: 4, trusses: 0, shape: 'T', steps: ['baggern', 'beton', 'turm', 'turm', 'fenster'] },
 ];
 Object.assign(WORDS, { woodhouse: ['HOLZHAUS', 'Holzhaus'], holes: ['FUNDAMENT', 'Fundament'], tower: ['HOCHHAUS', 'Hochhaus'], towercrane: ['TURMKRAN', 'Turmkran'], storey: ['STOCKWERK', 'Stockwerk'],
   window: ['FENSTER', 'Fenster'], helipad: ['LANDEPLATZ', 'Landeplatz'], heli: ['HUBSCHRAUBER', 'Hubschrauber'] });

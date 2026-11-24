@@ -25,7 +25,8 @@
       saw: false,               // Kettensäge gekauft
       trees: null,              // Wald: je Baum Zeitpunkt des Fällens (0 = steht)
       house: { step: 0, type: 0, maxType: 0, pick: false, built: 0, seenInside: false, signIntro: false, color: 'creme' },   // seenInside: fertiges Haus schon betreten (dann steht das Schild „Neues Haus“), signIntro: Schild schon einmal vorgestellt   // Baustelle Wohnhaus: erledigte Bauschritte (0–5), Haustyp, größter wählbarer Typ, Auswahl offen (nach Abriss), Anzahl Abrisse
-      farm: { items: [] },                   // Bauernhaus innen: Möbel wie beim Wohnhaus [{ k, x, y }]
+      farm: { items: [] },
+      fire: { step: 0 },                     // Feuerwache: erledigte Bauschritte (0–5), wie house.step                   // Bauernhaus innen: Möbel wie beim Wohnhaus [{ k, x, y }]
       home: { unlocked: false, items: [] }   // Wohnhaus innen: freigeschaltet? Möbel [{ k: 'bed', x, y } …] (x/y = 0–1 im Zimmer, mehrfach möglich)
     };
   }
@@ -138,6 +139,7 @@
     if (q.has('bau')) { Object.assign(Hof.save.house, { step: Math.max(0, Math.min(5, parseInt(q.get('bau'), 10) || 0)), pick: false }); Hof.persist(); }   // Hausbau-Schritt setzen
     if (q.has('haustyp')) { const t = Math.max(0, parseInt(q.get('haustyp'), 10) || 0); Object.assign(Hof.save.house, { type: t, maxType: Math.max(t, Hof.save.house.maxType | 0) }); Hof.persist(); }   // Haustyp (0 klein, 1 groß)
     if (q.has('moebel')) { Hof.save.home.items = [{ k: 'bed', x: .9, y: .1 }, { k: 'sofa', x: .1, y: .5 }, { k: 'tv', x: .2, y: .05 }, { k: 'tub', x: .9, y: .9 }]; Hof.persist(); }   // ein paar Möbel fürs Umzug-Testen
+    if (q.has('wache')) { Hof.save.house.towerDone = true; Hof.save.fire = Object.assign(Hof.save.fire || {}, { step: Math.max(0, Math.min(5, parseInt(q.get('wache'), 10) || 0)) }); Hof.persist(); }   // Feuerwache: freischalten und Bauschritt setzen
     if (q.has('haus')) { Hof.save.home = { unlocked: q.get('haus') === '1', items: [] }; Hof.persist(); }   // Wohnhaus: ?haus=0 zu und leer, ?haus=1 offen und leer
   }
 })();

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261123d">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124a">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261123d"></script>
-<script src="../gemeinsam/basis.js?v=20261123d"></script>
-<script src="../gemeinsam/bau.js?v=20261123d"></script>
+<script src="../gemeinsam/sterne.js?v=20261124a"></script>
+<script src="../gemeinsam/basis.js?v=20261124a"></script>
+<script src="../gemeinsam/bau.js?v=20261124a"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -97,6 +97,7 @@ const PLOTS = { F: { word: 'farm', page: '../hof.html#stadt' }, P: { word: 'fire
 const HOME_PAGE = '../wohnhaus/index.html', HOME_PRICE = 10;   // fertiges Wohnhaus: einmal mit Sternen freischalten, dann hineingehen
 const homeOpen = () => !!(save.home && save.home.unlocked);
 const PLOT_WAIT = 0.8;
+if (save.house && save.house.type === 3 && save.house.step >= 5 && !save.house.towerDone) { save.house.towerDone = true; Hof.persist(); }   // Hochhaus steht schon: merken (Feuerwache wird frei)
 const signOn = () => save.house && save.house.step >= 5 && !save.house.pick && save.house.seenInside;   // Schild „Neues Haus“ steht                       // so lange stehen bleiben, bis etwas passiert (Darüberlaufen löst nichts aus)
 
 const Hub = (() => {
@@ -158,6 +159,16 @@ const Hub = (() => {
   // Stadt-Bauplatz (2×2 Zellen) ins Hintergrundbild malen
   function drawPlot(B, k, x, y) {
     const w = 2*G, h = 2*G;
+    if (k === 'P' && fireOpen()) {                 // Feuerwache: Baustelle (Grube, Bodenplatte, …)
+      const st = (save.fire && save.fire.step) | 0;
+      B('#a08060', x+1, y+1, w-2, h-2); for (let i = 0; i < 30; i++) B(i % 2 ? '#8a6a4c' : '#b8987a', x+3+((i*13)%(w-8)), y+3+((i*7)%(h-8)), 2, 2);
+      if (st >= 1) { B('#5a4030', x+7, y+9, w-14, h-18); B('#4a3426', x+8, y+10, w-16, 3); }
+      if (st >= 2) { B('#8d9196', x+7, y+9, w-14, h-18); B('#a8aeb4', x+8, y+10, w-16, h-20); }
+      for (let i = 0; i < w; i += 9) { B('#d35400', x+i, y, 2, 6); B('#d35400', x+i, y+h-6, 2, 6); }   // Bauzaun
+      B('#ffffff', x, y+2, w, 2); B('#ffffff', x, y+h-4, w, 2); B('#ffffff', x, y+2, 2, h-4); B('#ffffff', x+w-2, y+2, 2, h-4);
+      B('#5a3b1c', x+w-12, y-10, 2, 12); B('#c0392b', x+w-20, y-16, 18, 8); B('#fff', x+w-17, y-13, 12, 2);   // rotes Schild
+      return;
+    }
     if (k === 'F') {                               // Bauernhof: fertig, mit Holzzaun, Scheune und Silo
       B('#6fbf4f', x+1, y+1, w-2, h-2);
       B('rgba(0,0,0,.25)', x+5, y+8, 30, 34);
@@ -203,6 +214,7 @@ const Hub = (() => {
     }
     const BACK = ['baggern', 'beton', 'mauer', 'holz', 'kran', 'dach', 'holzdach', 'wohnhaus', 'abriss'];   // zurück: Bauarbeiter steht unten am Bauplatz
     if (BACK.includes(from)) { Object.assign(ENT.person.m, { r: oy+3, c: ox+6, a: Math.PI/2 }); active = 'person'; }
+    if (from === 'wache' && plotPos.P) { Object.assign(ENT.person.m, { r: plotPos.P.r + 2, c: plotPos.P.c, a: -Math.PI/2 }); active = 'person'; }   // zurück von der Feuerwachen-Baustelle
     if (from === 'hof' && plotPos.F) {           // zurück vom Bauernhof: neben dem Bauernhof-Platz
       const [r, c] = besidePlot(plotPos.F);
       Object.assign(ENT.person.m, { r, c }); active = 'person';
@@ -286,6 +298,8 @@ const Hub = (() => {
           plotT = 0; plotDone = t;
           if (pickHere) { openPick(); return; }
           sayWord(homeHere ? 'house' : PLOTS[t].word);
+          const fs = (save.fire && save.fire.step) | 0;
+          if (t === 'P' && fireOpen() && fs < FIRE_READY) { entering = true; sfx.enter(); setTimeout(() => { location.href = 'spiele/' + FIRE_TYPE.steps[fs] + '/index.html?ort=wache'; }, 900); return; }   // Feuerwache bauen
           if (homeHere) enterHome();
           else if (PLOTS[t].page) { entering = true; sfx.enter(); setTimeout(() => { location.href = PLOTS[t].page; }, 900); }
           else { sfx.click(); plotShown = t; }

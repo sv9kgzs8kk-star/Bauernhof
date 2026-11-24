@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="../icon.png">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124e">
+<title>Feuerwache</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ihud" class="hud gamehud hidden">
+  <button class="pill btn" data-home aria-label="Zur Stadt"><i class="ico" data-ico="home"></i></button>
+  <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
+</div>
+<script>window.NO_PAD = true;   // hier wird getippt</script>
+<script src="../gemeinsam/sterne.js?v=20261124e"></script>
+<script src="../gemeinsam/basis.js?v=20261124e"></script>
+<script src="../gemeinsam/moebel.js?v=20261124e"></script>
+<script src="../gemeinsam/bau.js?v=20261124e"></script>
+<script>
+/* =====================================================================
+   FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
+   Erdgeschoss: links die Fahrzeughalle (Löschfahrzeug, Rüstwagen, Rolltore, Schläuche, unten an der Rutschstange),
+                rechts hinten die Umkleide mit Spinden, rechts vorne die Leitstelle mit Funkgerät, Haustür und Treppe.
+   Obergeschoss: links der Schlafraum mit Betten und dem Loch der Rutschstange, rechts Küche und Aufenthaltsraum.
+   Antippen: Kind läuft hin. Fahrzeug antippen = Blaulicht und Martinshorn. Rolltor antippen = auf/zu.
+   Vor dem Spind stehen bleiben = Feuerwehrkleidung an/aus. Oben aufs Loch stellen = runterrutschen. Bett = schlafen.
+   ===================================================================== */
+window.HOF_URL = '../baustelle/index.html';
+const save = Hof.save;
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('wache')));
+Object.assign(WORDS, { lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], rw: ['RÜSTWAGEN', 'Rüstwagen'], locker: ['SPIND', 'Spind'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
+  radio: ['FUNKGERÄT', 'Funkgerät'], pole: ['RUTSCHSTANGE', 'Rutschstange'], hoses: ['SCHLÄUCHE', 'Schläuche'], up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'],
+  dorm: ['SCHLAFRAUM', 'Schlafraum'], kitchen: ['KÜCHE', 'Küche'] });
+
+const Wache = (() => {
+  const S = 1, WH = 24, T4 = 4, GAP = 28;
+  let room, floor, level = 0, walls = [], spots = {}, stairs, kid, grid, idle = 0, swap = null, slide = null, night = null, atDoor = 0;
+  let gear = false, gearT = 0, vehicles = [], gates = [0, 0], gateGoal = [0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
+  const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  const inR = (r, x, y, p = 0) => x > r.x - p && x < r.x + r.w + p && y > r.y - p && y < r.y + r.h + p;
+
+  function enter() {
+    Hof.load();
+    const f = save.fire || {};
+    if ((f.step | 0) < 5 || !f.unlocked) { goHof('wache'); return; }
+    layout(true);
+    const cols = Math.min(gc - 1, 16);
+    room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - G - 12 };
+    floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 };
+    setupLevel();
+    kid = { x: spots.door.x + spots.door.w / 2, y: floor.y + floor.h - 26, path: [], t: 0, flip: false, still: 0 };
+    show('ihud'); setWord('firestation');
+    setTimeout(() => sayWord('firestation'), 400);
+  }
+  function setWord(key) { const el = $('iword'); el.dataset.say = key; el.querySelector('.word').textContent = WORDS[key][0]; }
+
+  // ---------- Grundriss je Etage ----------
+  function setupLevel() {
+    const fx = floor.x, fy = floor.y, fw = floor.w, fh = floor.h, fb = fy + fh, fr = fx + fw;
+    const vx = Math.round(fx + fw * 0.6), hy = Math.round(fy + fh * 0.45), rw = fr - vx - T4;
+    const d1 = Math.round(fy + fh * 0.62 - GAP / 2), hx = vx + T4 + 6;   // Durchgang Umkleide ↔ Leitstelle links
+    walls = [
+      { x: vx, y: room.y + WH - 2, w: T4, h: d1 - room.y - WH + 2 }, { x: vx, y: d1 + GAP, w: T4, h: fb - d1 - GAP },   // Halle | rechts (Durchgang)
+      { x: vx + T4, y: hy, w: hx - vx - T4, h: T4 }, { x: hx + GAP, y: hy, w: fr - hx - GAP, h: T4 },                     // Umkleide | Leitstelle (Durchgang)
+    ];
+    stairs = { x: fr - 30, y: fb - 48, w: 28, h: 42 };   // Treppe unten rechts
+    spots = { vx, hy, pole: { x: vx - 22, y: fy + 18, w: 12, h: 12 } };
+    furn = []; vehicles = [];
+    if (level === 0) {
+      const hw = vx - fx, vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));
+      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'rw', cx: fx + Math.round(hw * 0.68) }]
+        .map((v, i) => Object.assign(v, { i, x: v.cx - (vw >> 1), y: fb - vl - 14, w: vw, h: vl, blink: 0 }));
+      spots.gates = vehicles.map(v => ({ x: v.x - 8, w: v.w + 16 }));
+      spots.lockers = { x: vx + T4 + 8, y: fy, w: Math.min(rw - 16, 4 * 16), h: 12 };
+      spots.bench = { x: spots.lockers.x + 4, y: Math.round(fy + (hy - fy) * 0.55), w: Math.min(rw - 50, 40), h: 8 };
+      const dw = Math.max(24, Math.min(rw - 60, 46)); spots.desk = { x: fr - 34 - dw, y: hy + T4 + 10, w: dw, h: 16 };   // Leitstelle hinten rechts, neben der Treppe
+      spots.hoses = { x: fx + 4, y: room.y + 2, w: Math.min(44, Math.round(hw * 0.22)), h: WH + 6 };
+      spots.door = { x: Math.round(vx + T4 + Math.max(4, (rw - 2 * G - 34) * 0.4)), w: 2 * G };
+      walls.push(...vehicles, spots.lockers, spots.bench, spots.desk);
+    } else {
+      spots.door = { x: Math.round(vx + T4 + Math.max(4, (rw - 2 * G - 34) * 0.4)), w: 2 * G };
+      const hw = vx - fx, n = Math.max(2, Math.min(4, Math.floor((hw - 40) / 36)));
+      for (let i = 0; i < n; i++) furn.push({ k: 'bed', x: fx + 8 + i * 36, y: fy + 4 });
+      furn.push({ k: 'table', x: vx + T4 + Math.round(rw * 0.3), y: fy + Math.round((hy - fy) * 0.3) }, { k: 'chair', x: vx + T4 + Math.round(rw * 0.3) - 16, y: fy + Math.round((hy - fy) * 0.3) },
+        { k: 'stove', x: fr - 22, y: fy + 2 }, { k: 'fridge', x: fr - 42, y: fy }, ...(rw >= 120 ? [{ k: 'tv', x: vx + T4 + Math.round(rw * 0.32) + 10, y: hy + T4 + 4 }, { k: 'sofa', x: vx + T4 + Math.round(rw * 0.32), y: fb - 26 }] : []));   // weg vom Durchgang zur Halle; schmal: kein Sofa
+      furn = furn.filter(o => BY[o.k]).map(o => Object.assign(o, { f: BY[o.k], w: BY[o.k].w, h: BY[o.k].h }));
+      walls.push(...furn.filter(o => o.k !== 'bed' && o.k !== 'tv'));
+    }
+    buildGrid(); paint();
+  }
+  function buildGrid() {
+    const c = 4, cols = Math.floor(floor.w / c), rows = Math.floor(floor.h / c), ok = [];
+    const block = walls.concat(level === 1 ? [] : []);
+    for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+      const cell = { x: floor.x + q * c - 8, y: floor.y + r * c - 2, w: c + 16, h: c + 4 };
+      ok.push(!block.some(wl => hit(cell, wl)));
+    }
+    grid = { c, cols, rows, ok };
+  }
+  const cellOf = (x, y) => [clamp(Math.floor((y - floor.y) / grid.c), 0, grid.rows - 1), clamp(Math.floor((x - floor.x) / grid.c), 0, grid.cols - 1)];
+  function findPath(tx, ty) {
+    const [sr, sc] = cellOf(kid.x, kid.y); let [er, ec] = cellOf(tx, ty);
+    const idx = (r, c) => r * grid.cols + c;
+    if (!grid.ok[idx(er, ec)]) { let best = null, bd = 1e9;
+      for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) if (grid.ok[idx(r, c)]) { const d = (r - er) ** 2 + (c - ec) ** 2; if (d < bd) { bd = d; best = [r, c]; } }
+      if (!best) return []; [er, ec] = best; }
+    const prev = new Map(), q = [[sr, sc]]; prev.set(idx(sr, sc), -1);
+    while (q.length) { const [r, c] = q.shift(); if (r === er && c === ec) break;
+      for (const [dr, dc] of [[1,0],[-1,0],[0,1],[0,-1]]) { const nr = r + dr, nc = c + dc; if (nr < 0 || nc < 0 || nr >= grid.rows || nc >= grid.cols) continue;
+        const k = idx(nr, nc); if (!grid.ok[k] || prev.has(k)) continue; prev.set(k, idx(r, c)); q.push([nr, nc]); } }
+    if (!prev.has(idx(er, ec))) return [];
+    const path = []; let k = idx(er, ec);
+    while (k !== -1) { const r = Math.floor(k / grid.cols), c = k % grid.cols; path.unshift({ x: floor.x + c * grid.c + grid.c / 2, y: floor.y + r * grid.c + grid.c / 2 }); k = prev.get(k); }
+    return path;
+  }
+  const walkTo = (x, y) => { kid.path = findPath(x, y); kid.still = 0; };
+
+  // ---------- Hintergrund ----------
+  function paint() {
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(tiles.grass), c*G+i*T, r*G+j*T);
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    const { x, y, w, h } = room, { vx, hy } = spots, fb = floor.y + floor.h;
+    B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
+    const tileF = (x1, y1, x2, y2, c1, c2, n) => { for (let yy = y1, k = 0; yy < y2; yy += n, k++) for (let xx = x1, j = 0; xx < x2; xx += n, j++) B((k + j) % 2 ? c1 : c2, xx, yy, Math.min(n, x2 - xx), Math.min(n, y2 - yy)); };
+    if (level === 0) {
+      B('#8d9196', x, y + WH, vx - x, h - WH); for (let xx = x; xx < vx; xx += 16) B('#7f8388', xx, y + WH, 1, h - WH); for (let yy = y + WH; yy < y + h; yy += 16) B('#7f8388', x, yy, vx - x, 1);   // Hallenboden Beton
+      for (const v of vehicles) { B('#ffd23f', v.x - 6, v.y - 6, 2, v.h + 12); B('#ffd23f', v.x + v.w + 4, v.y - 6, 2, v.h + 12); }   // gelbe Stellplatz-Linien
+      tileF(vx, y + WH, x + w, hy, '#dfe6ea', '#cfd8de', 8);           // Umkleide: Fliesen
+      tileF(vx, hy, x + w, y + h, '#e6dcc8', '#d4c8ae', 10);           // Leitstelle/Flur
+      const p = spots.pole; B('#2c2c2c', p.x - 2, p.y - 2, p.w + 4, p.h + 4); B('#e03b3b', p.x, p.y, p.w, p.h); B('#ffd23f', p.x + 2, p.y + 2, p.w - 4, p.h - 4);   // Landematte unter der Stange
+    } else {
+      const carpet = (x1, y1, x2, y2, c1, c2) => { B(c1, x1, y1, x2 - x1, y2 - y1); for (let i = 0; i < 50; i++) B(c2, x1 + ((i * 37) % Math.max(1, x2 - x1 - 2)), y1 + ((i * 23) % Math.max(1, y2 - y1 - 2)), 2, 2); };
+      carpet(x, y + WH, vx, y + h, '#a9c8e8', '#bcd6f0');               // Schlafraum
+      tileF(vx, y + WH, x + w, hy, '#fff8e8', '#d9534f', 8);           // Küche
+      for (let yy = hy, k = 0; yy < y + h; yy += 6, k++) { B(k % 2 ? '#c58a4f' : '#b97f45', vx, yy, x + w - vx, 6); B('#8e5a2e', vx, yy + 5, x + w - vx, 1); }   // Aufenthaltsraum Holz
+      const p = spots.pole; B('#5a5a5a', p.x - 3, p.y - 3, p.w + 6, p.h + 6); B('#111', p.x, p.y, p.w, p.h); B('#ffd23f', p.x - 3, p.y - 3, p.w + 6, 1); B('#ffd23f', p.x - 3, p.y + p.h + 2, p.w + 6, 1);   // Loch mit gelbem Rand
+    }
+    // Treppe
+    { const s2 = stairs; B('#5a3b1c', s2.x - 2, s2.y - 2, s2.w + 4, s2.h + 4);
+      for (let i = 0; i < 7; i++) { const sy = s2.y + i * 6, c = level === 0 ? ['#e0a868', '#c98a4f'][i % 2] : `rgb(${60 + i * 18},${40 + i * 13},${24 + i * 8})`; B(c, s2.x, sy, s2.w, 6); B('rgba(0,0,0,.25)', s2.x, sy + 5, s2.w, 1); }
+      const ax = s2.x + s2.w / 2, ay = s2.y + s2.h / 2, up = level === 0;
+      for (let i = 0; i < 5; i++) B('#ffffff', Math.round(ax - i), Math.round(up ? ay - 6 + i : ay + 6 - i), 2 * i + 1, 1);
+      B('#ffffff', ax - 1, up ? ay - 1 : ay - 6, 3, 7); }
+    // Rückwand: rote Klinker, Fenster; in der Halle hängen hinten links die Schläuche (werden in draw gezeichnet)
+    B('#b5442e', x, y, w, WH + 2); for (let yy = y + 3; yy < y + WH; yy += 5) B('#7a2218', x, yy, w, 1);
+    for (let yy = y, k = 0; yy < y + WH; yy += 5, k++) for (let xx = x + (k % 2) * 6; xx < x + w; xx += 12) B('#7a2218', xx, yy, 1, 5);
+    B('#cdb27a', x, y + WH, w, 2); B('#5a2a1c', x, y + WH + 1, w, 2);
+    const win = wx => { B('#f2f2f2', wx, y + 4, 22, 14); B('#6cc4f0', wx + 2, y + 6, 18, 10); B('#9fe3ff', wx + 2, y + 6, 18, 4); B('#f2f2f2', wx + 10, y + 6, 2, 10); };
+    if (level === 0) { win(vx + Math.round((x + w - vx) * 0.6)); } else { win(x + Math.round((vx - x) * 0.55)); win(vx + Math.round((x + w - vx) * 0.25)); }
+    // Außenmauern, vorne: unten Rolltore (Halle) und Haustür, oben Fenster
+    const WC = '#e9dcc0', WD = '#b8a888';
+    B(WD, x - 4, y - 4, w + 8, 4); B(WC, x - 4, y - 4, w + 8, 2);
+    B(WD, x - 4, y - 4, 4, h + 8); B(WC, x - 4, y - 4, 2, h + 8); B(WD, x + w, y - 4, 4, h + 8); B(WC, x + w + 2, y - 4, 2, h + 8);
+    const holes = level === 0 ? [...spots.gates, spots.door] : [];
+    let cx = x - 4; for (const o of holes.slice().sort((a, b) => a.x - b.x)) { B(WD, cx, y + h, o.x - cx, 4); B(WC, cx, y + h, o.x - cx, 2); cx = o.x + o.w; }
+    B(WD, cx, y + h, x + w + 4 - cx, 4); B(WC, cx, y + h, x + w + 4 - cx, 2);
+    if (level === 0) { const d = spots.door; B('#c9b48a', d.x + 4, y + h, d.w - 8, 4); for (const g of spots.gates) B('#5a5a5a', g.x, y + h + 3, g.w, 3); }   // Schwelle, Torschienen
+    else { B('#9fe3ff', x + Math.round(w * 0.2), y + h, 30, 2); B('#9fe3ff', x + Math.round(w * 0.7), y + h, 30, 2); }
+    for (const r of walls.filter(r => !r.key && !r.k && r !== spots.lockers && r !== spots.bench && r !== spots.desk)) { B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2)); }
+  }
+
+  // ---------- Zeichnen der Dinge ----------
+  function drawVehicle(v, time) {                     // von oben, Front (Fahrerhaus) nach unten zu den Toren
+    const { x, y, w, h } = v, cab = Math.round(h * 0.26), on = v.blink > 0 && Math.floor(time / 150) % 2;
+    R('rgba(0,0,0,.25)', x + 3, y + 4, w, h);
+    for (const yy of [y + Math.round(h * 0.15), y + Math.round(h * 0.45), y + h - cab + 4]) { R('#1b1b1b', x - 2, yy, 3, 10); R('#1b1b1b', x + w - 1, yy, 3, 10); }   // Räder
+    R('#8e1f1f', x, y, w, h); R('#c0392b', x + 1, y + 1, w - 2, h - 2);
+    R('#f2f2f2', x + 1, y + h - cab - 3, w - 2, 2); R('#ffd23f', x + 1, y + h - cab - 1, w - 2, 1);   // Streifen zwischen Aufbau und Fahrerhaus
+    R('#a92f22', x + 2, y + h - cab + 1, w - 4, cab - 7); R('#1c3f6e', x + 3, y + h - 6, w - 6, 4); R('#6cc4f0', x + 4, y + h - 6, w - 8, 1);   // Fahrerhaus-Dach, Frontscheibe
+    R('#333', x - 3, y + h - cab + 3, 3, 3); R('#333', x + w, y + h - cab + 3, 3, 3);                 // Spiegel
+    const lb = Math.round(w * 0.5); R('#333', x + (w - lb) / 2, y + h - cab + 2, lb, 4);            // Blaulichtbalken
+    R(on ? '#3fa9f5' : '#1c5e9e', x + (w - lb) / 2 + 1, y + h - cab + 3, (lb >> 1) - 1, 2); R(on ? '#1c5e9e' : '#3fa9f5', x + w / 2, y + h - cab + 3, (lb >> 1) - 1, 2);
+    if (v.blink > 0) { const g = on ? 'rgba(63,169,245,.35)' : 'rgba(63,169,245,.15)'; R(g, x - 8, y + h - cab - 6, w + 16, 16); }
+    const top = y + 3, bh = h - cab - 9;
+    if (v.key === 'lf') {                               // Löschfahrzeug: Leiter und Schlauchhaspel auf dem Dach
+      R('#9aa0a6', x + 4, top, w - 8, bh); R('#c8ccd0', x + 6, top + 2, 3, bh - 4); R('#c8ccd0', x + w - 9, top + 2, 3, bh - 4);
+      for (let yy = top + 5; yy < top + bh - 3; yy += 6) R('#c8ccd0', x + 9, yy, w - 18, 2);
+      const r = Math.round(w * 0.18); R('#555', x + w / 2 - r, top + bh - 2 * r - 4, 2 * r, 2 * r); R('#e8e2d0', x + w / 2 - r + 2, top + bh - 2 * r - 2, 2 * r - 4, 2 * r - 4); R('#555', x + w / 2 - 2, top + bh - r - 6, 4, 4);
+    } else {                                            // Rüstwagen: Geräteboxen und Lichtmast
+      for (let i = 0; i < 3; i++) { const by = top + i * Math.round(bh / 3); R('#e8e8e8', x + 4, by + 1, w - 8, Math.round(bh / 3) - 3); R('#b8b8b8', x + 4, by + Math.round(bh / 3) - 3, w - 8, 1); }
+      R('#555', x + w / 2 - 3, top + 4, 6, 6); R('#ffd23f', x + w / 2 - 2, top + 5, 4, 4);
+    }
+    R('#ffd23f', x, y + Math.round(h * 0.3), 1, Math.round(h * 0.4)); R('#ffd23f', x + w - 1, y + Math.round(h * 0.3), 1, Math.round(h * 0.4));   // Warnstreifen
+  }
+  function drawGates(time) {                            // Rolltore in der Vorderwand: offen = man sieht die Straße
+    const yb = room.y + room.h;
+    spots.gates.forEach((g, i) => {
+      const k = gates[i];
+      R('#6a6a6a', g.x, yb - 2, g.w, 8); R('#4a4a4a', g.x, yb + 4, g.w, 2);   // Straße/Einfahrt hinter dem Tor
+      const c = Math.round(6 * (1 - k)); if (c > 0) { R('#8e1f1f', g.x, yb, g.w, c); R('#c0392b', g.x + 1, yb, g.w - 2, Math.max(1, c - 1)); for (let xx = g.x + 3; xx < g.x + g.w - 2; xx += 4) R('#8e1f1f', xx, yb, 1, c); }
+      R('#333', g.x - 2, yb - 1, 2, 7); R('#333', g.x + g.w, yb - 1, 2, 7);
+    });
+  }
+  function drawHoses(time) {                           // Schläuche hängen an der Rückwand (bewegen sich beim Antippen)
+    const h = spots.hoses, n = Math.max(2, Math.floor(h.w / 10)), wob = hoseWob > 0 ? Math.sin(time / 60) * 2 * hoseWob : 0;
+    R('#5a3b1c', h.x, room.y + 3, h.w, 3);
+    for (let i = 0; i < n; i++) { const x = h.x + 3 + i * 10 + Math.round(wob * (i % 2 ? 1 : -1)); R('#e8e2d0', x, room.y + 6, 5, WH + 2); R('#c8c0a8', x + 4, room.y + 6, 1, WH + 2); R('#9aa0a6', x, room.y + WH + 6, 5, 3); }
+  }
+  function drawLockers() {
+    const l = spots.lockers, n = Math.max(2, Math.floor(l.w / 16));
+    for (let i = 0; i < n; i++) { const x = l.x + i * 16; R('#2c3e50', x, l.y, 15, l.h); R('#c0392b', x + 1, l.y + 1, 13, l.h - 2); R('#e9dcc0', x + 10, l.y + 5, 2, 3); R('#8e1f1f', x + 3, l.y + 3, 6, 1); }
+    const b = spots.bench; R('#5a3b1c', b.x, b.y, b.w, b.h); R('#a0673a', b.x + 1, b.y + 1, b.w - 2, b.h - 3);
+  }
+  function drawDesk(time) {
+    const d = spots.desk, on = radioT > 0 && Math.floor(time / 120) % 2;
+    R('#5a3b1c', d.x, d.y, d.w, d.h); R('#a0673a', d.x + 1, d.y + 1, d.w - 2, d.h - 3);
+    R('#222', d.x + 4, d.y - 6, 16, 10); R('#3fa9f5', d.x + 5, d.y - 5, 14, 7); R('#7ed957', d.x + 6, d.y - 4, 6, 1); R('#7ed957', d.x + 6, d.y - 2, 9, 1);   // Bildschirm
+    R('#333', d.x + d.w - 16, d.y + 2, 12, 8); R(on ? '#ff5a3c' : '#7a2218', d.x + d.w - 14, d.y + 4, 3, 3); R('#555', d.x + d.w - 6, d.y - 6, 1, 8);   // Funkgerät mit Antenne
+    if (radioT > 0) for (let k = 0; k < 3; k++) { const r = 4 + ((time / 90 + k * 4) % 12); R('rgba(255,255,255,.7)', d.x + d.w - 6 - r, d.y - 8 - r / 2, 2, 1); R('rgba(255,255,255,.7)', d.x + d.w - 6 + r, d.y - 8 - r / 2, 2, 1); }
+  }
+  function drawPole(time) {                           // Stange: unten von der Matte bis zur Decke, oben nur das Loch
+    if (level !== 0) return; const p = spots.pole, cx = p.x + p.w / 2;
+    R('#9aa0a6', cx - 1, room.y + 2, 3, p.y + p.h / 2 - room.y - 2); R('#e8eef2', cx - 1, room.y + 2, 1, p.y + p.h / 2 - room.y - 2);
+  }
+  const GEAR = { h: '#ffd23f', r: '#24346b', w: '#ffd23f', b: '#24346b', n: '#111' };
+  function drawKid(x, y) {
+    const K = 2, fr = kid.path.length && Math.floor(kid.t * 8) % 2 ? KID.b : KID.a, w = 10 * K, h = 13 * K, pal = gear ? Object.assign({}, KID.pal, GEAR) : KID.pal;
+    R('rgba(0,0,0,.25)', Math.round(x - w / 2) + K, Math.round(y) - 2 * K, w, 2 * K);
+    fr.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(pal[ch], Math.round(x - w / 2) + (kid.flip ? 9 - i : i) * K, Math.round(y - h) + j * K, K, K); }));
+    if (gear) { R('#e0b000', Math.round(x - w / 2) + 2 * K, Math.round(y - h) - K, 6 * K, K); R('#ffd23f', Math.round(x - w / 2), Math.round(y - h) + 2 * K, w, K); }   // Helmkrempe und -schild
+  }
+
+  // ---------- Bedienung ----------
+  function onPointer(type, x, y) {
+    if (type !== 'down' || swap || slide || night) return true;
+    idle = 0;
+    if (level === 0) {
+      const v = vehicles.find(v => inR(v, x, y, 4));
+      if (v) { v.blink = 3; sayWord(v.key); setWord(v.key); tatuta(); return true; }
+      const gi = spots.gates.findIndex(g => x > g.x - 4 && x < g.x + g.w + 4 && y > room.y + room.h - 14 && y < room.y + room.h + 12);
+      if (gi >= 0) { gateGoal[gi] = gateGoal[gi] ? 0 : 1; sfx.click(); for (let k = 0; k < 6; k++) tone(180 + k * 10, .05, 'square', .03, k * .08); setWord('rolltor'); sayWord('rolltor'); return true; }
+      if (inR(spots.hoses, x, y, 4)) { hoseWob = 1.5; setWord('hoses'); sayWord('hoses'); sfx.clod(); return true; }
+      if (inR(spots.desk, x, y, 6) || inR({ x: spots.desk.x, y: spots.desk.y - 8, w: spots.desk.w, h: 10 }, x, y, 2)) { radio(); return true; }
+    }
+    walkTo(x, y);
+    return true;
+  }
+  function tatuta() { for (let k = 0; k < 4; k++) { tone(466, .32, 'square', .05, k * .7); tone(622, .32, 'square', .05, k * .7 + .35); } }
+  function radio() { radioT = 2; setWord('radio'); sayWord('radio'); for (let k = 0; k < 10; k++) tone(300 + Math.random() * 900, .04, 'sawtooth', .02, k * .05); tone(1200, .08, 'sine', .04, .6); }
+
+  // ---------- Ablauf ----------
+  function update(dt) {
+    idle += dt; hoseWob = Math.max(0, hoseWob - dt); radioT = Math.max(0, radioT - dt); gearT = Math.max(0, gearT - dt);
+    for (const v of vehicles) v.blink = Math.max(0, v.blink - dt);
+    for (let i = 0; i < 2; i++) gates[i] = approach(gates[i], gateGoal[i], dt / 1.2);
+    if (!kid) return;
+    if (swap) { swap.t += dt;
+      if (swap.t > 0.35 && !swap.done) { swap.done = true; level = 1 - level; setupLevel(); kid.x = stairs.x - 14; kid.y = stairs.y + stairs.h - 2; kid.flip = true; kid.path = []; kid.still = 0; const w = level ? 'up' : 'down'; setWord(w); sayWord(w); }
+      if (swap.t > 0.7) swap = null; return; }
+    if (slide) { slide.t += dt;                         // Rutschstange: oben ins Loch, unten an der Stange herunter auf die Matte
+      if (slide.t > 0.4 && !slide.done) { slide.done = true; level = 0; setupLevel(); kid.path = []; kid.flip = false; }
+      if (slide.done) { const p = spots.pole, k = clamp((slide.t - 0.4) / 0.7, 0, 1); kid.x = p.x + p.w / 2 + 6; kid.y = room.y + WH + (p.y + p.h + 6 - room.y - WH) * k; }
+      if (slide.t > 1.2) { slide = null; kid.still = 0; sfx.clod(); setWord('pole'); } return; }
+    if (night) { night.t += dt; if (night.t > 4.2 && !night.morning) { night.morning = true; tone(523, .15, 'triangle', .08); tone(659, .15, 'triangle', .08, .15); tone(784, .25, 'triangle', .08, .3); setTimeout(() => say('Guten Morgen'), 400); }
+      if (night.t > 5.4) { kid.y = night.bed.y + night.bed.h + 8; night = null; kid.still = 0; } return; }
+    if (level === 0 && !kid.path.length && kid.y > floor.y + floor.h - 8 && kid.x > spots.door.x + 2 && kid.x < spots.door.x + spots.door.w - 2) {
+      atDoor += dt; if (atDoor > 0.6) { atDoor = -99; sfx.enter(); goHof('wache'); return; } } else if (atDoor > 0) atDoor = 0;
+    if (kid.path.length) {
+      const tgt = kid.path[0], dx = tgt.x - kid.x, dy = tgt.y - kid.y, d = Math.hypot(dx, dy), sp = 70 * dt;
+      if (Math.abs(dx) > 0.5) kid.flip = dx < 0;
+      if (d <= sp) { kid.x = tgt.x; kid.y = tgt.y; kid.path.shift(); } else { kid.x += dx / d * sp; kid.y += dy / d * sp; }
+      kid.t += dt; kid.still = 0; kid.used = false;
+      return;
+    }
+    kid.still += dt;
+    if (kid.used) return;                               // jede Stelle löst einmal aus, bis das Kind weiterläuft
+    if (kid.still > 0.3 && inR(stairs, kid.x, kid.y, 2)) { kid.used = true; swap = { t: 0 }; sfx.enter(); return; }
+    const p = spots.pole;
+    if (level === 1 && kid.still > 0.35 && inR(p, kid.x, kid.y - 4, 4)) { kid.used = true; slide = { t: 0 }; sayWord('pole'); tone(880, .9, 'sine', .05, 0, 220); return; }
+    if (level === 0 && kid.still > 0.5 && kid.x > spots.lockers.x - 4 && kid.x < spots.lockers.x + spots.lockers.w + 4 && kid.y < spots.lockers.y + spots.lockers.h + 26) {
+      kid.used = true; gear = !gear; gearT = 0.6; sfx.unlock(); setWord(gear ? 'gear' : 'locker'); sayWord(gear ? 'gear' : 'locker');
+      for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, gear ? '#ffd23f' : '#ffffff', 30); return; }
+    if (level === 1 && kid.still > 0.8) { const b = furn.find(o => o.k === 'bed' && kid.x > o.x + 2 && kid.x < o.x + o.w - 2 && kid.y > o.y + 4 && kid.y < o.y + o.h + 4);
+      if (b) { kid.used = true; night = { t: 0, bed: b }; setWord('sleep'); say('Gute Nacht'); tone(392, .3, 'triangle', .06); tone(330, .3, 'triangle', .06, .35); tone(262, .5, 'triangle', .06, .7); } }
+  }
+  function draw(time) {
+    if (!room) return;
+    ctx.drawImage(bg, 0, 0);
+    if (level === 0) { drawHoses(time); drawLockers(); drawDesk(time); drawGates(time); for (const v of vehicles) drawVehicle(v, time); drawPole(time); }
+    else for (const o of furn.slice().sort((a, b) => (a.y + a.h) - (b.y + b.h))) o.f.draw(R, o.x, o.y, true, time);
+    if (night) {
+      const t = night.t, a = t < 1.4 ? t / 1.4 : t < 3.8 ? 1 : Math.max(0, 1 - (t - 3.8) / 1.4), b = night.bed;
+      R('#f1c27d', b.x + Math.round(b.w / 2) - 4, b.y + 6, 8, 7); R('#6b3e1e', b.x + Math.round(b.w / 2) - 4, b.y + 5, 8, 3);   // Kopf auf dem Kissen
+      R(`rgba(10,15,40,${(a * 0.6).toFixed(2)})`, 0, 0, W, H);
+      for (let k = 0; k < 3; k++) { const zt = (t * 0.8 + k * 0.33) % 1; R('#ffffff', Math.round(b.x + b.w * 0.6 + zt * 10), Math.round(b.y - zt * 22), 3, 3); }
+    } else if (slide && !slide.done) { const k = 1 - slide.t / 0.4; if (k > 0.2) drawKid(kid.x, kid.y); }
+    else drawKid(kid.x, kid.y);
+    if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); R(`rgba(0,0,0,${a.toFixed(2)})`, 0, 0, W, H); }
+    if (slide && !slide.done) R(`rgba(0,0,0,${(slide.t / 0.4 * 0.8).toFixed(2)})`, 0, 0, W, H);
+    if (idle > 4 && !kid.path.length && Math.floor(time / 600) % 2 === 0) {   // Hinweis: Treppe, Loch, Ausgang
+      const pts = level ? [spots.pole, stairs] : [stairs, { x: spots.door.x, y: room.y + room.h - 12, w: spots.door.w, h: 4 }];
+      for (const q of pts) { const cx = Math.round(q.x + q.w / 2), cy = q.y - 6; for (let i = 0; i < 4; i++) R('rgba(255,255,255,.85)', cx - i, cy + i, 2 * i + 1, 1); }
+    }
+  }
+  function resize() { const l = level; layout(false); level = l; if (room) { const cols = Math.min(gc - 1, 16); room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - G - 12 }; floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 }; setupLevel(); kid.path = []; kid.x = clamp(kid.x, floor.x + 8, floor.x + floor.w - 8); kid.y = clamp(kid.y, floor.y + 14, floor.y + floor.h); } }
+  return { enter, update, draw, resize, onPointer, _dbg: () => ({ level, gear, kid: kid && { x: kid.x, y: kid.y, n: kid.path.length }, spots, stairs, vehicles, gates, room, floor, furn: furn.map(o => [o.k, o.x, o.y, o.w, o.h]) }) };
+})();
+startLoop(Wache);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

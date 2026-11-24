@@ -116,6 +116,11 @@
     Hof.load(); Hof.save.home.unlocked = true; Hof.persist();
   };
 
+  // Feuerwache freischalten (fertig gebaut, Sterne vorher mit Hof.spend abziehen); fire.unlocked fehlt in alten Spielständen = zu
+  Hof.unlockFire = function () {
+    Hof.load(); if (!Hof.save.fire || typeof Hof.save.fire !== 'object') Hof.save.fire = { step: 5 }; Hof.save.fire.unlocked = true; Hof.persist();
+  };
+
   // Möbel im Wohnhaus speichern: Liste [{ k, x, y }] (x/y je 0–1 im Zimmer), gleiche Möbel dürfen mehrfach vorkommen
   Hof.setHome = function (list, where) {          // where = 'farm' für das Bauernhaus, sonst Wohnhaus
     Hof.load();

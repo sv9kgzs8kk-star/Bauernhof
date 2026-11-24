@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261124c">
+<title>Wache</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="whud" class="hud gamehud hidden">
+  <div class="pill" data-say="firehouse" style="pointer-events:auto"><span class="word">WACHE</span> <span id="wcount">0/0</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261124c"></script>
+<script src="../../../gemeinsam/basis.js?v=20261124c"></script>
+<script src="../../../gemeinsam/bau.js?v=20261124c"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => site();   // Feuerwache (?ort=wache)
+let winTimer = null;
+// Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: HAUPTGEBÄUDE DER FEUERWACHE MAUERN (fire.step 3 → 4) – wie das Mauern beim Wohnhaus, aber rote Klinker
+   Links steht schon die Fahrzeughalle. Rote Steine von der Palette in die leuchtenden Lücken ziehen (oder Lücke antippen),
+   Reihe für Reihe, 5 Reihen (2 Stockwerke); Tür und Fenster bleiben frei. Bauarbeiter antippen = er trägt einen Stein hin.
+   Zum Schluss senkt sich das Flachdach, Fenster und Tür sind drin, das Wappen hängt über der Tür, das Blaulicht blinkt.
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('wache')));
+if (ORT !== 'wache') location.replace(location.pathname + '?ort=wache');
+
+const Wache = (() => {
+  let g, fg, m, cells, state, row, drag = null, pal, plops = [], paused = false, wk = null, roofK = 0;
+  function siteGeo() {                                 // gleiche Lage wie bei der Fahrzeughalle
+    const hw = clamp(gc - 5, 3, 6) * G, hh = Math.min(4, gr - 4) * G;
+    const hx = Math.max(G / 2, Math.min(Math.round((gc * G - hw) / 2) - G, gc * G - hw - Math.round(2.9 * G))), hy = Math.max(G + 8, Math.round(((gr - 1) * G - hh) / 2));
+    return { hx, hy, hw, hh };
+  }
+  function enter() {
+    Hof.load();
+    if (site().step !== 3) { goHof(); return; }
+    layout(true);
+    g = siteGeo(); fg = fireGeo(g.hx, g.hy, g.hw, g.hh); m = fg.main;
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+    }
+    const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+    const fx = g.hx - 14, fy = g.hy - 14, fw = g.hw + 28 + 3 * G, fh = g.hh + 26;
+    for (let x = fx; x <= fx + fw; x += 9) B('#d35400', x, fy - 2, 2, 7);
+    for (let y = fy; y <= fy + fh; y += 9) { B('#d35400', fx, y, 2, 6); B('#d35400', fx + fw, y, 2, 6); }
+    B('#ffffff', fx, fy, fw + 2, 2); B('#ffffff', fx, fy, 2, fh); B('#ffffff', fx + fw, fy, 2, fh);
+    B('#6a7076', g.hx - 2, g.hy - 2, g.hw + 4, g.hh + 4); B('#a2a8ae', g.hx - 1, g.hy - 1, g.hw + 2, g.hh + 2);   // Bodenplatte
+    cells = mainCells(m);
+    const cw = cells[0].w, ch = cells[0].h;
+    pal = { x: Math.min(g.hx + g.hw + G, W - 2 * cw - 14), y: m.bot - 3 * ch - 8, w: 2 * cw + 8, h: 3 * (ch - 1) + 8 };   // Palette rechts neben der Wache
+    B('rgba(0,0,0,.25)', pal.x + 2, pal.y + 3, pal.w, pal.h);
+    B('#5a3b1c', pal.x, pal.y, pal.w, pal.h); for (let y = pal.y + 2; y < pal.y + pal.h; y += 6) B('#a0673a', pal.x + 1, y, pal.w - 2, 4);
+    row = 0; drag = null; plops = []; roofK = 0;
+    const hx = Math.round(pal.x + pal.w / 2), hy = pal.y + pal.h + 12;
+    wk = { x: hx, y: hy, hx, hy, path: [], carry: false, k: null, a: Math.PI, t: 0 };
+    state = 'play'; show('whud'); hud();
+    setTimeout(() => sayWord('firehouse'), 400);
+  }
+  $('pausebtn').addEventListener('click', () => { if (state !== 'play') return; paused = true; drag = null; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+  const need = () => cells.filter(k => !k.open);
+  function hud() { $('wcount').textContent = need().filter(k => k.done).length + '/' + need().length; }
+  const free = () => cells.filter(k => k.r === row && !k.open && !k.done);
+  const inPal = (x, y) => x > pal.x - 8 && x < pal.x + pal.w + 8 && y > pal.y - 10 && y < pal.y + pal.h + 8;
+  function place(k) {
+    k.done = true; sfx.clod(); hud(); plops.push({ k, t: 0 });
+    for (let i = 0; i < 6; i++) spawn(k.x + rnd(0, k.w), k.y + k.h, rnd(-15, 15), rnd(-15, -5), .35, '#d8c8a8', 40);
+    if (!free().length) {
+      row++; while (row < MAIN_ROWS && !free().length) row++;
+      sfx.load();
+      if (row >= MAIN_ROWS) { state = 'roof'; hide('whud'); setTimeout(() => sayWord('flatroof'), 300); }
+    }
+  }
+  const onWorker = (x, y) => Math.abs(x - wk.x) < 16 && Math.abs(y - wk.y) < 16;
+  function sendWorker() {
+    const k = free()[0]; if (!k) return;
+    const fy = m.bot + 14, tx = Math.round(k.x + k.w / 2);
+    wk.carry = true; wk.k = k; wk.path = [{ x: wk.hx, y: fy }, { x: tx, y: fy, put: true }, { x: wk.hx, y: fy }, { x: wk.hx, y: wk.hy, home: true }];
+    sfx.click();
+  }
+  function updWorker(dt) {
+    const q = wk.path[0]; if (!q) return;
+    const dx = q.x - wk.x, dy = q.y - wk.y, d = Math.hypot(dx, dy), sp = 75 * dt;
+    if (d > 0.5) wk.a = Math.atan2(dy, dx);
+    wk.t += dt;
+    if (d > sp) { wk.x += dx / d * sp; wk.y += dy / d * sp; return; }
+    wk.x = q.x; wk.y = q.y; wk.path.shift();
+    if (q.put) {
+      let k = wk.k && !wk.k.done && wk.k.r === row ? wk.k : null;
+      if (!k) { const f = free(); k = f.sort((a, b) => Math.abs(a.x + a.w / 2 - wk.x) - Math.abs(b.x + b.w / 2 - wk.x))[0]; }
+      if (k && state === 'play') place(k);
+      wk.carry = false; wk.k = null;
+    }
+    if (q.home) wk.a = Math.PI;
+  }
+  function onPointer(type, x, y) {
+    if (state !== 'play' || paused) return true;
+    if (type === 'down') {
+      if (onWorker(x, y)) { if (!wk.path.length) sendWorker(); return true; }
+      if (inPal(x, y)) { drag = { x, y }; sfx.click(); return true; }
+      const k = free().find(k => x > k.x - 3 && x < k.x + k.w + 3 && y > k.y - 3 && y < k.y + k.h + 3);
+      if (k) place(k);
+    } else if (type === 'move' && drag) { drag.x = x; drag.y = y; }
+    else if (type === 'up' && drag) {
+      let best = null, bd = 30;
+      for (const k of free()) { const d = Math.hypot(k.x + k.w / 2 - drag.x, k.y + k.h / 2 - drag.y); if (d < bd) { bd = d; best = k; } }
+      if (best) place(best); else sfx.bonk();
+      drag = null;
+    }
+    return true;
+  }
+  function update(dt) {
+    for (const p of plops) p.t += dt; plops = plops.filter(p => p.t < 0.25);
+    if (wk && !paused) updWorker(dt);
+    if (state === 'roof') { roofK = Math.min(1, roofK + dt / 1.2); if (roofK >= 1) { state = 'won'; sfx.bonk(); sfx.unlock(); confetti(); finishStep(4, 'firestation', 'wache'); } }
+  }
+  const Q = snapF(R, 2);
+  function draw(time) {
+    if (!cells) return;
+    ctx.drawImage(bg, 0, 0);
+    drawGarage(Q, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], time });
+    const fin = state === 'roof' || state === 'won';
+    drawMain(R, m, fin ? { done: true, roofK, time } : { built: row, time });
+    if (!fin) {
+      const on = Math.abs(Math.sin(time / 260)) > .5;
+      for (const k of cells) if (k.r === row) {
+        if (k.open) continue;
+        if (k.done) drawFireBrick(R, k.x, k.y, k.w, k.h);
+        else R(on ? 'rgba(255,210,63,.8)' : 'rgba(255,210,63,.45)', k.x + 1, k.y + 1, k.w - 2, k.h - 2);
+      } else if (k.r > row && !k.open) R('rgba(255,255,255,.15)', k.x + 1, k.y + 1, k.w - 2, k.h - 2);
+      for (const p of plops) R('rgba(255,255,255,.6)', p.k.x, p.k.y, p.k.w, p.k.h);
+    }
+    const cw = cells[0].w, ch = cells[0].h;
+    for (let j = 0; j < 3; j++) for (let i = 0; i < 2; i++) drawFireBrick(R, pal.x + 3 + i * (cw + 1), pal.y + 3 + j * (ch - 1), cw, ch);
+    const fr = ((Math.round(wk.a / (Math.PI * 2) * 32) % 32) + 32) % 32, bob = wk.path.length && Math.floor(wk.t * 8) % 2 ? 1 : 0;
+    ctx.drawImage(BUILDER.shadows[fr], Math.round(wk.x - 17 + 2), Math.round(wk.y - 17 + 2)); ctx.drawImage(BUILDER.frames[fr], Math.round(wk.x - 17), Math.round(wk.y - 17 - bob));
+    if (wk.carry) { const bw = Math.round(cw * 0.75), bh = Math.round(ch * 0.75), hx = wk.x + Math.cos(wk.a) * 9, hy = wk.y + Math.sin(wk.a) * 9 - bob;
+      drawFireBrick(R, Math.round(hx - bw / 2), Math.round(hy - bh / 2), bw, bh); }
+    if (state === 'play' && !drag && !wk.path.length && Math.floor(time / 700) % 4 === 0) R('rgba(255,210,63,.6)', Math.round(wk.x - 11), Math.round(wk.y + 11), 22, 2);
+    if (drag) drawFireBrick(R, Math.round(drag.x - cw / 2), Math.round(drag.y - ch / 2), cw, ch);
+    if (state === 'play' && !drag) {
+      const k = free()[0];
+      if (k) {
+        const sx = pal.x + pal.w / 2, sy = pal.y + pal.h / 2, ex = k.x + k.w / 2, ey = k.y + k.h / 2, n = Math.ceil(Math.hypot(ex - sx, ey - sy) / 7);
+        const blink = Math.floor(time / 180) % 3;
+        for (let i = 1; i < n; i++) if (i % 3 === blink) R('rgba(255,255,255,.85)', Math.round(sx + (ex - sx) * i / n) - 1, Math.round(sy + (ey - sy) * i / n) - 1, 3, 3);
+        drawArrow(Math.round(sx - 3), Math.round(pal.y - 16 - Math.abs(Math.sin(time / 220)) * 4));
+      }
+    }
+  }
+  function resize() { layout(false); }
+  function exit() { clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ state, row, pal, wk: wk && { x: wk.x, y: wk.y, n: wk.path.length, carry: wk.carry }, free: free().map(k => [k.x + k.w / 2, k.y + k.h / 2]) }) };
+})();
+startLoop(Wache);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

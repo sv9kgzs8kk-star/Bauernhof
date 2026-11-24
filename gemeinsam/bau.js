@@ -55,7 +55,7 @@ function drawWoodHouseIcon(F, x, y, w, h) {
 // Bauort: dieselben Bau-Minispiele bauen das Wohnhaus oder (mit ?ort=wache) die Feuerwache. site() = Fortschritt des Bauorts.
 const ORT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('ort') === 'wache' ? 'wache' : 'haus';
 const FIRE_TYPE = { key: 'fire', word: 'firestation', floors: 2, loads: 3, trusses: 0, shape: 'F', steps: ['baggern', 'beton', 'garage', 'wache', 'schlauchturm'] };
-const FIRE_READY = 3;                                  // so viele Bauschritte der Feuerwache gibt es schon als Spiel
+const FIRE_READY = 4;                                  // so viele Bauschritte der Feuerwache gibt es schon als Spiel
 const houseType = () => { if (ORT === 'wache') return FIRE_TYPE; const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
 function site() {
   const s = Hof.save;
@@ -671,7 +671,8 @@ Object.assign(WORDS, { firestation: ['FEUERWACHE', 'Feuerwache'], garage: ['FAHR
 // Grundriss auf der Bodenplatte x,y,w,h (schräg von oben wie drawHouseTop: oben die Dachfläche d, vorne die Wand fh)
 function fireGeo(x, y, w, h) {
   const gw = Math.max(12, Math.round(w * 0.56)), d = Math.round(h * 0.55);
-  return { garage: { x, y, w: gw, d, fh: h - d }, main: { x: x + gw + 3, y, w: w - gw - 3, h } };
+  const fh = h - d, mh = Math.round(fh * 1.5);          // Hauptgebäude: 2 Stockwerke, ragt nach oben über die Halle
+  return { garage: { x, y, w: gw, d, fh }, main: { x: x + gw + 3, w: w - gw - 3, top: y + h - d - mh, d, fh: mh, bot: y + h } };
 }
 // Rolltore in der Vorderwand der Halle: [x, y, w, h]
 function garageGates(gg) {
@@ -729,4 +730,54 @@ function drawGarage(F, gg, o = {}) {
     F(C.edge, gx - 1, gy - 1, gW + 2, 1);
   }
   if (n >= 6) drawFlatRoof(F, x + Math.round(w / 2), y + Math.round(d / 2), w + 4, d + 4);
+}
+
+// ---------- Feuerwache: Hauptgebäude, rot gemauert (5 Reihen × 5 Spalten; unten Tür und 2 Fenster, oben 3 Fenster) ----------
+Object.assign(WORDS, { firehouse: ['WACHE', 'Wache'] });
+const MAIN_ROWS = 5, MAIN_COLS = 5, MAIN_HOLES = ['2,0', '2,1', '0,1', '4,1', '0,3', '2,3', '4,3'];
+const FIRE_BRICK = ['#7a2218', '#b5442e', '#d0654a'];
+function mainCells(m) {
+  const cw = m.w / MAIN_COLS, rh = m.fh / MAIN_ROWS, out = [];
+  for (let r = 0; r < MAIN_ROWS; r++) for (let c = 0; c < MAIN_COLS; c++) {
+    const x = Math.round(m.x + c * cw), y = Math.round(m.bot - (r + 1) * rh);
+    out.push({ r, c, x, y, w: Math.round(m.x + (c + 1) * cw) - x, h: Math.round(m.bot - r * rh) - y, open: MAIN_HOLES.includes(c + ',' + r) });
+  }
+  return out;
+}
+function drawFireBrick(F, x, y, w, h) {
+  F(FIRE_BRICK[0], x, y, w, h); F(FIRE_BRICK[1], x + 1, y + 1, w - 2, h - 3); F(FIRE_BRICK[2], x + 1, y + 1, w - 2, 1); F('#d8c8a8', x, y + h - 1, w, 1);
+  if (w > 9) F(FIRE_BRICK[0], x + (w >> 1), y + 1, 1, Math.max(1, (h >> 1) - 1));
+}
+// Hauptgebäude zeichnen; o: { built: fertige Reihen 0..5 (Steine + Mauerkrone in dieser Höhe), done (Dach, Fenster, Tür, Wappen), roofK 0..1 (Dach senkt sich), time }
+function drawMain(F, m, o = {}) {
+  const built = o.done ? MAIN_ROWS : (o.built || 0), cells = mainCells(m), rh = m.fh / MAIN_ROWS;
+  for (const k of cells) if (k.r < built) {
+    if (!k.open) drawFireBrick(F, k.x, k.y, k.w, k.h);
+    else if (!o.done) F('#2e1f10', k.x, k.y, k.w, k.h);
+  }
+  if (o.done) {                                        // Fenster und Tür einsetzen
+    const hole = (c, r0, r1) => { const a = cells.find(k => k.c === c && k.r === r1), b = cells.find(k => k.c === c && k.r === r0); return [a.x, a.y, a.w, b.y + b.h - a.y]; };
+    for (const [c, r] of [[0, 1], [4, 1], [0, 3], [2, 3], [4, 3]]) { const [x, y, w, h] = hole(c, r, r);
+      F('#f2f2f2', x + 1, y + 1, w - 2, h - 2); F('#6cc4f0', x + 2, y + 2, w - 4, h - 4); F('#9fe3ff', x + 2, y + 2, w - 4, Math.max(1, (h >> 1) - 2)); F('#f2f2f2', x + (w >> 1), y + 2, 1, h - 4); }
+    const [dx, dy, dw, dh] = hole(2, 0, 1);
+    F('#5a5a5a', dx + 1, dy + 1, dw - 2, dh - 1); F('#9fe3ff', dx + 2, dy + 2, dw - 4, dh - 3); F('#5a5a5a', dx + (dw >> 1), dy + 2, 1, dh - 3); F('#ffd23f', dx + (dw >> 1) + 2, dy + Math.round(dh * 0.55), 1, 2);
+    if (rh >= 8) { const ey = Math.round(m.bot - 2 * rh - rh / 2), ex = Math.round(m.x + m.w / 2), er = Math.max(2, Math.round(rh * 0.42));   // Wappen über der Tür
+    F('#ffffff', ex - er - 1, ey - er - 1, 2 * er + 3, 2 * er + 3); F('#c0392b', ex - er, ey - er, 2 * er + 1, 2 * er + 1); F('#ffd23f', ex - 1, ey - Math.max(1, er - 2), 2, Math.max(2, 2 * er - 2)); }
+  }
+  // Mauerkrone in Höhe der fertigen Reihen (die Wände wachsen nach oben)
+  const cy = Math.round(m.bot - built * rh - m.d), th = 3;
+  if (built > 0 && !o.done) { F(FIRE_BRICK[0], m.x, cy, m.w, th); F(FIRE_BRICK[0], m.x, cy, th, m.d); F(FIRE_BRICK[0], m.x + m.w - th, cy, th, m.d); F(FIRE_BRICK[2], m.x, cy, m.w, 1); }
+  if (o.done) {                                        // Flachdach (senkt sich zum Schluss von oben ab), Blaulicht
+    const k = o.roofK == null ? 1 : clamp(o.roofK, 0, 1), up = Math.round((1 - k) * 30), top = m.top - up;
+    if (k < 1) F('rgba(0,0,0,.18)', m.x, m.top, m.w, m.d);
+    drawFlatRoof(F, m.x + m.w / 2, top + m.d / 2, m.w + 4, m.d + 4);
+    if (k >= 1) { const on = Math.floor((o.time || 0) / 300) % 2; F(on ? '#3fa9f5' : '#1c5e9e', m.x + m.w - 8, m.top + 3, 3, 3); F(on ? '#1c5e9e' : '#3fa9f5', m.x + m.w - 4, m.top + 3, 3, 3); }
+  }
+}
+// Ganze Feuerwache nach Bauschritt (Stadt und spätere Bau-Spiele)
+function drawFireStation(F, x, y, w, h, o = {}) {
+  const fg = fireGeo(x, y, w, h), st = o.step || 0;
+  if (st >= 3) drawGarage(F, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], time: o.time });
+  if (st >= 4) drawMain(F, fg.main, { done: true, time: o.time });
+  return fg;
 }

@@ -52,7 +52,19 @@ function drawWoodHouseIcon(F, x, y, w, h) {
   F('#c98a4f', x + lw, y + rz + 2, w - lw, h - rz - 2); for (let xx = x + lw + 2; xx < x + w; xx += 4) F('#7a4a22', xx, y + rz + 2, 1, h - rz - 2);   // Veranda
   F('#5a3b1c', x + lw, y + rz - 2, w - lw, 3); F('#5a3b1c', x + w - 2, y + rz, 2, h - rz);
 }
-const houseType = () => { const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
+// Bauort: dieselben Bau-Minispiele bauen das Wohnhaus oder (mit ?ort=wache) die Feuerwache. site() = Fortschritt des Bauorts.
+const ORT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('ort') === 'wache' ? 'wache' : 'haus';
+const FIRE_TYPE = { key: 'fire', word: 'firestation', floors: 2, loads: 3, trusses: 0, shape: 'F', steps: ['baggern', 'beton', 'garage', 'wache', 'schlauchturm'] };
+const FIRE_READY = 2;                                  // so viele Bauschritte der Feuerwache gibt es schon als Spiel
+const houseType = () => { if (ORT === 'wache') return FIRE_TYPE; const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
+function site() {
+  const s = Hof.save;
+  if (ORT === 'wache') { if (!s.fire || typeof s.fire !== 'object') s.fire = { step: 0 }; return s.fire; }
+  if (!s.house || typeof s.house !== 'object') s.house = { step: 0 }; return s.house;
+}
+// Feuerwache darf gebaut werden, sobald das Hochhaus einmal fertig war (Bauernhof gibt es immer)
+const fireOpen = () => { const h = Hof.save.house || {}; return !!(h.towerDone || (h.type === 3 && h.step >= 5)); };
+if (ORT === 'wache' && typeof goHof === 'function') { const _goHof = goHof; goHof = () => _goHof('wache'); }   // zurück in die Stadt: neben die Feuerwache
 const houseFloors = () => houseType().floors;
 // Putzfarben (beim Mauern gewählt, save.house.color): Grund, hell, dunkel (Kanten/Sockel), Rand
 const HOUSE_COLORS = [

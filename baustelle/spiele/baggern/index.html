@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261123d">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261124a">
 <title>Baggern</title>
 <style>.pill canvas.veh{width:clamp(30px,6vmin,46px);height:clamp(30px,6vmin,46px);image-rendering:pixelated}</style>
 </head>
@@ -46,9 +46,9 @@ window.addEventListener('error', function (e) {
   </div>
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
-<script src="../../../gemeinsam/sterne.js?v=20261123d"></script>
-<script src="../../../gemeinsam/basis.js?v=20261123d"></script>
-<script src="../../../gemeinsam/bau.js?v=20261123d"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261124a"></script>
+<script src="../../../gemeinsam/basis.js?v=20261124a"></script>
+<script src="../../../gemeinsam/bau.js?v=20261124a"></script>
 <script>
 /* =====================================================================
    MINISPIEL: GRUBE AUSHEBEN (Baustelle, Wohnhaus Schritt 1)
@@ -89,7 +89,7 @@ const DigGame = (() => {
 
   function enter() {
     Hof.load();
-    if ((save.house && save.house.step) >= 1) { goBack(); return; }   // Grube ist schon fertig
+    if (site().step >= 1) { goBack(); return; }   // Grube ist schon fertig
     layout(true);
     pit = makePit();
     ground = [];
@@ -126,8 +126,8 @@ const DigGame = (() => {
   function finish() {
     if (state === 'won') return;
     state = 'won'; clearHeld();
-    Hof.load(); if (!save.house || typeof save.house !== 'object') save.house = { step: 0 };
-    save.house.step = Math.max(save.house.step, 1); save.stars += BAU_STARS_DIG; Hof.persist();
+    Hof.load();
+    site().step = Math.max(site().step, 1); save.stars += BAU_STARS_DIG; Hof.persist();
     setTimeout(() => {
       hide('mhud'); hide('ctrl'); $('wingain').textContent = BAU_STARS_DIG;
       const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_DIG); applyIcons(row);

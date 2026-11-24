@@ -11,13 +11,15 @@ baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `b
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
                               **Feuerwache** (`P`): frei, sobald das Hochhaus einmal fertig war (`house.towerDone`, `fireOpen()`); dann Baustelle mit Bauzaun und Bauschild (Feuerwache-Bild, 5 Kästchen für die Schritte, `drawFireIcon`).
                               Fortschritt `save.fire.step` (0–5). Bau-Minispiele mit `?ort=wache` bauen die Wache statt des Hauses (`ORT`, `site()`, `FIRE_TYPE` in bau.js;
-                              `goHof` führt dann nach `#wache`). Schritte: baggern, beton, garage, wache (fertig), schlauchturm (Blöcke, Turmdrehkran, Landeplatz).
+                              `goHof` führt dann nach `#wache`). Schritte: baggern, beton, garage, wache, schlauchturm (alle fertig, `FIRE_READY = 5`, danach ist die Wache fertig gebaut).
+                              Schlauchturm `spiele/schlauchturm/` (step 4 → 5): Turmdrehkran; Tieflader 1 bringt 3 rote Turmblöcke + Haube (Turm hinten rechts auf dem Hauptgebäude, `hoseGeo()`, `drawHoseBlock()`, `drawHoseTower()`),
+                              Tieflader 2 den Landeplatz aufs Hallendach (`drawPadSlab()`, `drawGaragePad()`); Ausleger dreht weg, Hubschrauber kommt von links und landet.
                               Wache `spiele/wache/` (step 3 → 4): Hauptgebäude rechts neben der Halle rot mauern wie beim Wohnhaus (5 × 5, `mainCells()`, `MAIN_HOLES`), Bauarbeiter antippbar; dann senkt sich das Flachdach, Fenster/Tür/Wappen/Blaulicht (`drawMain()`). Ganze Wache je Schritt: `drawFireStation()`.
                               Garage `spiele/garage/` (step 2 → 3): Autokran hebt 6 Teile vom Tieflader (je 3): Rückwand, 2 Seitenwände, Vorderwand links/rechts mit Torloch, Flachdach;
                               dann 2 Torlöcher antippen → Rolltore fahren runter. Zeichnen in bau.js: `fireGeo()` (Halle links 56 %, rechts Platz fürs Hauptgebäude), `garageSlots()`, `garageGates()`, `drawGarage()`, `drawPanelTop()`, `drawFlatRoof()`.
                               `FIRE_READY` = so viele Schritte sind schon spielbar. Testlink `?wache=N` (Schritt setzen, Hochhaus gilt als gebaut).
                               Schild mit Schloss); Plätze rechts (`CITY_RIGHT`) oder unten (`CITY_BELOW`), je nach Bildschirm
-baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, garage/, wache/, holz/, kran/, dach/, holzdach/, abriss/, holzabriss/, turm/, fenster/, sprengung/
+baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): baggern/, beton/, mauer/, garage/, wache/, schlauchturm/, holz/, kran/, dach/, holzdach/, abriss/, holzabriss/, turm/, fenster/, sprengung/
                               (Sprengung, nur Hochhaus: Umzug → 6 Absperrgitter antippen → 4 Sprengladungen an die EG-Pfeiler → roter Griff am Zündkasten:
                               Sirene, „Drei, zwei, eins“ vorgelesen, dumpfes Rumms, Haus sackt in den Boden, Staubwolke → Schutt wegbaggern, 3 Kipper.)
                               (Turm, nur Hochhaus `shape: 'T'`: Turmdrehkran hebt Fertigteil-Module (3 je Stockwerk) vom Tieflader; ein Tieflader = ein Stockwerk;

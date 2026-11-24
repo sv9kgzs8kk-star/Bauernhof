@@ -55,7 +55,7 @@ function drawWoodHouseIcon(F, x, y, w, h) {
 // Bauort: dieselben Bau-Minispiele bauen das Wohnhaus oder (mit ?ort=wache) die Feuerwache. site() = Fortschritt des Bauorts.
 const ORT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('ort') === 'wache' ? 'wache' : 'haus';
 const FIRE_TYPE = { key: 'fire', word: 'firestation', floors: 2, loads: 3, trusses: 0, shape: 'F', steps: ['baggern', 'beton', 'garage', 'wache', 'schlauchturm'] };
-const FIRE_READY = 4;                                  // so viele Bauschritte der Feuerwache gibt es schon als Spiel
+const FIRE_READY = 5;                                  // so viele Bauschritte der Feuerwache gibt es schon als Spiel
 const houseType = () => { if (ORT === 'wache') return FIRE_TYPE; const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
 function site() {
   const s = Hof.save;
@@ -779,5 +779,42 @@ function drawFireStation(F, x, y, w, h, o = {}) {
   const fg = fireGeo(x, y, w, h), st = o.step || 0;
   if (st >= 3) drawGarage(F, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], time: o.time });
   if (st >= 4) drawMain(F, fg.main, { done: true, time: o.time });
+  if (st >= 5) { drawGaragePad(F, fg.garage, o.time); drawHoseTower(F, fg.main, { blocks: HOSE_BLOCKS, cap: true, time: o.time }); }
   return fg;
 }
+
+// ---------- Feuerwache: Schlauchturm (3 Blöcke + Haube) hinten rechts auf dem Hauptgebäude, Landeplatz auf dem Hallendach ----------
+Object.assign(WORDS, { hosetower: ['SCHLAUCHTURM', 'Schlauchturm'], block: ['BLOCK', 'Block'] });
+const HOSE_BLOCKS = 3;
+// Turm-Grundfläche auf dem Dach des Hauptgebäudes m: x, w, d; gy = Bodenpunkt (Mitte), base = Höhe des Dachs, bh = Blockhöhe, ch = Haube
+function hoseGeo(m) {
+  const w = Math.max(4, Math.round(m.w * 0.42)), d = Math.max(4, Math.round(m.d * 0.45)), dy = Math.max(1, Math.round(m.d * 0.06));
+  return { x: m.x + m.w - w - Math.max(1, Math.round(m.w * 0.06)), w, d, gy: m.top + m.fh + dy + Math.round(d / 2), base: m.fh,
+    bh: Math.max(3, Math.round(m.fh * 0.36)), ch: Math.max(2, Math.round(m.fh * 0.2)) };
+}
+// Ein Turmblock (oder die Haube): Bodenpunkt-Mitte (cx, gy), Höhe e der Unterkante, h hoch
+function drawHoseBlock(F, cx, gy, w, d, h, e, cap = false, time = 0) {
+  const x = Math.round(cx - w / 2), y0 = Math.round(gy - d / 2 - e - h);
+  if (cap) {                                          // Haube: graues Dach mit Überstand, Sirene obendrauf
+    F('#4a4d50', x - 1, y0, w + 2, d + h); F('#8d9196', x, y0 + 1, w, d - 1); F('#a8aeb4', x, y0 + 1, w, 1); F('#6a6e72', x, y0 + d, w, h - 1);
+    if (w >= 8) { const sx = Math.round(cx) - 2, sy = y0 + Math.round(d / 2) - 2, on = Math.floor(time / 400) % 2; F('#333', sx, sy, 4, 4); F(on ? '#3fa9f5' : '#1c5e9e', sx + 1, sy + 1, 2, 2); }
+    return;
+  }
+  F(FIRE_BRICK[0], x, y0, w, d + h); F(FIRE_BRICK[2], x + 1, y0 + 1, w - 2, d - 2);                  // Oberseite (Mauerkrone)
+  F(FIRE_BRICK[1], x + 1, y0 + d, w - 2, h - 1); F('#d8c8a8', x, y0 + d + h - 1, w, 1);              // Vorderseite, Fuge unten
+  for (let yy = y0 + d + 3; yy < y0 + d + h - 2; yy += 4) F(FIRE_BRICK[0], x + 1, yy, w - 2, 1);    // Ziegelreihen
+  if (w >= 8 && h >= 8) { const sw = Math.max(2, Math.round(w * 0.18)); F('#2e1f10', Math.round(cx - sw / 2), y0 + d + 2, sw, h - 5); F('#6cc4f0', Math.round(cx - sw / 2), y0 + d + 2, sw, 1); }   // Fensterschlitz
+}
+// Schlauchturm auf dem Hauptgebäude; o: { blocks 0..3, cap, time }
+function drawHoseTower(F, m, o = {}) {
+  const t = hoseGeo(m), cx = t.x + t.w / 2;
+  for (let k = 0; k < (o.blocks || 0); k++) drawHoseBlock(F, cx, t.gy, t.w, t.d, t.bh, t.base + k * t.bh);
+  if (o.cap) drawHoseBlock(F, cx, t.gy, t.w, t.d, t.ch, t.base + HOSE_BLOCKS * t.bh, true, o.time);
+}
+// Landeplatz-Platte auf dem Hallendach (oder am Haken): Bodenpunkt-Mitte (cx, gy), Unterkante auf Höhe e
+function drawPadSlab(F, cx, gy, w, d, e, time) {
+  const x = Math.round(cx - w / 2), y = Math.round(gy - d / 2 - e) - 2;
+  F('#2e3134', x, y, w, d + 2); F('#3a3d40', x + 1, y + 1, w - 2, d - 2);
+  drawHelipad(F, x, y, w, d, time);
+}
+function drawGaragePad(F, gg, time) { drawPadSlab(F, gg.x + gg.w / 2, gg.y + gg.d / 2 + gg.fh, gg.w - 2, gg.d - 2, gg.fh, time); }

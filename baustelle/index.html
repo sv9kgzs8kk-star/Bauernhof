@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124c">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124d">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261124c"></script>
-<script src="../gemeinsam/basis.js?v=20261124c"></script>
-<script src="../gemeinsam/bau.js?v=20261124c"></script>
+<script src="../gemeinsam/sterne.js?v=20261124d"></script>
+<script src="../gemeinsam/basis.js?v=20261124d"></script>
+<script src="../gemeinsam/bau.js?v=20261124d"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -167,6 +167,13 @@ const Hub = (() => {
     const w = 2*G, h = 2*G;
     if (k === 'P' && fireOpen()) {                 // Feuerwache: Baustelle (Grube, Bodenplatte, …)
       const st = (save.fire && save.fire.step) | 0;
+      if (st >= 5) {                               // fertig: Hof aus Beton, Ausfahrt vor den Toren, ohne Bauzaun und Schild
+        B('#7d8185', x+1, y+1, w-2, h-2); B('#a2a8ae', x+2, y+2, w-4, h-4);
+        for (let i = 0; i < w-6; i += 6) B('#959ba1', x+3+i, y+2, 1, h-4);
+        const fg = drawFireStation(B, x+5, y+12, w-10, h-20, { step: st });
+        B('#e9eef2', fg.garage.x, y+h-8, fg.garage.w, 1); B('#d35400', fg.garage.x, y+h-5, fg.garage.w, 1);   // Ausfahrt-Markierung
+        return;
+      }
       B('#a08060', x+1, y+1, w-2, h-2); for (let i = 0; i < 30; i++) B(i % 2 ? '#8a6a4c' : '#b8987a', x+3+((i*13)%(w-8)), y+3+((i*7)%(h-8)), 2, 2);
       if (st >= 1) { B('#5a4030', x+7, y+9, w-14, h-18); B('#4a3426', x+8, y+10, w-16, 3); }
       if (st >= 2) { B('#8d9196', x+7, y+9, w-14, h-18); B('#a8aeb4', x+8, y+10, w-16, h-20); }

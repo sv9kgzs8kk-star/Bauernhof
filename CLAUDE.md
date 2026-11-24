@@ -9,7 +9,7 @@ index.html                  ← Startseite: leitet sofort in die STADT weiter (`
 hof.html                    ← Bauernhof (Laufen/Fahren, Besucherin, Scheunen-Laden, Menü)
 baustelle/index.html        ← Welt STADT (Kachel „STADT“, Ordner bleibt `baustelle/`): Bauhof als begehbare Karte, **nur zu Fuß** (Bauarbeiter; Bagger und Kipper stehen geparkt als Deko; Bauplatz `S` → Bau-Spiel des aktuellen Schritts)
                               mit Stadtplan: `F` Bauernhof (fertig, 0,8 s stehen → hof.html), `P` Feuerwache, `Q` Bahnhof (gesperrt,
-                              **Feuerwache** (`P`): frei, sobald das Hochhaus einmal fertig war (`house.towerDone`, `fireOpen()`); dann Baustelle mit Bauzaun.
+                              **Feuerwache** (`P`): frei, sobald das Hochhaus einmal fertig war (`house.towerDone`, `fireOpen()`); dann Baustelle mit Bauzaun und Bauschild (Feuerwache-Bild, 5 Kästchen für die Schritte, `drawFireIcon`).
                               Fortschritt `save.fire.step` (0–5). Bau-Minispiele mit `?ort=wache` bauen die Wache statt des Hauses (`ORT`, `site()`, `FIRE_TYPE` in bau.js;
                               `goHof` führt dann nach `#wache`). Schritte: baggern, beton (fertig), garage (Wandplatten), wache (mauern), schlauchturm (Blöcke, Turmdrehkran, Landeplatz).
                               `FIRE_READY` = so viele Schritte sind schon spielbar. Testlink `?wache=N` (Schritt setzen, Hochhaus gilt als gebaut).

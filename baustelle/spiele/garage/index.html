@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261124b">
+<title>Fahrzeughalle</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="khud" class="hud gamehud hidden">
+  <div class="pill" data-say="garage" style="pointer-events:auto"><span class="word">FAHRZEUGHALLE</span> <span id="kcount">0/8</span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261124b"></script>
+<script src="../../../gemeinsam/basis.js?v=20261124b"></script>
+<script src="../../../gemeinsam/bau.js?v=20261124b"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
+const save = Hof.save;
+const house = () => site();   // Feuerwache (?ort=wache)
+let winTimer = null;
+// Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
+function finishStep(step, key, back) {
+  Hof.load(); house().step = Math.max(house().step, step); save.stars += BAU_STARS_STEP; Hof.persist();
+  setTimeout(() => {
+    document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+    $('wingain').textContent = BAU_STARS_STEP;
+    const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+    $('winword').dataset.say = key; $('winword').querySelector('.word').textContent = WORDS[key][0];
+    show('gwin'); sfx.win(); confetti();
+    setTimeout(() => sayWord(key), 1400);
+    winTimer = setTimeout(() => goHof(back), 4200);
+  }, 400);
+}
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: FAHRZEUGHALLE DER FEUERWACHE (fire.step 2 → 3) – schräg von oben wie der Kran beim Wohnhaus
+   Der Autokran hebt 6 fertige Teile vom Tieflader: Rückwand, 2 Seitenwände, Vorderwand links/rechts (mit Torloch), Flachdach.
+   Teil antippen oder Ausleger über den Tieflader ziehen → Haken geht runter und hebt es an; über der leuchtenden Stelle loslassen
+   oder die Stelle antippen. Ein Tieflader bringt 3 Teile. Danach die 2 Torlöcher antippen: Rolltore fahren herunter.
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('garage')));
+if (ORT !== 'wache') location.replace(location.pathname + '?ort=wache');
+
+function siteGeo() {                                   // wie beim Kran: Bodenplatte mittig, rechts Platz für den Autokran
+  const hw = clamp(gc - 5, 3, 6) * G, hh = Math.min(4, gr - 4) * G;   // hochkant: Halle nicht zu schmal, der Kran rückt an den Rand
+  const hx = Math.max(G / 2, Math.min(Math.round((gc * G - hw) / 2) - G, gc * G - hw - Math.round(2.9 * G))), hy = Math.max(G, Math.round(((gr - 1) * G - hh) / 2));
+  return { hx, hy, hw, hh };
+}
+function paintGround(g) {
+  for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+    const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+  }
+  const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
+  const x0 = g.hx - 14, y0 = g.hy - 14, w = g.hw + 28 + 3 * G, h = g.hh + 26;
+  for (let x = x0; x <= x0 + w; x += 9) B('#d35400', x, y0 - 2, 2, 7);
+  for (let y = y0; y <= y0 + h; y += 9) { B('#d35400', x0, y, 2, 6); B('#d35400', x0 + w, y, 2, 6); }
+  B('#ffffff', x0, y0, w + 2, 2); B('#ffffff', x0, y0, 2, h); B('#ffffff', x0 + w, y0, 2, h);
+  B('#6a7076', g.hx - 2, g.hy - 2, g.hw + 4, g.hh + 4); B('#a2a8ae', g.hx - 1, g.hy - 1, g.hw + 2, g.hh + 2);   // Bodenplatte
+  for (let i = 0; i < g.hw * g.hh / 60; i++) B(i % 2 ? '#989ea4' : '#b0b6bc', g.hx + (i * 37) % g.hw, g.hy + (i * 23) % g.hh, 2, 1);
+}
+
+const Q = snapF(R, 2);
+const Halle = (() => {
+  let g, gg, slots, crane, truck, hook, carry, queue, done, paused = false, placed, follow, idle = 0, delivered = 0, finger = null, gates, gateK, phase;
+  const N = GARAGE_PARTS, PER_TRUCK = 3, TIP = 50;
+  const liftH = lh => Math.round(4 + lh * 22);
+  const slot = () => slots[Math.min(placed, N - 1)];
+  function enter() {
+    Hof.load();
+    if (site().step !== 2) { goHof(); return; }
+    layout(true);
+    g = siteGeo(); gg = fireGeo(g.hx, g.hy, g.hw, g.hh).garage; slots = garageSlots(gg); gates = garageGates(gg);
+    paintGround(g);
+    crane = { x: g.hx + g.hw + Math.round(1.7 * G), y: g.hy + 14 };
+    const park = g.hx + Math.round(g.hw / 2) - 28;
+    delivered = PER_TRUCK;
+    truck = { x: park, park, y: Math.min((gr - 1) * G + 3, gr * G - 20), load: delivered, state: 'park' };
+    hook = { x: crane.x - 30, y: crane.y + 30, lh: 1, vx: 0 };
+    placed = 0; carry = null; queue = []; done = null; follow = null; idle = 0; gateK = [0, 0]; phase = 'crane';
+    show('khud'); hud();
+    setTimeout(() => sayWord('garage'), 400);
+  }
+  $('pausebtn').addEventListener('click', () => { if (done !== null) return; paused = true; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+  function hud() { $('kcount').textContent = (placed + gateK.filter(k => k >= 1).length) + '/' + (N + 2); }
+  const pickPt = () => [truck.x + 22, truck.y + FLATBED_SLOTS[Math.max(0, truck.load - 1)] + 1];
+  const slotPt = () => [slot().x, slot().y];
+  const busy = () => queue.length > 0;
+  function to(x, y, lh, then) { queue.push({ x, y, lh, then }); }
+  function fetch() {
+    const [x, y] = pickPt(); sfx.click(); follow = null;
+    to(x, y, 1); to(x, y, 0, () => { carry = { ang: 0, k: 0 }; truck.load--; sfx.clod(); sayWord(slot().roof ? 'flatroof' : 'panel'); });
+    to(x, y, 1, () => {
+      if (truck.load <= 0) { truck.state = 'leave'; sfx.honk(); }
+      if (finger) follow = { x: finger.x, y: finger.y, sx: finger.x, sy: finger.y };
+    });
+  }
+  function place() {
+    const [x, y] = slotPt(); follow = null;
+    to(x, y, 1); to(x, y, 0, () => {
+      carry = null; placed++; hud(); sfx.bonk();
+      for (let k = 0; k < 12; k++) spawn(x + rnd(-10, 10), y + rnd(-6, 6), rnd(-25, 25), rnd(-20, 5), .5, '#cfc8b8', 30);
+    });
+    to(x, y, 1, () => { if (placed >= N) { phase = 'gates'; to(crane.x - 30, crane.y + 30, 1); setTimeout(() => sayWord('rolltor'), 700); } });
+  }
+  function closeGate(i) {
+    if (gateK[i] > 0) return;
+    gateK[i] = 0.01; sfx.click();
+  }
+  function finish() {
+    done = 0; hide('khud'); sfx.unlock(); confetti();
+    setTimeout(() => finishStep(3, 'garage', 'garage'), 1600);
+  }
+  const onTruck = (x, y) => truck.state === 'park' && truck.load > 0 && x > truck.x - 8 && x < truck.x + 64 && y > truck.y - 10 && y < truck.y + 26;
+  const nearSlot = (x, y, r) => { if (placed >= N) return false; const s = slot();
+    if (s.roof) return Math.abs(x - s.x) < s.w / 2 + r && Math.abs(y - s.y) < s.h / 2 + r;
+    const hx = s.ang ? r : s.len / 2 + r, hy = s.ang ? s.len / 2 + r : r; return Math.abs(x - s.x) < hx && Math.abs(y - s.y) < hy; };
+  const gateAt = (x, y) => {                          // nächstes noch offenes Tor in der Nähe
+    let best = -1, bd = 1e9;
+    gates.forEach(([gx, gy, gw, gh], i) => { if (gateK[i] > 0) return; const d = Math.hypot(x - (gx + gw / 2), y - (gy + gh / 2));
+      if (d < bd && x > gx - 12 && x < gx + gw + 12 && y > gy - 14 && y < gy + gh + 14) { bd = d; best = i; } });
+    return best; };
+  function onPointer(type, x, y) {
+    if (paused || done !== null) return true;
+    idle = 0;
+    if (phase === 'gates') {
+      if (type === 'down') { const i = gateAt(x, y); if (i >= 0) closeGate(i); else { const j = gateK.findIndex(k => k === 0); if (j >= 0 && y > gg.y) closeGate(j); } }
+      return true;
+    }
+    if (type === 'down' || type === 'move') finger = { x, y }; else if (type === 'up') finger = null;
+    if (type === 'down') {
+      if (busy()) return true;
+      if (!carry && onTruck(x, y)) { fetch(); return true; }
+      if (carry && nearSlot(x, y, 10)) { place(); sfx.click(); return true; }
+      follow = { x, y, sx: x, sy: y };
+      return true;
+    }
+    if (type === 'move' && follow) { follow.x = x; follow.y = y; return true; }
+    if (type === 'up' && follow) {
+      const f = follow; follow = null;
+      if (carry && nearSlot(hook.x, hook.y, 26)) place();
+      else if (!carry && Math.hypot(f.x - f.sx, f.y - f.sy) < 8 && nearSlot(x, y, 14)) { fetch(); queue.push({ thenPlace: true }); }
+    }
+    return true;
+  }
+  function update(dt) {
+    if (paused || !hook) return;
+    idle += dt;
+    if (carry) { carry.k = approach(carry.k, hook.lh > 0.5 ? 1 : 0, 2.4 * dt); carry.ang = approach(carry.ang, hook.lh > 0.5 ? slot().ang : 0, 2.4 * dt); }
+    const ox = hook.x, q = queue[0];
+    if (q && q.thenPlace) { queue.shift(); place(); }
+    else if (q) {
+      const d = Math.hypot(q.x - hook.x, q.y - hook.y), sp = 170 * dt;
+      if (d > sp) { hook.x += (q.x - hook.x) / d * sp; hook.y += (q.y - hook.y) / d * sp; }
+      else { hook.x = q.x; hook.y = q.y; hook.lh = approach(hook.lh, q.lh, 2.2 * dt);
+        if (hook.lh === q.lh) { queue.shift(); if (q.then) q.then(); } }
+    } else if (follow) {
+      const d = Math.hypot(follow.x - hook.x, follow.y - hook.y), sp = 260 * dt;
+      if (d > sp) { hook.x += (follow.x - hook.x) / d * sp; hook.y += (follow.y - hook.y) / d * sp; } else { hook.x = follow.x; hook.y = follow.y; }
+      hook.x = clamp(hook.x, 8, W - 8); hook.y = clamp(hook.y, 30, H - 8);
+      if (!carry && onTruck(hook.x, hook.y)) fetch();
+    }
+    if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 10) { if (delivered >= N) { truck.state = 'gone'; truck.x = -200; } else { truck.load = Math.min(PER_TRUCK, N - delivered); delivered += truck.load; truck.x = -70; truck.state = 'arrive'; } } }
+    else if (truck.state === 'arrive') { truck.x = approach(truck.x, truck.park, 110 * dt); if (truck.x === truck.park) { truck.state = 'park'; sfx.honk(); } }
+    hook.vx = approach(hook.vx, (hook.x - ox) / Math.max(dt, 1e-3), 600 * dt);
+    for (let i = 0; i < 2; i++) if (gateK[i] > 0 && gateK[i] < 1) {          // Rolltor rattert herunter
+      const a = gateK[i]; gateK[i] = Math.min(1, a + dt / 1.4);
+      if (Math.floor(a * 8) !== Math.floor(gateK[i] * 8)) sfx.beep();
+      if (gateK[i] >= 1) { sfx.load(); hud(); if (gateK.every(k => k >= 1)) finish(); }
+    }
+    if (done !== null) done += dt;
+    setEngine(phase === 'crane', busy() || !!follow, 30);
+  }
+  // Teil auf dem Tieflader (liegend) bzw. am Haken
+  function drawPiece(i, cx, cy, len, ang, lift, k = 0) {
+    const s = slots[i];
+    if (s.roof) { const w = Math.round(40 + (s.w - 40) * k), h = Math.round(6 + (s.h - 6) * k);
+      if (lift) Q('rgba(0,0,0,.2)', Math.round(cx - w / 2) + 2 + Math.round(lift * 6), Math.round(cy - h / 2) + 2 + Math.round(lift * 6), w, h);
+      drawFlatRoof(Q, cx, cy, w, h); }
+    else drawPanelTop(Q, cx, cy, len, ang, lift);
+  }
+  function draw(time) {
+    if (!truck) return;
+    ctx.drawImage(bg, 0, 0);
+    drawFlatbedTop(Q, Math.round(truck.x), truck.y, 0, 0, 3);
+    for (let j = 0; j < truck.load; j++) {           // Teile auf dem Tieflader: das oberste wird als Nächstes geholt
+      const i = Math.min(N - 1, placed + (carry ? 1 : 0) + (truck.load - 1 - j));
+      drawPiece(i, Math.round(truck.x) + 22, truck.y + FLATBED_SLOTS[j] + 1, 40, 0, 0);
+    }
+    drawGarage(Q, gg, { parts: placed, gates: gateK, time });
+    const a = Math.abs(Math.sin(time / 260)) > .5;
+    if (phase === 'crane' && placed < N) {            // leuchtende Zielstelle
+      const s = slot(), col = carry ? (a ? 'rgba(126,217,87,.9)' : 'rgba(126,217,87,.5)') : (a ? 'rgba(255,210,63,.85)' : 'rgba(255,210,63,.45)');
+      if (s.roof) { const x = Math.round(s.x - s.w / 2), y = Math.round(s.y - s.h / 2); R(col, x, y, s.w, 3); R(col, x, y + s.h - 3, s.w, 3); R(col, x, y, 3, s.h); R(col, x + s.w - 3, y, 3, s.h); }
+      else if (s.ang) R(col, s.x - 3, s.y - Math.round(s.len / 2), 7, s.len); else R(col, s.x - Math.round(s.len / 2), s.y - 3, s.len, 7);
+    }
+    if (phase === 'gates') gates.forEach(([gx, gy, gw, gh], i) => { if (gateK[i] === 0) { const col = a ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.45)'; R(col, gx - 2, gy - 2, gw + 4, 2); R(col, gx - 2, gy + gh, gw + 4, 2); R(col, gx - 2, gy, 2, gh); R(col, gx + gw, gy, 2, gh); } });
+    // Autokran mit Last
+    drawMobileCraneBody(Q, crane.x, crane.y, 1);
+    const sway = clamp(-hook.vx * 0.04, -8, 8), lh = liftH(hook.lh), lx = hook.x + sway, ly = hook.y - lh;
+    if (carry) { const s = slot(), len = Math.round(Math.min(s.len, 40) + (s.len - Math.min(s.len, 40)) * carry.k);
+      drawPiece(Math.min(placed, N - 1), lx, ly + 4, len, carry.ang, hook.lh, carry.k); }
+    else Q('rgba(0,0,0,.2)', Math.round(hook.x) - 2, Math.round(hook.y), 5, 3);
+    drawMobileCraneBoom(Q, crane.x, crane.y, hook.x, hook.y, TIP);
+    drawRope(R, Math.round(hook.x), Math.round(hook.y - TIP), Math.round(lx), Math.round(ly));
+    // Hinweise
+    if (done !== null) return;
+    const b = Math.abs(Math.sin(time / 220)) * 4;
+    if (phase === 'gates') { const j = gateK.findIndex(k => k === 0); if (j >= 0) { const [gx, gy, gw] = gates[j]; drawArrow(Math.round(gx + gw / 2 - 3), Math.round(gy - 20 - b)); } return; }
+    if (!busy() && !follow) {
+      if (!carry && truck.state === 'park') { const [x, y] = pickPt(); drawArrow(Math.round(x - 3), Math.round(y - 22 - b)); }
+      else if (carry) {
+        const s = slot(), ay = s.y - (s.roof ? Math.round(s.h / 2) : s.ang ? Math.round(s.len / 2) : 0); drawArrow(Math.round(s.x - 3), Math.round(ay - 18 - b));
+        if (idle > 2) { const k = (time / 1200) % 1, n = 6; for (let i = 0; i < n; i++) { const u = i / n; if (Math.abs(u - k) < 0.12) R('rgba(255,210,63,.9)', Math.round(hook.x + (s.x - hook.x) * u) - 1, Math.round(hook.y - 20 + (ay - hook.y + 20) * u) - 1, 3, 3); } }
+      }
+    }
+  }
+  function resize() { layout(false); }
+  function exit() { setEngine(false, false); clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ placed, N, phase, gateK, truck, hook, carry: !!carry, slot: slotPt(), pick: pickPt(), gates, busy: busy() }) };
+})();
+startLoop(Halle);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

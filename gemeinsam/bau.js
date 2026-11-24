@@ -55,7 +55,7 @@ function drawWoodHouseIcon(F, x, y, w, h) {
 // Bauort: dieselben Bau-Minispiele bauen das Wohnhaus oder (mit ?ort=wache) die Feuerwache. site() = Fortschritt des Bauorts.
 const ORT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('ort') === 'wache' ? 'wache' : 'haus';
 const FIRE_TYPE = { key: 'fire', word: 'firestation', floors: 2, loads: 3, trusses: 0, shape: 'F', steps: ['baggern', 'beton', 'garage', 'wache', 'schlauchturm'] };
-const FIRE_READY = 2;                                  // so viele Bauschritte der Feuerwache gibt es schon als Spiel
+const FIRE_READY = 3;                                  // so viele Bauschritte der Feuerwache gibt es schon als Spiel
 const houseType = () => { if (ORT === 'wache') return FIRE_TYPE; const h = typeof Hof !== 'undefined' && Hof.save && Hof.save.house; return HOUSE_TYPES[Math.min(HOUSE_TYPES.length - 1, Math.max(0, (h && h.type) | 0))]; };
 function site() {
   const s = Hof.save;
@@ -663,4 +663,70 @@ function drawHelicopter(F, x, y, time, a = 0, spin = 1, k = 1.6) {
   const r = (time || 0) / 1000 * 25 * spin, L = 14 * k;
   for (const o of [0, Math.PI / 2]) { const ca = Math.cos(r + o), sa = Math.sin(r + o); pixLine(F, x - ca * L, y - sa * L, x + ca * L, y + sa * L, 2, 'rgba(30,30,30,.75)'); }
   F('#222', x - 2, y - 2, 4, 4);
+}
+
+// ---------- Feuerwache: Fahrzeughalle aus Wandplatten (links), später Hauptgebäude (rechts) und Schlauchturm ----------
+Object.assign(WORDS, { firestation: ['FEUERWACHE', 'Feuerwache'], garage: ['FAHRZEUGHALLE', 'Fahrzeughalle'], panel: ['WANDPLATTE', 'Wandplatte'],
+  rolltor: ['ROLLTOR', 'Rolltor'], flatroof: ['DACH', 'Dach'] });
+// Grundriss auf der Bodenplatte x,y,w,h (schräg von oben wie drawHouseTop: oben die Dachfläche d, vorne die Wand fh)
+function fireGeo(x, y, w, h) {
+  const gw = Math.max(12, Math.round(w * 0.56)), d = Math.round(h * 0.55);
+  return { garage: { x, y, w: gw, d, fh: h - d }, main: { x: x + gw + 3, y, w: w - gw - 3, h } };
+}
+// Rolltore in der Vorderwand der Halle: [x, y, w, h]
+function garageGates(gg) {
+  const p = Math.max(2, Math.round(gg.w * 0.07)), gw = Math.round((gg.w - 3 * p) / 2), gh = Math.max(3, gg.fh - Math.max(2, Math.round(gg.fh * 0.22)));
+  return [[gg.x + p, gg.y + gg.d + gg.fh - gh, gw, gh], [gg.x + gg.w - p - gw, gg.y + gg.d + gg.fh - gh, gw, gh]];
+}
+// Die 6 Teile der Halle (Reihenfolge = Bau-Reihenfolge): Rückwand, Seitenwände, Vorderwand links/rechts (je mit Torloch), Dach
+const GARAGE_PARTS = 6, PANEL_T = 4;
+function garageSlots(gg) {
+  const { x, y, w, d } = gg, t = PANEL_T, hw = Math.round(w / 2);
+  return [
+    { x: x + hw, y: y + (t >> 1), len: w, ang: 0 },
+    { x: x + (t >> 1), y: y + Math.round(d / 2), len: d, ang: Math.PI / 2 },
+    { x: x + w - (t >> 1), y: y + Math.round(d / 2), len: d, ang: Math.PI / 2 },
+    { x: x + Math.round(hw / 2), y: y + d - (t >> 1), len: hw, ang: 0 },
+    { x: x + hw + Math.round((w - hw) / 2), y: y + d - (t >> 1), len: w - hw, ang: 0 },
+    { x: x + hw, y: y + Math.round(d / 2), len: w, ang: 0, roof: true, w: w + 4, h: d + 4 },
+  ];
+}
+const PANEL_COL = { base: '#d9d3c5', edge: '#8f887a', light: '#f0ebe0', joint: '#b8b1a2', red: '#c0392b', redD: '#8e1f1f' };
+// Wandplatte von oben als Balken (Mitte cx,cy, Länge len, Winkel ang); lift 0..1 = Höhe (Schatten wandert)
+function drawPanelTop(F, cx, cy, len, ang, lift = 0) {
+  const ca = Math.cos(ang) * len / 2, sa = Math.sin(ang) * len / 2, sh = Math.round(2 + lift * 6);
+  pixLine(F, cx - ca + sh, cy - sa + sh, cx + ca + sh, cy + sa + sh, 5, 'rgba(0,0,0,.22)');
+  pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 6, PANEL_COL.edge); pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 4, PANEL_COL.base); pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 1, PANEL_COL.light);
+}
+// Flachdach-Platte von oben (Mitte cx,cy, Größe w×h)
+function drawFlatRoof(F, cx, cy, w, h) {
+  const x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+  F('#5f646a', x, y, w, h); F('#8d9196', x + 1, y + 1, w - 2, h - 2); F('#a8aeb4', x + 1, y + 1, w - 2, 1);
+  for (let i = 0, k = x * 7 + y * 3; i < w * h / 30; i++) { k = (k * 9301 + 49297) % 233280; F(k % 2 ? '#7a7f85' : '#9ca2a8', x + 2 + k % Math.max(1, w - 4), y + 2 + (k >> 5) % Math.max(1, h - 4), 1, 1); }   // Kies
+  F('#5f646a', x + 2, y + 2, w - 4, 1); F('#5f646a', x + 2, y + h - 3, w - 4, 1); F('#5f646a', x + 2, y + 2, 1, h - 4); F('#5f646a', x + w - 3, y + 2, 1, h - 4);   // Attika
+}
+// Fahrzeughalle zeichnen; o: { parts 0..6 (gesetzte Teile), gates [k0, k1] (0 = offen, 1 = Rolltor ganz unten), time }
+function drawGarage(F, gg, o = {}) {
+  const { x, y, w, d, fh } = gg, t = PANEL_T, n = o.parts || 0, C = PANEL_COL, hw = Math.round(w / 2), gates = garageGates(gg), gk = o.gates || [0, 0];
+  if (n >= 1) {                                       // Rückwand: Krone oben, Innenseite darunter
+    F(C.joint, x, y + t, w, Math.min(fh, d + fh - t)); for (let xx = x + 8; xx < x + w - 2; xx += 10) F(C.edge, xx, y + t, 1, Math.min(fh, d + fh - t));
+    F(C.edge, x, y, w, t); F(C.light, x, y, w, 1);
+  }
+  for (const [i, wx] of [[1, x], [2, x + w - t]]) if (n > i) { F(C.edge, wx, y, t, d + fh); F(C.base, wx + 1, y + 1, t - 2, d - 1); F(C.joint, wx + 1, y + d, t - 2, fh - 1); }   // Seitenwände
+  for (const [i, px, pw, gi] of [[3, x, hw, 0], [4, x + hw, w - hw, 1]]) if (n > i) {   // Vorderwand links/rechts: Krone und Fassade mit Torloch
+    F(C.edge, px, y + d - t, pw, t); F(C.light, px, y + d - t, pw, 1);
+    F(C.edge, px, y + d, pw, fh); F(C.base, px + (i === 3 ? 1 : 0), y + d, pw - 1, fh - 1);
+    F(C.red, px, y + d + 1, pw, Math.max(1, Math.round(fh * 0.12))); F(C.edge, px + pw - 1, y + d, 1, fh);   // roter Streifen, Fuge
+    const [gx, gy, gW, gH] = gates[gi];
+    F('#2a2a2a', gx, gy, gW, gH); F('#444', gx + 1, gy + gH - 2, gW - 2, 2);   // Torloch (Halle innen dunkel)
+    const k = clamp(gk[gi] || 0, 0, 1), rh = Math.round(gH * k);
+    if (rh > 0) {                                     // Rolltor kommt von oben herunter
+      F(C.redD, gx, gy, gW, rh); F(C.red, gx + 1, gy, gW - 2, rh);
+      for (let yy = gy + 2; yy < gy + rh; yy += 3) F(C.redD, gx + 1, yy, gW - 2, 1);
+      if (k >= 1 && gH > 10) { const wy = gy + Math.round(gH * 0.3); for (let wx = gx + 2; wx + 3 < gx + gW - 1; wx += 5) F('#9fe3ff', wx, wy, 3, 2); }   // Fensterreihe
+      F('#555', gx, gy + rh - 1, gW, 1);
+    }
+    F(C.edge, gx - 1, gy - 1, gW + 2, 1);
+  }
+  if (n >= 6) drawFlatRoof(F, x + Math.round(w / 2), y + Math.round(d / 2), w + 4, d + 4);
 }

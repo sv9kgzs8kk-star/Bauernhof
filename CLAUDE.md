@@ -42,6 +42,13 @@ feuerwache/index.html       ← Feuerwache innen (HOF_URL = '../baustelle/index.
                               Schläuche hinten links antippen = wackeln; Landematte der Rutschstange), rechts hinten Umkleide (vor den Spinden 0,5 s stehen = Feuerwehranzug an/aus, `gear`),
                               rechts vorne Leitstelle (Funkgerät antippen), Haustür, Treppe unten rechts. OG: Schlafraum (Betten = schlafen), Loch der Rutschstange (0,35 s drauf = runterrutschen),
                               Küche, Aufenthaltsraum. Kind und Wegesuche wie im Wohnhaus. Test: `?wache=5&sterne=20`.
+                              **Alarm** (nur in der Wache, erster nach 10–16 s, nach einem Einsatz 25–40 s): rotes Blinken, Gong, Bild des Einsatzes oben, Pfeil.
+                              Michael: **erst den Feuerwehranzug anziehen** (Spind), dann zum leuchtenden Fahrzeug (antippen oder danebenstellen) → einsteigen,
+                              Tor auf, alle Fahrzeuge des Einsatzes (`EINSAETZE[key].veh`) fahren raus → `spiele/einsatz/index.html?e=<key>`. Zurück mit `#einsatz` (im Anzug neben dem Fahrzeug).
+feuerwache/spiele/einsatz/  ← Einsatz-Szene (HOF_URL = '../../index.html'): Auto kommt mit Blaulicht, unten Werkzeugleiste (`E.tools`), richtiges Werkzeug (`E.tool`) löst den Einsatz;
+                              falsches = lustige Reaktion („Das passt nicht“), nach 2 Fehlversuchen oder 8 s leuchtet das richtige. Geschafft: 1 Stern, `Hof.fireMission()` (fire.missions + 1).
+                              Einsatz 1 KATZE IM BAUM (`katze`, Löschfahrzeug, Leiter): Leiter fährt aus, Kind im Anzug klettert hoch, bringt die Katze dem Mädchen.
+gemeinsam/feuerwehr.js      ← Feuerwehr gemeinsam: `EINSAETZE` (neue Einsätze hier eintragen), `drawFireTruck()` (von oben, 'down'/'right'), `drawToolIcon()`, `drawCat()`, `drawKidPal()`, `GEAR_PAL`, `drawEinsatzIcon()`.
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen.
                               Holzhaus (`WOOD`): L-förmig, Holzwände/-böden, unten Wohnzimmer mit Kamin (linker Flügel), Küche und Bad (rechter Flügel),

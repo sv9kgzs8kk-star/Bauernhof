@@ -36,6 +36,12 @@ baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): b
                               (Abriss: Schild „Neues Haus“ über dem Bauplatz (Zelle oy/ox+5), steht sobald das fertige Haus einmal betreten wurde (`house.seenInside`, nach Abriss wieder false), beim ersten Mal wackelt es und wird vorgelesen (`house.signIntro`); 0,8 s davor stehen → Karte Haus → Abrissbirne → neues Haus → Umzug (Möbel antippen → Kiste → Transporter),
                               Abrissbirne am Autokran (Kugel zur Seite ziehen und loslassen, Antippen geht auch), Schutt wegbaggern wie beim Graben (über Schuttfelder fahren, Schaufel voll → zum Kipper); danach `Hof.demolishHouse`: house.pick = true, maxType +1.
                               Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)
+feuerwache/index.html       ← Feuerwache innen (HOF_URL = '../baustelle/index.html', zurück nach `#wache`): fertige Wache (fire.step 5) in der Stadt betreten,
+                              einmal für `FIRE_PRICE` Sterne freischalten (`Hof.unlockFire`, `save.fire.unlocked`). Zum Entdecken, Alarme kommen später (nur hier drinnen).
+                              EG: links Fahrzeughalle (Löschfahrzeug `lf`, Rüstwagen `rw`: antippen = Blaulicht + Martinshorn; 2 Rolltore in der Vorderwand antippen = auf/zu;
+                              Schläuche hinten links antippen = wackeln; Landematte der Rutschstange), rechts hinten Umkleide (vor den Spinden 0,5 s stehen = Feuerwehranzug an/aus, `gear`),
+                              rechts vorne Leitstelle (Funkgerät antippen), Haustür, Treppe unten rechts. OG: Schlafraum (Betten = schlafen), Loch der Rutschstange (0,35 s drauf = runterrutschen),
+                              Küche, Aufenthaltsraum. Kind und Wegesuche wie im Wohnhaus. Test: `?wache=5&sterne=20`.
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen.
                               Holzhaus (`WOOD`): L-förmig, Holzwände/-böden, unten Wohnzimmer mit Kamin (linker Flügel), Küche und Bad (rechter Flügel),

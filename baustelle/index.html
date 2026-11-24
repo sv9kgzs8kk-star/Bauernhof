@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124d">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124e">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261124d"></script>
-<script src="../gemeinsam/basis.js?v=20261124d"></script>
-<script src="../gemeinsam/bau.js?v=20261124d"></script>
+<script src="../gemeinsam/sterne.js?v=20261124e"></script>
+<script src="../gemeinsam/basis.js?v=20261124e"></script>
+<script src="../gemeinsam/bau.js?v=20261124e"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -314,6 +314,7 @@ const Hub = (() => {
           if (pickHere) { openPick(); return; }
           sayWord(homeHere ? 'house' : PLOTS[t].word);
           const fs = (save.fire && save.fire.step) | 0;
+          if (t === 'P' && fireOpen() && fs >= 5) { enterFire(); return; }   // fertige Feuerwache: hinein (einmal freischalten)
           if (t === 'P' && fireOpen() && fs < FIRE_READY) { entering = true; sfx.enter(); setTimeout(() => { location.href = 'spiele/' + FIRE_TYPE.steps[fs] + '/index.html?ort=wache'; }, 900); return; }   // Feuerwache bauen
           if (homeHere) enterHome();
           else if (PLOTS[t].page) { entering = true; sfx.enter(); setTimeout(() => { location.href = PLOTS[t].page; }, 900); }
@@ -383,6 +384,25 @@ const Hub = (() => {
       missingId: () => 'shopbuy',
       onBuy: () => { Hof.unlockHome(); confetti(); setTimeout(() => { hide('shop'); shopOpen = false; goHome(); }, 1200); },
       onPlay: () => { shopOpen = false; goHome(); },
+      onHome: () => { hide('shop'); shopOpen = false; show('ctrl'); show('hubhud'); $('starcount').textContent = save.stars; }
+    });
+  }
+  // Fertige Feuerwache betreten: offen → hinein, sonst Laden (freischalten gegen Sterne, wie das Wohnhaus)
+  const FIRE_PAGE = '../feuerwache/index.html', FIRE_PRICE = 10;
+  const fireUnlocked = () => !!(save.fire && save.fire.unlocked);
+  function goFire() { entering = true; sfx.enter(); setTimeout(() => { location.href = FIRE_PAGE; }, 900); }
+  function enterFire() {
+    if (fireUnlocked()) { goFire(); return; }
+    shopOpen = true; clearTapGoal(); clearHeld(); hide('hubhud');
+    openShop({
+      stats: () => [['star', save.stars, 'star', 'shopstar']],
+      item: { word: WORDS.firestation[0], sayKey: 'firestation', price: () => fireUnlocked() ? null : FIRE_PRICE,
+              draw: el => { const c = document.createElement('canvas'); c.width = 28; c.height = 20; c.style.cssText = 'width:84px;height:60px;image-rendering:pixelated';
+                const x = c.getContext('2d'); drawFireIcon((col, a, b, w, h) => { x.fillStyle = col; x.fillRect(a, b, w, h); }, 0, -2); el.innerHTML = ''; el.appendChild(c); } },
+      canPlay: fireUnlocked,
+      missingId: () => 'shopbuy',
+      onBuy: () => { Hof.unlockFire(); confetti(); setTimeout(() => { hide('shop'); shopOpen = false; goFire(); }, 1200); },
+      onPlay: () => { shopOpen = false; goFire(); },
       onHome: () => { hide('shop'); shopOpen = false; show('ctrl'); show('hubhud'); $('starcount').textContent = save.stars; }
     });
   }

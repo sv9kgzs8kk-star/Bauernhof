@@ -22,6 +22,48 @@ const EINSATZ_KEYS = Object.keys(EINSAETZE);
 // Feuerwehranzug fürs Kind (KID aus moebel.js): gelber Helm, dunkelblaue Jacke mit gelbem Streifen
 const GEAR_PAL = { h: '#ffd23f', r: '#24346b', w: '#ffd23f', b: '#24346b', n: '#111' };
 
+// Feuerwehrauto von der Seite (Einsätze, Michael: einheitliche Perspektive). x = hinten links, by = Unterkante der Räder, L = Länge, fährt nach rechts.
+// key 'lf' = Löschfahrzeug (hoher Aufbau mit Rollläden, Steckleiter auf dem Dach), 'dlk' = Drehleiter (niedriger Aufbau, Drehkranz hinten,
+// Leiterpaket übers Fahrerhaus, Korb vorne); deployed = Stützen unten, Leiter nicht gezeichnet (die zeichnet das Spiel vom Drehkranz zum Korb).
+// Drehkranz der Drehleiter liegt bei (x + round(L * 0.32), by - 27).
+function drawFireTruckSide(F, x, by, L, key, on = false, deployed = false) {
+  x = Math.round(x); by = Math.round(by);
+  const dlk = key === 'dlk', cx = x + L - 25, bodyTop = dlk ? by - 23 : by - 30, active = on !== null;
+  F('rgba(0,0,0,.25)', x + 2, by - 2, L - 2, 3);
+  if (dlk && deployed) for (const sx of [x + 5, x + L - 31]) { F('#555', sx, by - 12, 4, 14); F('#333', sx - 2, by + 1, 8, 2); F('#ffd23f', sx, by - 8, 4, 2); }   // Stützen
+  F('#333', x + 2, by - 11, L - 4, 3);                                                     // Fahrgestell
+  // Aufbau
+  F('#7a1a12', x, bodyTop, L - 25, by - 9 - bodyTop); F('#c0392b', x + 1, bodyTop + 1, L - 27, by - 11 - bodyTop); F('#e0604c', x + 1, bodyTop + 1, L - 27, 1);
+  if (!dlk) { const n = 3, pw = Math.floor((L - 33) / n);                                  // Rollläden der Geräteräume
+    for (let i = 0; i < n; i++) { const px = x + 3 + i * (pw + 1); F('#9aa0a6', px, bodyTop + 4, pw, by - 17 - bodyTop); for (let yy = bodyTop + 5; yy < by - 13; yy += 2) F('#c8ccd0', px, yy, pw, 1); F('#555', px + Math.round(pw / 2) - 1, by - 15, 3, 1); }
+    F('#c8ccd0', x + 3, bodyTop - 3, L - 31, 1); F('#c8ccd0', x + 3, bodyTop - 1, L - 31, 1);   // Steckleiter auf dem Dach
+    for (let lx = x + 5; lx < x + L - 29; lx += 5) F('#9aa0a6', lx, bodyTop - 3, 1, 3);
+  } else { for (let i = 0; i < 3; i++) { const px = x + 3 + i * 16; F('#b8bcc0', px, bodyTop + 3, 14, by - 16 - bodyTop); F('#555', px + 6, by - 15, 3, 1); } }   // Geräteklappen
+  F('#ffd23f', x, by - 13, L - 25, 1); F('#f2f2f2', x, by - 12, L - 25, 1);               // Warnstreifen
+  F('#555', x - 1, by - 12, 2, 3);                                                         // Trittstufe hinten
+  // Fahrerhaus (vorne rechts): schräge Scheibe, Seitenfenster, Tür
+  const ct = by - 28;
+  for (let yy = ct; yy < by - 9; yy++) { const slope = yy < by - 18 ? Math.round((by - 18 - yy) * 0.45) : 0; F(yy === ct ? '#e0604c' : '#c0392b', cx, yy, 25 - slope, 1); }
+  F('#7a1a12', cx, ct, 1, by - 9 - ct);
+  for (let yy = ct + 3; yy < by - 19; yy++) { const slope = Math.round((by - 18 - yy) * 0.45); F('#1c2430', cx + 17, yy, 7 - slope, 1); F('#3d8fc9', cx + 18, yy, 5 - slope, 1); }   // Windschutzscheibe
+  F('#1c2430', cx + 3, ct + 3, 12, 7); F('#3d8fc9', cx + 4, ct + 4, 10, 5); F('#6cc4f0', cx + 4, ct + 4, 4, 5); F('#d6f2ff', cx + 9, ct + 4, 1, 3);   // Seitenfenster
+  F('#7a1a12', cx + 2, ct + 3, 1, by - 12 - ct - 3); F('#7a1a12', cx + 16, ct + 3, 1, by - 12 - ct - 3); F('#333', cx + 12, by - 17, 3, 1);   // Tür
+  F('#f2f2f2', cx + 3, by - 15, 12, 1);
+  F('#3a3a3a', x + L - 3, by - 12, 3, 3); F('#fff6c0', x + L - 2, by - 16, 2, 3); F('#e03b3b', x, by - 17, 1, 3);   // Stoßstange, Scheinwerfer, Rücklicht
+  // Blaulichter: Balken auf dem Fahrerhaus, eins hinten
+  const lamp = (lx, ly, lit) => { F('#163a63', lx, ly, 6, 3); F(lit ? '#5cc0ff' : '#1c5e9e', lx + 1, ly, 4, 2); if (lit) F('rgba(92,192,255,.35)', lx - 2, ly - 2, 10, 6); };
+  F('#333', cx + 5, ct - 1, 14, 1); lamp(cx + 5, ct - 3, active && on); lamp(cx + 13, ct - 3, active && !on); lamp(x + 2, bodyTop - (dlk ? 3 : 6), active && !on);
+  if (dlk) {                                           // Drehkranz hinten, Leiterpaket nach vorne übers Fahrerhaus, Korb vorne
+    const tx = x + Math.round(L * 0.32);
+    F('#555', tx - 8, by - 26, 16, 3); F('#8a8f94', tx - 6, by - 27, 12, 2); F('#c0392b', tx - 3, by - 30, 6, 4);
+    if (!deployed) { const x1 = x + L - 3;
+      for (let lx = tx; lx < x1; lx++) { const yy = by - 31 - Math.round((lx - tx) * 0.04); F('#7f8388', lx, yy, 1, 4); F('#c8ccd0', lx, yy, 1, 1); F('#c8ccd0', lx, yy + 3, 1, 1); if ((lx - tx) % 5 === 0) F('#c8ccd0', lx, yy, 1, 4); }
+      F('#9aa0a6', x1 - 2, by - 38, 9, 7); F('#e8e8e8', x1 - 1, by - 37, 7, 5); F('#c0392b', x1 - 1, by - 35, 7, 1); }   // Korb
+  }
+  // Räder
+  for (const wx of dlk ? [x + 11, x + 24, x + L - 15] : [x + 14, x + L - 15]) { F('#1b1b1b', wx - 5, by - 11, 10, 11); F('#1b1b1b', wx - 6, by - 10, 12, 9); F('#9aa0a6', wx - 2, by - 7, 4, 4); F('#555', wx - 1, by - 6, 2, 2); }
+}
+
 // Feuerwehrauto von oben. x0,y0 = linke obere Ecke, L = Länge, Wd = Breite.
 // dir 'down': Fahrerhaus unten (steht in der Halle vor dem Tor), 'right': fährt nach rechts.
 // on = Blaulicht-Takt (true/false wechseln = blinkt; null = Blaulichter aus), glow = blauer Schein drumherum

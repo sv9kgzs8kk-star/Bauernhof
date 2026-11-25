@@ -317,7 +317,7 @@ const Einsatz = (() => {
       if (i > 0 && cut(i - 1)) { R('#e0c890', a, yt + 1, 2, t.th - 2); }                                             // Schnittfläche
       if (cut(i)) { R('#e0c890', b - 2, yt + 1, 2, t.th - 2); }
     }
-    for (const m of marks) if (!m.done) {             // gelbe Schnittlinie, wird beim Sägen dunkel
+    if (phase === 'saw') for (const m of marks) if (!m.done) {   // gelbe Schnittlinie erst nach der Wahl der Kettensäge (Michael), wird beim Sägen dunkel
       const yt = t.y - Math.round(t.th / 2) - 3, hh = t.th + 6, blink = phase === 'saw' && Math.floor(time / 300) % 2;
       for (let yy = 0; yy < hh; yy += 3) R(blink ? '#fff08a' : '#ffd23f', m.x - 1, yt + yy, 2, 2);
       if (m.p > 0) R('#2a1a10', m.x - 1, yt + 3, 2, Math.round((hh - 6) * m.p)); }
@@ -374,14 +374,13 @@ const Einsatz = (() => {
     ctx.drawImage(bg, 0, 0);
     if (cat.on === 'tree' && !(cat.anim && cat.anim.jump)) { const sh = react && react.k === 'hose' && react.t < 1.4 ? Math.round(Math.sin(time / 40) * 2) : 0; drawCat(R, Math.round(cat.x + sh), Math.round(cat.y), cat.s); }
     if (MUELL) drawBins(time);
-    if (BAUM) drawCar();
     if (HAUS) { drawHouseFire(time); for (const p of family) drawKidPal(R, p.x, p.y, p.pal, 2, false, false);
       R('#8a5a2b', family[1].x + 14, roadY - 12, 10, 6); R('#5a3b1c', family[1].x + 22, roadY - 15, 5, 5); R('#222', family[1].x + 25, roadY - 14, 1, 1); R('#8a5a2b', family[1].x + 14, roadY - 7, 2, 3); R('#8a5a2b', family[1].x + 21, roadY - 7, 2, 3);   // Hund
     } else if (!BAUM) drawKidPal(R, girl.x, girl.y, MUELL ? OWNER : GIRL, 2, false, false);   // beim Baum sitzt der Fahrer im Auto
     if (cat.on === 'girl') drawCat(R, Math.round(girl.x - 34), Math.round(girl.y - 18), cat.s);   // Katze sitzt wieder neben dem Mädchen
     const on = Math.floor(time / 150) % 2 === 1;
     drawFireTruck(R, truck.x, truck.y, L, WD, E.veh[0], 'right', on, false, truck.deployed);
-    if (BAUM) drawTree(time);
+    if (BAUM) { drawTree(time); drawCar(); }          // untere Spur liegt vor dem Feuerwehrauto (oben): Baum und Auto danach zeichnen
     if (FIRE && ['hoseup', 'spray', 'out', 'thanks'].includes(phase)) { const a = { x: truck.x + Math.round(L * 0.4), y: truck.y + 2 }, b = nozzle();   // Schlauch vom Auto zum Strahlrohr
       pixLine(R, a.x, a.y, b.x - 6, b.y + 10, 2, '#d8cfb4'); pixLine(R, b.x - 6, b.y + 10, b.x, b.y, 2, '#d8cfb4'); R('#9aa0a6', a.x - 2, a.y - 2, 5, 5); }
     if (phase === 'exit' || phase === 'back') R('#f2f2f2', Math.round(truck.x + L - 22), Math.round(truck.y - 4), 10, 4);   // offene Fahrertür

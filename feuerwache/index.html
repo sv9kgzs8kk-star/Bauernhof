@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125h">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125i">
 <title>Feuerwache</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261125h"></script>
-<script src="../gemeinsam/basis.js?v=20261125h"></script>
-<script src="../gemeinsam/moebel.js?v=20261125h"></script>
-<script src="../gemeinsam/bau.js?v=20261125h"></script>
-<script src="../gemeinsam/feuerwehr.js?v=20261125h"></script>
+<script src="../gemeinsam/sterne.js?v=20261125i"></script>
+<script src="../gemeinsam/basis.js?v=20261125i"></script>
+<script src="../gemeinsam/moebel.js?v=20261125i"></script>
+<script src="../gemeinsam/bau.js?v=20261125i"></script>
+<script src="../gemeinsam/feuerwehr.js?v=20261125i"></script>
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
@@ -575,13 +575,17 @@ const Wache = (() => {
     let deck = [], last = null;
     try { deck = JSON.parse(localStorage.getItem('wache.stapel') || '[]'); last = localStorage.getItem('wache.letzter'); } catch (e) {}
     deck = Array.isArray(deck) ? deck.filter(k => EINSAETZE[k]) : [];
+    let known = null; try { known = JSON.parse(localStorage.getItem('wache.alle') || 'null'); } catch (e) {}
+    if (!Array.isArray(known)) known = ['katze', 'haus', 'ball', 'unfall', 'baum', 'muell'];   // Stand vor dem Merken (#85)
+    const fresh = EINSATZ_KEYS.filter(k => !known.includes(k) && !deck.includes(k));
+    if (fresh.length && deck.length) deck.unshift(...fresh);   // neuer Einsatz (neu eingebaut) kommt als Nächstes dran, danach normal gemischt
     if (!deck.length) {
       deck = EINSATZ_KEYS.slice();
       for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
       if (deck.length > 1 && deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];   // auch über die Mischgrenze nie zweimal derselbe
     }
     const key = deck.shift();
-    try { localStorage.setItem('wache.stapel', JSON.stringify(deck)); localStorage.setItem('wache.letzter', key); } catch (e) {}
+    try { localStorage.setItem('wache.stapel', JSON.stringify(deck)); localStorage.setItem('wache.letzter', key); localStorage.setItem('wache.alle', JSON.stringify(EINSATZ_KEYS)); } catch (e) {}
     return key;
   }
   const need = () => alarm ? EINSAETZE[alarm.key].veh : [];

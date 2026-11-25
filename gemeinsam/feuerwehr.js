@@ -6,7 +6,7 @@ Object.assign(WORDS, {
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
-  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], ballroof: ['BALL AUF DEM DACH', 'Ball auf dem Dach'], ball: ['BALL', 'Ball'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
+  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], ballroof: ['BALL AUF DEM DACH', 'Ball auf dem Dach'], astcar: ['AST AUF AUTO', 'Ast auf Auto'], branch: ['AST', 'Ast'], ball: ['BALL', 'Ball'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
@@ -15,6 +15,7 @@ const EINSAETZE = {
   ball: { word: 'ballroof', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // kleiner Einsatz: Ball auf dem Dach (Drehleiter)
   unfall: { word: 'crash', veh: ['lf'], tool: 'cutter', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // Autounfall: Tür klemmt (Rettungsschere ist im Löschfahrzeug)
   baum: { word: 'treeroad', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] }, // umgestürzter Baum (Kettensäge ist im Löschfahrzeug)
+  ast: { word: 'astcar', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // kleiner Einsatz: Ast auf geparktem Auto (Kettensäge)
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
 };
 const EINSATZ_KEYS = Object.keys(EINSAETZE);
@@ -127,6 +128,10 @@ function drawEinsatzIcon(F, x, y, key) {
   } else if (key === 'baum') {
     F('#555', x, y + 16, 30, 8); F('#ffffff', x + 3, y + 19, 4, 1); F('#ffffff', x + 12, y + 19, 4, 1); F('#ffffff', x + 21, y + 19, 4, 1);   // Straße
     F('#6b4423', x + 2, y + 13, 18, 5); F('#4a2e14', x + 2, y + 13, 18, 1); F('#24561f', x + 17, y + 6, 12, 12); F('#3f8f37', x + 18, y + 7, 10, 9);   // Stamm, Krone
+  } else if (key === 'ast') {
+    F('#2e9e5b', x + 2, y + 13, 24, 7); F('#2e9e5b', x + 7, y + 8, 13, 6); F('#9fe3ff', x + 9, y + 9, 9, 3); F('#222', x + 5, y + 19, 4, 4); F('#222', x + 19, y + 19, 4, 4);   // Auto
+    F('#6b4423', x + 20, y + 2, 10, 3); F('#6b4423', x + 12, y + 5, 10, 3); F('#4a2e14', x + 12, y + 7, 10, 1);   // Ast quer übers Dach
+    F('#24561f', x + 3, y + 2, 11, 8); F('#3f8f37', x + 5, y + 3, 7, 5);   // Blätter
   } else if (key === 'muell') {
     F('#4a4d50', x + 9, y + 10, 13, 14); F('#6a6e72', x + 10, y + 11, 11, 12); F('#333', x + 8, y + 9, 15, 2);   // Tonne
     F('#e74c3c', x + 10, y + 1, 11, 8); F('#ff8a3c', x + 12, y + 3, 7, 6); F('#ffd23f', x + 14, y + 5, 3, 4); F('#e74c3c', x + 13, y - 2, 4, 3);   // Flammen

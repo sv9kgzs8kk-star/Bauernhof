@@ -75,8 +75,10 @@ const Einsatz = (() => {
   let BAR = 54, RH = 48, basket = null, target = null, pivot, Lmax, kid = { x: 0, y: 0, show: false, step: false };
   let crash = null, cuts = [], holdPt = null, driver = null, sparks = [];   // Autounfall: Auto, Schnittpunkte an der Tür, Fahrer
   const DRIVER = { h: '#2a1a10', s: '#c68642', r: '#3fa9f5', w: '#ffffff', b: '#34495e' };
-  let parked = null, branch = null, bmarks = [], bpieces = [], pile = null, carry = null, mate = null, home = null, amb = null, tow = null, tool = null, plaster = null, crane = null;   // Ast auf Auto
+  let parked = null, branch = null, bmarks = [], bpieces = [], pile = null, carry = null, mate = null, home = null, amb = null, tow = null, tool = null, plaster = null, crane = null, sani = null;   // Ast auf Auto
   const MATE_PAL = Object.assign({}, GEAR_PAL, { h: '#f2f2f2' });   // Kollege im Anzug
+  const SANI_PAL = { h: '#3a2a1a', r: '#e74c3c', w: '#ffffff', b: '#e74c3c', n: '#111' };   // Sanitäter
+  const PL_COLS = [['#3fa9f5', '#bfe3ff'], ['#ff6b8a', '#ffd0db'], ['#5cc98a', '#c9f2d9'], ['#ffd23f', '#fff1b3'], ['#9b59b6', '#e2c8ef']];   // bunte Pflaster: Farbe, Punkte
   let trunk = null, marks = [], pieces = [], car = null, sawT = 0, walkTo = null;   // Baum: Stamm, Schnittlinien, Stücke, wartendes Auto
   let bins = null, fires = [], house = null, family = [], sprayAt = null, aim = null, spraying = 0, steam = [], backFrom = null, owner = null;   // Mülltonne: Tonnen, Feuer { hp }, Spritzstelle, Zielpunkt
   const BOY = { h: '#5a3b1c', r: '#3fa9f5', w: '#ffffff', b: '#2c3e50' };
@@ -172,7 +174,7 @@ const Einsatz = (() => {
     const n = E.tools.length, gap = W < 240 ? 6 : 10, sw = Math.min(46, Math.floor((W - 12 - (n - 1) * gap) / n)), x0 = Math.round(W / 2 - (n * sw + (n - 1) * gap) / 2);   // schmal: Kästchen kleiner
     bar = E.tools.map((k, i) => ({ k, x: x0 + i * (sw + gap), y: H - BAR + Math.round((BAR - sw) / 2), w: sw, h: sw }));
     paint();
-    carry = null; amb = null; tow = null; tool = E.tool; plaster = null; crane = null;
+    carry = null; amb = null; tow = null; tool = E.tool; plaster = null; crane = null; sani = null;
     phase = 'arrive'; t = 0; wrong = 0; react = null; idle = 0; starGiven = false; basket = null; target = null; kid.show = false; aim = null; spraying = 0; steam = [];
     show('ihud'); setWord(E.word); tatuta();
     setTimeout(() => sayWord(E.word), 500);
@@ -293,8 +295,14 @@ const Einsatz = (() => {
     o.x += (tg.x - o.x) / d * sp; o.y += (tg.y - o.y) / d * sp; o.step = true; return false;
   }
   const CC = () => UNFALL ? crash : parked;
-  function stickPlaster() { plaster.st = 'on'; plaster.tOn = 0; driver.plaster = true; tone(700, .08, 'sine', .05); tone(940, .12, 'sine', .05, .09);
-    say('Danke! Jetzt tut es nicht mehr weh.'); for (let k = 0; k < 6; k++) hearts.push({ x: driver.x + rnd(-12, 12), y: driver.y - 30 - rnd(0, 10), t: -k * 0.15 }); }
+  function plasterGeo() {                              // Fenster mit großem Gesicht (16 × 16 Felder) links und Pflastern rechts
+    const pw0 = Math.min(W - 16, 420), ph0 = Math.min(H - BAR - 24, 250), K = Math.max(4, Math.floor(Math.min(ph0 - 24, pw0 * 0.55) / 16));
+    const fw = 16 * K, plw = 4 * K, plh = 2 * K, pw = Math.min(pw0, fw + plw + 3 * 16 + 20), ph = Math.max(fw + 24, 5 * (plh + 8) + 16);
+    const x = Math.round((W - pw) / 2), y = Math.round(Math.max(8, (H - BAR - ph) / 2)), fx = x + 14, fy = y + Math.round((ph - fw) / 2);
+    const cx = Math.round((fx + fw + x + pw) / 2), gap = (ph - 16) / 5;
+    return { x, y, w: pw, h: ph, K, fx, fy, pw: plw, ph: plh, spots: [{ x: fx + 6 * K, y: fy + 4.5 * K }, { x: fx + 10 * K, y: fy + 4.5 * K }],
+      home: PL_COLS.map((c, i) => ({ x: cx, y: Math.round(y + 8 + gap * (i + 0.5)) })) };
+  }
   const carTop = () => ({ x: parked.x + parked.w / 2, y: parked.by - Math.round(25 * parked.u) });
   const bedSpot = () => ({ x: tow.x + Math.round(3 * tow.u), by: tow.base - Math.round(15 * tow.u) });            // Auto mit der klemmenden Tür
   function putOnPile(q) { q.gone = true; q.held = false; pile.n++; sfx.clod(); tone(180, .1, 'triangle', .06); setWord('wood'); }
@@ -317,13 +325,16 @@ const Einsatz = (() => {
         } }
       if (type === 'up') for (const m of bmarks) { m.lx = m.ly = undefined; }
       return true; }
-    if (phase === 'plaster') {                        // Pflaster aus dem Verbandskasten auf die Stirn ziehen; Antippen = Kind holt es und klebt es auf
-      const pl = plaster;
-      if (type === 'down' && (pl.st === 'box' || pl.st === 'back') && Math.hypot(x - pl.x, y - pl.y) < 22) { pl.st = 'drag'; pl.x0 = x; pl.y0 = y; pl.moved = false; }
-      else if (type === 'down' && pl.st === 'box' && Math.hypot(x - driver.x, y - driver.y + 14) < 18) { pl.st = 'carry'; sfx.click(); }   // Fahrerin antippen geht auch
-      if (type === 'move' && pl.st === 'drag') { if (Math.hypot(x - pl.x0, y - pl.y0) > 8) pl.moved = true; if (pl.moved) { pl.x = x; pl.y = y; } }
-      if (type === 'up' && pl.st === 'drag') { if (!pl.moved) { pl.st = 'carry'; sfx.click(); setWord('plaster'); sayWord('plaster'); }
-        else if (Math.hypot(pl.x - driver.x, pl.y - (driver.y - 22)) < 20) stickPlaster(); else pl.st = 'back'; }
+    if (phase === 'plaster' && plaster.open >= 1 && !plaster.done) {   // großes Gesicht: 2 Pflaster auf die Wunde ziehen (antippen = Pflaster rutscht selbst hin)
+      const P = plaster, g = plasterGeo();
+      if (type === 'down') { const q = P.items.filter(q => q.spot < 0 && !q.anim).find(q => Math.abs(x - q.x) < g.pw / 2 + 8 && Math.abs(y - q.y) < g.ph / 2 + 8);
+        if (q) { P.drag = { q, ox: x - q.x, oy: y - q.y, x0: x, y0: y, moved: false }; sfx.click(); } }
+      if (type === 'move' && P.drag) { const d = P.drag; if (Math.hypot(x - d.x0, y - d.y0) > 6) d.moved = true; if (d.moved) { d.q.x = x - d.ox; d.q.y = y - d.oy; } }
+      if (type === 'up' && P.drag) { const d = P.drag, free = g.spots.map((sp, i) => i).filter(i => !P.items.some(q => q.spot === i || (q.anim && q.anim.spot === i)));
+        if (!d.moved) { if (free.length) d.q.anim = { x: g.spots[free[0]].x, y: g.spots[free[0]].y, spot: free[0] }; }
+        else { const i = free.sort((a, b) => Math.hypot(g.spots[a].x - d.q.x, g.spots[a].y - d.q.y) - Math.hypot(g.spots[b].x - d.q.x, g.spots[b].y - d.q.y))[0];
+          if (i != null && Math.hypot(g.spots[i].x - d.q.x, g.spots[i].y - d.q.y) < g.K * 3) d.q.anim = { x: g.spots[i].x, y: g.spots[i].y, spot: i }; else d.q.anim = { x: d.q.hx, y: d.q.hy, spot: -1 }; }   // daneben: zurück
+        P.drag = null; }
       return true; }
     if (phase === 'crane') {                          // Kran: Haken mit dem Finger steuern (ziehen oder hintippen)
       if ((type === 'down' || type === 'move') && y < H - BAR) crane.target = { x, y: y - 14 };   // Finger zeigt auf den Haken, die Auslegerspitze ist darüber
@@ -475,18 +486,27 @@ const Einsatz = (() => {
         amb.siren += dt; if (Math.floor(amb.siren * 2) !== Math.floor((amb.siren - dt) * 2) && (!amb.arrived || amb.leave)) tone(Math.floor(amb.siren * 2) % 2 ? 784 : 587, .4, 'square', .03);
         if (!amb.arrived) { amb.x = approach(amb.x, amb.stop, 120 * dt); if (amb.x === amb.stop) { amb.arrived = t; } }
         else if (!amb.plastered) { amb.open = clamp(amb.open + dt * 3, 0, 1);
-          if (amb.open >= 1 && !plaster) { const bx = Math.round(Math.min(W - 10, amb.x + amb.w + 16)), by = amb.base - 2;
-            plaster = { bx, by, x: bx, y: by - 14, st: 'box' }; go('plaster'); setWord('plaster'); say('Sie hat eine Schramme. Klebe ihr ein Pflaster auf!'); } }
-        else if (!driver.in) { amb.open = clamp(amb.open + dt * 3, 0, 1); if (amb.open >= 1 && walkP(driver, { x: amb.x + amb.w + 4, y: amb.base - 2 }, 50 * dt)) { driver.in = true; tone(300, .1, 'triangle', .05); say('Gute Besserung!'); amb.t2 = t; } }
+          if (amb.open >= 1 && !sani) { sani = { x: amb.x + amb.w + 4, y: amb.base - 2, step: false, show: true }; tone(500, .08, 'square', .03); }   // Sanitäter steigt hinten aus
+          if (sani && !plaster && walkP(sani, { x: driver.x + 16, y: driver.y }, 55 * dt)) {   // … läuft zur Fahrerin, dann großes Gesicht
+            const g = plasterGeo(); plaster = { open: 0, done: false, t: 0, drag: null, items: PL_COLS.map((c, i) => ({ c, x: g.home[i].x, y: g.home[i].y, hx: g.home[i].x, hy: g.home[i].y, spot: -1, anim: null })) };
+            go('plaster'); setWord('plaster'); say('Sie hat eine Wunde. Klebe zwei Pflaster drauf!'); } }
+        else if (!driver.in) { amb.open = clamp(amb.open + dt * 3, 0, 1); const rear = { x: amb.x + amb.w + 4, y: amb.base - 2 };
+          const a = walkP(driver, rear, 50 * dt), b = !sani.show || walkP(sani, { x: rear.x + 12, y: rear.y }, 50 * dt);
+          if (a && b) { driver.in = true; tone(300, .1, 'triangle', .05); say('Gute Besserung!'); amb.t2 = t; } }
+        else if (sani.show) { if (walkP(sani, { x: amb.x + amb.w + 4, y: amb.base - 2 }, 50 * dt)) { sani.show = false; tone(300, .1, 'triangle', .05); amb.t2 = t; } }
         else if (!amb.leave) { amb.open = clamp(amb.open - dt * 3, 0, 1); if (t - amb.t2 > 1.4) amb.leave = true; }
         else { amb.x -= 140 * dt; if (amb.x < -amb.w - 20) { go('tow'); const u = parked.u; tow = { x: W + 20, w: Math.round(100 * u), u, base: parked.by, stop: parked.x + parked.w + 4, beep: 0, k: 0 }; setWord('tow'); sayWord('tow'); } }
         break; }
-      case 'plaster': { const pl = plaster, sp = 85 * dt;
-        if (pl.st === 'back') { pl.x = approach(pl.x, pl.bx, 200 * dt); pl.y = approach(pl.y, pl.by - 14, 200 * dt); if (pl.x === pl.bx && pl.y === pl.by - 14) pl.st = 'box'; }
-        if (pl.st === 'carry') { if (walkP(kid, { x: pl.bx - 12, y: pl.by }, sp)) { pl.st = 'carry2'; tone(500, .06, 'square', .03); } }
-        else if (pl.st === 'carry2') { pl.x = kid.x + 8; pl.y = kid.y - 16; if (walkP(kid, { x: driver.x + 14, y: driver.y }, sp)) stickPlaster(); }
-        else if (pl.st !== 'carry') walkP(kid, kid, sp);
-        if (pl.st === 'on') { pl.tOn += dt; kid.step = false; if (pl.tOn > 2.2) { amb.plastered = true; go('amb'); } }
+      case 'plaster': { const P = plaster, g = plasterGeo();   // Fenster geht auf, Pflaster rutschen an ihren Platz, nach 2 Pflastern lächelt sie
+        P.t += dt; P.open = P.done ? clamp(P.open - dt * 3, 0, 1) : clamp(P.open + dt * 4, 0, 1);
+        for (const q of P.items) if (q.anim) { const d = Math.hypot(q.anim.x - q.x, q.anim.y - q.y), v = 700 * dt;
+          if (d > v) { q.x += (q.anim.x - q.x) / d * v; q.y += (q.anim.y - q.y) / d * v; }
+          else { q.x = q.anim.x; q.y = q.anim.y; q.spot = q.anim.spot; q.anim = null;
+            if (q.spot >= 0) { tone(700, .08, 'sine', .05); tone(940, .1, 'sine', .05, .09); if (q.spot === 0 || q.spot === 1) setWord('plaster'); } } }
+        if (!P.done && P.items.filter(q => q.spot >= 0).length >= 2) { P.done = true; P.tDone = P.t; driver.plaster = P.items.find(q => q.spot >= 0).c; sfx.win();
+          say('Danke! Jetzt tut es nicht mehr weh.'); for (let k = 0; k < 6; k++) hearts.push({ x: driver.x + rnd(-12, 12), y: driver.y - 30 - rnd(0, 10), t: -k * 0.15 }); }
+        if (P.done) P.open = P.t - P.tDone > 1.8 ? clamp(P.open - dt * 4, 0, 1) : 1;
+        if (P.done && P.t - P.tDone > 2.2) { amb.plastered = true; go('amb'); }
         break; }
       case 'tow': {                                   // Abschleppwagen kommt rückwärts von rechts, piept; die beiden gehen zurück, damit man das Auto sieht
         walkP(kid, home, 85 * dt); walkP(mate, { x: home.x - 16, y: home.y }, 85 * dt);
@@ -689,15 +709,29 @@ const Einsatz = (() => {
       R('#4a2e14', lx, ly, 11, 7); R('#6b4423', lx + 1, ly + 1, 9, 5); R('#e0c890', lx + 3, ly + 2, 4, 3); }
     if (driver.out && !driver.in) { drawKidPal(R, driver.x, driver.y, { h: '#6b3e1e', s: '#c68642', r: '#9b59b6', w: '#ffffff', b: '#34495e' }, 2, false, phase === 'amb' && driver.plaster && Math.floor(time / 120) % 2 === 1);   // Fahrerin
       const fx = Math.round(driver.x), fy = Math.round(driver.y - 22);
-      if (driver.plaster) { R('#e8b88a', fx - 4, fy - 1, 9, 4); R('#f6dcc0', fx - 1, fy - 1, 3, 4); R('#c9966a', fx - 3, fy, 1, 1); R('#c9966a', fx + 3, fy + 2, 1, 1); }   // Pflaster
+      if (driver.plaster) { R(driver.plaster[0], fx - 4, fy - 1, 9, 3); R(driver.plaster[1], fx - 1, fy - 1, 3, 3); }   // Pflaster
       else { R('#d0302a', fx - 2, fy, 5, 1); R('#d0302a', fx + 1, fy + 1, 2, 1); } }   // Schramme
   }
-  function drawPlaster(time) {                          // Verbandskasten an der Hecktür, Pflaster (leuchtet, solange es noch drin liegt)
-    const pl = plaster; if (!pl || pl.st === 'on') return;
-    R('rgba(0,0,0,.25)', pl.bx - 8, pl.by - 1, 18, 2); R('#f4f4f4', pl.bx - 8, pl.by - 12, 16, 11); R('#c8c8c8', pl.bx - 8, pl.by - 2, 16, 1); R('#e74c3c', pl.bx - 2, pl.by - 10, 4, 7); R('#e74c3c', pl.bx - 5, pl.by - 8, 10, 3);   // Kasten mit Kreuz
-    const x = Math.round(pl.x), y = Math.round(pl.y);
-    if (pl.st === 'box' || pl.st === 'back') { const a = (0.35 + 0.4 * Math.abs(Math.sin(time / 220))).toFixed(2); R(`rgba(255,210,63,${a})`, x - 9, y - 6, 18, 11); }
-    R('#e8b88a', x - 6, y - 3, 12, 6); R('#f6dcc0', x - 2, y - 3, 4, 6); R('#c9966a', x - 5, y - 2, 1, 1); R('#c9966a', x + 4, y + 1, 1, 1); R('#c9966a', x - 5, y + 1, 1, 1); R('#c9966a', x + 4, y - 2, 1, 1);
+  function drawPlaster(time) {                          // großes Gesicht (sie schaut traurig, mit Pflastern lächelt sie) und bunte Pflaster daneben
+    const P = plaster; if (!P || P.open <= 0) return;
+    const g = plasterGeo(), K = g.K, k = P.open, sx = Math.round(g.x + g.w / 2 * (1 - k)), sy = Math.round(g.y + g.h / 2 * (1 - k)), sw = Math.round(g.w * k), sh = Math.round(g.h * k);
+    R('rgba(0,0,0,.35)', 0, 0, W, H - BAR); R('#1f2b33', sx - 3, sy - 3, sw + 6, sh + 6); R('#f4f1e8', sx, sy, sw, sh);
+    if (k < 1) return;
+    const F = (c, cx, cy, w = 1, h = 1) => R(c, g.fx + Math.round(cx * K), g.fy + Math.round(cy * K), Math.round(w * K), Math.round(h * K));
+    for (let r = 1; r < 16; r++) { const dy = r - 8.5, hw = Math.sqrt(Math.max(0, 49 - dy * dy * 0.95)); if (hw > 0.5) F('#c68642', 8 - hw, r, 2 * hw, 1); }   // Gesicht
+    F('#6b3e1e', 1.5, 0.5, 13, 3); F('#6b3e1e', 1, 2, 2, 8); F('#6b3e1e', 13, 2, 2, 8); F('#7d4a26', 4, 1, 6, 1);   // Haare
+    F('#b06f35', 0.8, 7.5, 1.2, 2.5); F('#b06f35', 14, 7.5, 1.2, 2.5);                       // Ohren
+    F('#222', 5, 7.5, 2, 2); F('#222', 10, 7.5, 2, 2); F('#ffffff', 5.5, 7.8, 0.6, 0.6); F('#ffffff', 10.5, 7.8, 0.6, 0.6);   // Augen
+    F('#e8968a', 3, 10.2, 2, 1); F('#e8968a', 12, 10.2, 2, 1);                                 // Bäckchen
+    if (P.done) { F('#7a2a20', 6, 12, 5, 1); F('#7a2a20', 5, 11, 1, 1); F('#7a2a20', 11, 11, 1, 1); }   // Lächeln
+    else { F('#7a2a20', 6, 12, 5, 1); F('#7a2a20', 5, 13, 1, 1); F('#7a2a20', 11, 13, 1, 1); if (Math.floor(time / 500) % 2) F('#9fe3ff', 4.2, 9.6, 0.7, 1.2); }   // traurig, kleine Träne
+    F('#c0392b', 4, 4.2, 8, 0.6); F('#e74c3c', 5, 4.8, 2, 0.5); F('#e74c3c', 9, 4, 2, 0.5); F('#a93226', 7, 4.6, 3, 0.4);   // Wunde auf der Stirn
+    if (!P.done) for (const [i, sp] of g.spots.entries()) if (!P.items.some(q => q.spot === i)) { const a = (0.25 + 0.35 * Math.abs(Math.sin(time / 240))).toFixed(2); R(`rgba(255,210,63,${a})`, Math.round(sp.x - g.pw / 2 - 2), Math.round(sp.y - g.ph / 2 - 2), g.pw + 4, g.ph + 4); }   // hier hin
+    const drawPl = q => { const x = Math.round(q.x - g.pw / 2), y = Math.round(q.y - g.ph / 2), w = g.pw, h = g.ph;
+      R('rgba(0,0,0,.2)', x + 2, y + 2, w, h); R(q.c[0], x, y, w, h); R(q.c[1], x + Math.round(w * 0.3), y + 1, Math.round(w * 0.4), h - 2);
+      for (let i = 0; i < 4; i++) R(q.c[1], x + 2 + Math.round((i % 2) * (w * 0.75)), y + 2 + Math.round(Math.floor(i / 2) * (h - 6)), 2, 2); };
+    for (const q of P.items) if (q !== (P.drag && P.drag.q)) drawPl(q);
+    if (P.drag) drawPl(P.drag.q);
   }
   function drawCar() {                                 // wartendes Auto von der Seite (fährt nach links), Fahrer im Fenster
     const x = Math.round(car.x), y = Math.round(car.y);
@@ -759,7 +793,7 @@ const Einsatz = (() => {
     drawFireTruck(R, truck.x, truck.y, L, WD, E.veh[0], 'right', on, false, truck.deployed);
     if (BAUM) { drawTree(time); drawCar(); }
     if (UNFALL) drawCrash(time);
-    if (AST) { if (tow) drawTow(time, false); drawParked(time); if (tow) drawTow(time, true); drawBranch(time); drawPile(time); if (amb) drawAmb(time); if (phase === 'plaster') drawPlaster(time); }          // untere Spur liegt vor dem Feuerwehrauto (oben): Baum und Auto danach zeichnen
+    if (AST) { if (tow) drawTow(time, false); drawParked(time); if (tow) drawTow(time, true); drawBranch(time); drawPile(time); if (amb) drawAmb(time); if (sani && sani.show) drawKidPal(R, sani.x, sani.y, SANI_PAL, 2, false, sani.step && Math.floor(time / 120) % 2 === 1); }          // untere Spur liegt vor dem Feuerwehrauto (oben): Baum und Auto danach zeichnen
     if (FIRE && ['hoseup', 'spray', 'out', 'thanks'].includes(phase)) { const a = { x: truck.x + Math.round(L * 0.4), y: truck.y + 2 }, b = nozzle();   // Schlauch vom Auto zum Strahlrohr
       pixLine(R, a.x, a.y, b.x - 6, b.y + 10, 2, '#d8cfb4'); pixLine(R, b.x - 6, b.y + 10, b.x, b.y, 2, '#d8cfb4'); R('#9aa0a6', a.x - 2, a.y - 2, 5, 5); }
     if (phase === 'exit' || phase === 'back') R('#f2f2f2', Math.round(truck.x + L - 22), Math.round(truck.y - 4), 10, 4);   // offene Fahrertür
@@ -784,13 +818,14 @@ const Einsatz = (() => {
     if ((UNFALL || AST) && phase === 'cut' && idle > 4 && !holdPt) { const c = cuts.find(c => c.p < 1); if (c) drawArrow(Math.round(c.x - 3), Math.round(c.y - 22 - Math.abs(Math.sin(time / 220)) * 4)); }
     for (const p of sparks) R(p.t < 0.25 ? '#fff6a0' : '#ffb347', Math.round(p.x), Math.round(p.y), 2, 2);
     if (AST && phase === 'asaw' && idle > 4) { const m = bmarks.find(m => !m.done); if (m) drawArrow(Math.round(m.x - 3), Math.round(m.y - 26 - Math.abs(Math.sin(time / 220)) * 4)); }
-    if (AST && phase === 'plaster' && idle > 4 && plaster.st === 'box') drawArrow(Math.round(plaster.x - 3), Math.round(plaster.y - 24 - Math.abs(Math.sin(time / 220)) * 4));
     if (AST && phase === 'crane' && idle > 4) { const p = crane.hooked ? { x: bedSpot().x + parked.w / 2, y: bedSpot().by - 30 } : { x: carTop().x, y: carTop().y - 10 }; drawArrow(Math.round(p.x - 3), Math.round(p.y - 14 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (AST && phase === 'acarry' && idle > 4 && !carry) { const q = bpieces.find(q => !q.gone); if (q) drawArrow(Math.round(q.c.x + q.dx - 3), Math.round(q.c.y + q.dy - 30 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (BAUM && phase === 'saw' && idle > 4) { const m = marks.find(m => !m.done); if (m) drawArrow(Math.round(m.x - 3), Math.round(trunk.y - trunk.th - 26 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (BAUM && phase === 'clear' && idle > 4) { const q = pieces.find(q => !q.gone && !q.anim); if (q) drawArrow(Math.round((q.a + (q.crown ? trunk.ce : q.b)) / 2 - 3), Math.round(trunk.y - trunk.th - 26 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (FIRE && phase === 'spray' && (idle > 4 || !aim)) { const f = fires.find(f => f.hp > 0); if (f) drawArrow(Math.round(f.x - 3), Math.round(f.y - f.h - 6 - Math.abs(Math.sin(time / 220)) * 4)); }   // Hinweis: aufs nächste Feuer
     for (const h of hearts) if (h.t > 0) { const x = Math.round(h.x), y = Math.round(h.y); R('#ff4d6d', x, y, 3, 3); R('#ff4d6d', x + 4, y, 3, 3); R('#ff4d6d', x, y + 2, 7, 3); R('#ff4d6d', x + 2, y + 5, 3, 2); }
+    if (AST && phase === 'plaster') { drawPlaster(time);
+      if (idle > 4 && plaster.open >= 1 && !plaster.done && !plaster.drag) { const q = plaster.items.find(q => q.spot < 0 && !q.anim); if (q) drawArrow(Math.round(q.x - 3), Math.round(q.y - plasterGeo().ph / 2 - 16 - Math.abs(Math.sin(time / 220)) * 4)); } }
     // Werkzeugleiste (nur in der Auswahl hell)
     const choose = phase === 'choose', hint = choose && (wrong >= 2 || idle > 15), pulse = Math.abs(Math.sin(time / 220));
     for (const s of bar) {
@@ -805,7 +840,7 @@ const Einsatz = (() => {
     if (phase === 'steer' && idle > 4 && cat.on === 'tree' && !cat.anim) { const c = catC(); drawArrow(Math.round(c.x - 3), Math.round(c.y - 26 - pulse * 4)); }
   }
   function resize() { layout(false); }
-  return { enter, update, draw, resize, onPointer, _dbg: () => ({ phase, t, wrong, cat: { on: cat.on, i: cat.i, x: cat.x, y: cat.y }, basket, bar, stars: Hof.save.stars, cuts, crash, marks, pieces: pieces.map(q => ({ a: q.a, b: q.b, gone: q.gone })), trunk, bmarks, bpieces: bpieces.map(q => ({ c: q.c, dx: q.dx, dy: q.dy, gone: q.gone })), pile, carry: !!carry, mate, amb, tow, tool, driver, parked, plaster, crane, fires: fires.map(f => ({ x: f.x, y: f.y, h: f.h, hp: f.hp })), kid }) };
+  return { enter, update, draw, resize, onPointer, _dbg: () => ({ phase, t, wrong, cat: { on: cat.on, i: cat.i, x: cat.x, y: cat.y }, basket, bar, stars: Hof.save.stars, cuts, crash, marks, pieces: pieces.map(q => ({ a: q.a, b: q.b, gone: q.gone })), trunk, bmarks, bpieces: bpieces.map(q => ({ c: q.c, dx: q.dx, dy: q.dy, gone: q.gone })), pile, carry: !!carry, mate, amb, tow, tool, driver, parked, plaster, crane, sani, pgeo: AST && plaster ? plasterGeo() : null, fires: fires.map(f => ({ x: f.x, y: f.y, h: f.h, hp: f.hp })), kid }) };
 })();
 startLoop(Einsatz);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

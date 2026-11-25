@@ -59,6 +59,11 @@ feuerwache/spiele/einsatz/  ← Einsatz-Szene (HOF_URL = '../../index.html'): Au
                               richtiges Werkzeug leuchtet erst nach 2 Fehlversuchen oder 15 s.
                               Einsatz 1 KATZE IM BAUM (`katze`, Drehleiter, Werkzeug Leiter): Stützen raus, Kind steigt in den Korb, Korb mit dem Finger steuern (ziehen/tippen, `Lmax` um den Drehkranz).
                               Katze sitzt erst unten im Baum und klettert höher, wenn der Korb nahe kommt (3 Stellen `spots`); ganz oben springt sie in den Korb. Korb zurück, Kind bringt die Katze dem Mädchen.
+                              Einsatz 2 MÜLLTONNE BRENNT (`muell`, `MUELL`, Löschfahrzeug, Werkzeug Schlauch): 3 Tonnen am Gehweg, die mittlere brennt (`drawBins`, `drawFlames()` in feuerwehr.js). Kind rollt den Schlauch zur Spritzstelle (`sprayAt`),
+                              dann mit dem Finger zielen (halten/ziehen oder tippen): Tropfen fliegen im Bogen zum Finger (`nozzle()`, `aim`, `spraying`), jeder Treffer im Feuer senkt `fire.hp`, Dampf (`steam`); aus → „Feuer aus!“, Nachbar bedankt sich.
+                              Dieses Löschen ist die Grundlage für spätere Feuer (Hausbrand). Reihenfolge der nächsten Einsätze (Michael, 25.11.): Hausbrand, umgestürzter Baum, Autounfall, dann kleine (Ball auf dem Dach, Ast auf Auto, Ente im Gullygitter).
+                              Kettensäge und Rettungsschere hat das Löschfahrzeug an Bord; der Rüstwagen kommt erst für größere Einsätze mit 2 Fahrzeugen (Sprungtuch, 2. Schlauch).
+                              Wache: Alarm wählt zufällig, aber nie zweimal denselben Einsatz hintereinander (`sessionStorage` `wache.einsatz`); nach `#einsatz` steht man neben dem Fahrzeug dieses Einsatzes.
 gemeinsam/feuerwehr.js      ← Feuerwehr gemeinsam: `EINSAETZE` (neue Einsätze hier eintragen), `drawFireTruck()` (von oben, 'down'/'right'; Windschutzscheibe vorne, 4 runde Blaulichter an den Ecken, `on = null` = aus), `drawToolIcon()`, `drawCat()`, `drawKidPal()`, `GEAR_PAL`, `drawEinsatzIcon()`.
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen.

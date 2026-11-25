@@ -119,10 +119,11 @@ const Einsatz = (() => {
     }
     if (UNFALL) {                                      // Auto steht schräg auf dem Bordstein, vorne an der Laterne; Feuerwehr hält links davon
       // Auto als Pixelbild im Raster 64 × 26 Einheiten (u Pixel je Einheit), Front rechts an der Laterne; Fahrertür = Einheiten x 30–44, y 6–23
-      const u = W >= 380 ? 2 : 1, cl = 64 * u, cx = Math.round(W * 0.62), by = roadY + 3, cx0 = cx - Math.round(cl / 2);
-      crash = { x: cx0, w: cl, h: 26 * u, u, by, post: cx0 + cl + 2, doorK: 0 };
+      const u = 0.8, cl = Math.round(64 * u),   // Michael: Auto kleiner als das Feuerwehrauto (L = 80 → Auto etwa 51 lang)
+      cx = Math.round(W * 0.62), by = roadY + 3, cx0 = cx - Math.round(cl / 2);
+      crash = { x: cx0, w: cl, h: Math.round(26 * u), u, by, post: cx0 + cl + 2, doorK: 0 };
       const P = (ux, uy) => ({ x: cx0 + Math.round(ux * u), y: by - Math.round(uy * u) });
-      crash.P = P; crash.door = { x: P(30, 0).x, w: 14 * u, top: P(0, 23).y, bot: P(0, 6).y };
+      crash.P = P; crash.door = { x: P(30, 0).x, w: Math.round(14 * u), top: P(0, 23).y, bot: P(0, 6).y };
       cuts = [{ ...P(43.5, 20), p: 0 }, { ...P(43.5, 9), p: 0 }, { ...P(30.5, 13), p: 0 }];   // Scharnier oben/unten (vorne), Schloss (hinten)
       driver = { x: P(37, 0).x, y: P(0, 16).y, out: false };
       truck.park = Math.max(4, crash.x - L - 26);
@@ -297,7 +298,7 @@ const Einsatz = (() => {
           if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
       case 'cut': {                                   // Kind läuft zum gedrückten Punkt, Schere schließt sich langsam
         const c = holdPt || cuts.find(c => c.p > 0 && c.p < 1) || null;
-        if (c) { const tx = crash.door.x - 12; kid.x = approach(kid.x, tx, 90 * dt); kid.y = approach(kid.y, crash.by + 14, 90 * dt); kid.step = Math.abs(kid.x - tx) > 1; }   // links neben der Tür, damit man die Punkte sieht
+        if (c) { const tx = crash.x - 8; kid.x = approach(kid.x, tx, 90 * dt); kid.y = approach(kid.y, crash.by + 14, 90 * dt); kid.step = Math.abs(kid.x - tx) > 1; }   // links neben der Tür, damit man die Punkte sieht
         if (holdPt && holdPt.p < 1) { holdPt.p = Math.min(1, holdPt.p + dt * 0.6);
           if (Math.floor(t * 6) !== Math.floor((t - dt) * 6)) tone(90 + holdPt.p * 60, .14, 'sawtooth', .025); }
         for (const q of cuts) if (q.p >= 1 && !q.done) { q.done = true; if (holdPt === q) holdPt = null; tone(900, .06, 'square', .05); tone(300, .12, 'square', .05, .05); sfx.clod();
@@ -374,9 +375,9 @@ const Einsatz = (() => {
   }
   function drawCrash(time) {                           // Unfallauto von der Seite als Pixelbild (Einheiten 64 × 26), Front rechts eingedrückt an der Laterne
     const c = crash, u = c.u, blink = Math.floor(time / 350) % 2, ox0 = c.x, by = c.by;
-    const RU = (col, x0, y0, x1, y1) => R(col, ox0 + Math.round(x0 * u), by - Math.round(y1 * u), Math.max(1, Math.round((x1 - x0) * u)), Math.max(1, Math.round((y1 - y0) * u)));   // Rechteck in Einheiten (y nach oben)
+    const RU = (col, x0, y0, x1, y1) => { const a = Math.round(x0 * u), b = Math.round(x1 * u), c0 = Math.round(y0 * u), c1 = Math.round(y1 * u); R(col, ox0 + a, by - c1, Math.max(1, b - a), Math.max(1, c1 - c0)); };   // Rechteck in Einheiten (y nach oben), lückenlos gerundet
     const k = c.doorK || 0, off = k > 0 && k < 1 ? { x: -k * 14, y: -k * 4 } : null;
-    R('rgba(0,0,0,.25)', ox0 + 2 * u, by - u, 60 * u, 2 * u);
+    R('rgba(0,0,0,.25)', Math.round(ox0 + 2 * u), by - 1, Math.round(60 * u), 2);
     // Unterteil (vorne eingedrückt) und Motorhaube
     for (let y = 5; y < 14; y++) { const l = 2 + (y < 7 || y > 12 ? 1 : 0), r = 62 - (y > 12 ? 2 : 0) - (y >= 8 && y <= 11 ? 3 : 0) - (y === 7 || y === 12 ? 1 : 0);
       RU(y === 13 ? '#ef7a6e' : y < 7 ? '#a93226' : '#d9534f', l, y, r, y + 1); }
@@ -393,9 +394,9 @@ const Einsatz = (() => {
     RU('#e03b3b', 2, 10, 4, 12); RU(blink ? '#ff9f1a' : '#7a4a10', 60, 12, 62, 13); RU(blink ? '#ff9f1a' : '#7a4a10', 1, 12, 3, 13);   // Rücklicht, Warnblinker
     // Fahrertür: Fugen, Griff; wird abgeschnitten → kippt weg und liegt am Boden, dahinter die Öffnung mit Sitz
     if (off || k >= 1) { RU('#2a2a2a', 30, 6, 44, 23); RU('#5a4a3a', 33, 7, 41, 15); RU('#4a3a2a', 39, 12, 42, 21); }
-    if (!driver.out) { const hx = Math.round(ox0 + 35 * u), hy = by - 21 * u, sz = 4 * u;   // Fahrer winkt im Fenster
-      R(DRIVER.s, hx, hy + u, sz, sz); R(DRIVER.h, hx, hy, sz, u + 1); R('#222', hx + u, hy + 2 * u, 1, 1); R('#222', hx + 3 * u - 1, hy + 2 * u, 1, 1);
-      if (Math.floor(time / 400) % 2) R(DRIVER.s, hx + sz + u, hy - u, 2 * u, 3 * u); }
+    if (!driver.out) { const hx = Math.round(ox0 + 34 * u), hy = Math.round(by - 21 * u);   // Fahrer winkt im Fenster
+      R(DRIVER.s, hx, hy + 1, 4, 4); R(DRIVER.h, hx, hy, 4, 2); R('#222', hx + 1, hy + 2, 1, 1); R('#222', hx + 3, hy + 2, 1, 1);
+      if (Math.floor(time / 400) % 2) R(DRIVER.s, hx + 5, hy - 1, 2, 3); }
     const drawDoor = (dx, dy) => { const X = v => v + dx, Y = v => v + dy;
       RU('#d9534f', X(30), Y(6), X(44), Y(14)); RU('#ef7a6e', X(30), Y(13), X(44), Y(14));
       for (let y = 14; y < 23; y++) { const r = 46 - (y - 14) * 0.9; RU('#d9534f', X(30), Y(y), X(Math.min(44, r)), Y(y + 1)); }
@@ -403,10 +404,10 @@ const Einsatz = (() => {
       RU('#7a1a12', X(30), Y(6), X(30.5), Y(23)); RU('#7a1a12', X(43.5), Y(6), X(44), Y(21)); RU('#333', X(32), Y(11), X(35), Y(12)); };
     if (k <= 0) { if (driver.out) drawDoor(0, 0); else { RU('#7a1a12', 30, 6, 30.5, 23); RU('#7a1a12', 43.5, 6, 44, 21); RU('#333', 32, 11, 35, 12); } }   // Tür zu: nur Fugen und Griff (Fenster bleibt fürs Gesicht)
     else if (k < 1) drawDoor(off.x, off.y);
-    else { R('#8e2a20', ox0 + 12 * u, by - 2 * u, 16 * u, 2 * u); R('#d9534f', ox0 + 12 * u, by - 2 * u, 16 * u, u); }   // Tür liegt flach am Boden
+    else { R('#8e2a20', Math.round(ox0 + 12 * u), by - 2, Math.round(16 * u), 2); R('#d9534f', Math.round(ox0 + 12 * u), by - 2, Math.round(16 * u), 1); }   // Tür liegt flach am Boden
     if (phase === 'cut') for (const q of cuts) if (!q.done) {   // leuchtende Schnittpunkte erst mit der Schere
-      const pul = Math.abs(Math.sin(time / 220)); R(`rgba(255,210,63,${(0.4 + pul * 0.5).toFixed(2)})`, q.x - 5, q.y - 5, 10, 10); R('#ffd23f', q.x - 3, q.y - 3, 6, 6);
-      if (q.p > 0) R('#2a1a10', q.x - 3, q.y - 3, Math.round(6 * q.p), 6); }
+      const pul = Math.abs(Math.sin(time / 220)); R(`rgba(255,210,63,${(0.4 + pul * 0.5).toFixed(2)})`, q.x - 3, q.y - 3, 7, 7); R('#ffd23f', q.x - 2, q.y - 2, 5, 5);   // klein, damit sie sich am kleineren Auto nicht überdecken
+      if (q.p > 0) R('#2a1a10', q.x - 2, q.y - 2, Math.round(5 * q.p), 5); }
     if (driver.out) drawKidPal(R, driver.x, driver.y, DRIVER, 2, false, phase === 'outcar' && Math.floor(time / 120) % 2 === 1);
   }
   function drawCar() {                                 // wartendes Auto von der Seite (fährt nach links), Fahrer im Fenster

@@ -461,10 +461,27 @@ let tapGoal = null;                             // { r, c }
 function setTapGoal(r, c) { tapGoal = { r, c }; }
 function clearTapGoal() { tapGoal = null; }
 // Nächste Richtung auf dem kürzesten Weg zum Ziel (oder neben das Ziel, wenn man nicht draufkann)
-function autoDir(m, passable) {
+// cost (optional): Kosten je Feld (z. B. Straße billig, Wiese teurer) → günstigster statt kürzester Weg
+function autoDir(m, passable, cost) {
   if (!tapGoal) return null;
   const g = tapGoal, ok = (r, c) => (r === g.r && c === g.c) || (!passable(g.r, g.c) && Math.abs(r - g.r) + Math.abs(c - g.c) === 1);
   if (ok(m.r, m.c)) { tapGoal = null; return null; }
+  if (cost) {                                   // Dijkstra: Ziel-Feld selbst kostet immer 1
+    const dist = new Map(), first = new Map(), open = [[0, m.r, m.c]], k0 = m.r*1000 + m.c; dist.set(k0, 0); first.set(k0, null);
+    while (open.length) {
+      let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+      const [d, r, c] = open.splice(bi, 1)[0], key = r*1000 + c;
+      if (d > dist.get(key)) continue;
+      if (key !== k0 && ok(r, c)) return first.get(key);
+      for (const [k, [dx, dy]] of Object.entries(DIRS)) {
+        const nr = r + dy, nc = c + dx, nk = nr*1000 + nc;
+        if (!passable(nr, nc)) continue;
+        const nd = d + (ok(nr, nc) ? 1 : cost(nr, nc));
+        if (nd < (dist.has(nk) ? dist.get(nk) : Infinity)) { dist.set(nk, nd); first.set(nk, first.get(key) || k); open.push([nd, nr, nc]); }
+      }
+    }
+    tapGoal = null; return null;
+  }
   const first = new Map(), q = [[m.r, m.c]]; first.set(m.r*1000 + m.c, null);
   while (q.length) {
     const [r, c] = q.shift();
@@ -480,7 +497,7 @@ function autoDir(m, passable) {
 }
 function moverUpdate(m, dt, opts) {
   m.bumpCd -= dt; m.shake = Math.max(0, m.shake - dt);
-  const want = !m.moving ? (held || autoDir(m, opts.passable)) : null;
+  const want = !m.moving ? (held || autoDir(m, opts.passable, opts.cost)) : null;
   if (!m.moving && want) {
     const ta = DIRS[want][2], d = angDiff(ta, m.a);
     if (Math.abs(d) > 0.02) { m.a += clamp(d, -11*dt, 11*dt); if (Math.abs(angDiff(ta, m.a)) < 0.08) m.a = ta; }
@@ -492,7 +509,7 @@ function moverUpdate(m, dt, opts) {
       const left = m.prog - 1;
       m.r = m.tr; m.c = m.tc; m.moving = false; m.prog = 0;
       if (opts.onArrive && opts.onArrive(m) === 'stop') { tapGoal = null; return; }
-      const next = held || autoDir(m, opts.passable);
+      const next = held || autoDir(m, opts.passable, opts.cost);
       if (next && next === m.dir && moverTry(m, opts.passable, next)) m.prog = left;
     }
   }

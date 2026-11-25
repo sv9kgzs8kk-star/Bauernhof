@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125b">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125c">
 <title>Feuerwache</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261125b"></script>
-<script src="../gemeinsam/basis.js?v=20261125b"></script>
-<script src="../gemeinsam/moebel.js?v=20261125b"></script>
-<script src="../gemeinsam/bau.js?v=20261125b"></script>
-<script src="../gemeinsam/feuerwehr.js?v=20261125b"></script>
+<script src="../gemeinsam/sterne.js?v=20261125c"></script>
+<script src="../gemeinsam/basis.js?v=20261125c"></script>
+<script src="../gemeinsam/moebel.js?v=20261125c"></script>
+<script src="../gemeinsam/bau.js?v=20261125c"></script>
+<script src="../gemeinsam/feuerwehr.js?v=20261125c"></script>
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
@@ -60,7 +60,7 @@ const Wache = (() => {
   let room, floor, level = 0, walls = [], spots = {}, stairs, kid, grid, idle = 0, swap = null, slide = null, night = null, atDoor = 0;
   let gear = false, gearT = 0, vehicles = [], gates = [0, 0], gateGoal = [0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
   let alarm = null, nextAlarm = 12, depart = null, nag = 0;   // Alarm: { key, t, g }; depart: Fahrzeuge rücken aus
-  let gym = null, gymAct = null, bagSwing = 0;               // Fitnessraum (OG): Geräte; gymAct = { k: 'run'|'lift', t, n } läuft gerade
+  let gym = null, gymAct = null, bagSwing = 0, lastShow = -1;   // lastShow: zuletzt gezeigte Fernsehsendung               // Fitnessraum (OG): Geräte; gymAct = { k: 'run'|'lift', t, n } läuft gerade
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   const inR = (r, x, y, p = 0) => x > r.x - p && x < r.x + r.w + p && y > r.y - p && y < r.y + r.h + p;
 
@@ -144,11 +144,14 @@ const Wache = (() => {
         gym.bag.x = gym.bar.x + gym.bar.w - 16; gym.bar.y = gy0 + 4; gym.bag.y = gym.bar.y + gym.bar.h + 26;
         if (gym.bag.y + gym.bag.h + 10 > fb) gym.bag.y = fb - gym.bag.h - 10;
       }
-      const ky = fy + Math.round((hy - fy) * 0.35);
-      furn.push({ k: 'table', x: rx + Math.round(rw * 0.12), y: ky + 6 }, { k: 'stove', x: fr - 22, y: fy + 2 }, { k: 'fridge', x: fr - 42, y: fy },
+      // Küche (Michael): Küchenzeile an der Rückwand (Arbeitsfläche mit Schränken, Herd, Kühlschrank ganz rechts), Tisch mit 4 Stühlen
+      spots.counter = { x: rx + 2, y: fy, w: Math.max(14, fr - 46 - rx - 2), h: 18 };
+      const tx = rx + Math.max(18, Math.round((rw - 32) / 2)), ty = fy + Math.max(38, Math.round((hy - fy) * 0.45));
+      furn.push({ k: 'table', x: tx, y: ty }, { k: 'stove', x: fr - 44, y: fy + 2 }, { k: 'fridge', x: fr - 20, y: fy },
+        { k: 'chair', x: tx - 15, y: ty + 2 }, { k: 'chair', x: tx + 31, y: ty + 2 }, { k: 'chair', x: tx + 1, y: ty + 18 }, { k: 'chair', x: tx + 15, y: ty + 18 },
         { k: 'tv', x: fr - 30, y: rDoorLow }, { k: 'sofa', x: Math.max(rx + 4, fr - 50), y: fb - 26 });
       furn = furn.filter(o => BY[o.k]).map(o => Object.assign(o, { f: BY[o.k], w: BY[o.k].w, h: BY[o.k].h }));
-      walls.push(...furn.filter(o => o.k !== 'bed' && o.k !== 'tv'));
+      walls.push(spots.counter, ...furn.filter(o => !['bed', 'tv', 'chair', 'sofa'].includes(o.k)));   // auf Stühle und Sofa kann man sich setzen
     }
     buildGrid(); paint();
   }
@@ -283,6 +286,114 @@ const Wache = (() => {
     R('#7a1a12', a.x + dx, a.y, a.w, a.h); R('#c0392b', a.x + dx + 1, a.y + 1, a.w - 2, a.h - 2); R('#e0604c', a.x + dx + 2, a.y + 2, 2, a.h - 4);
     R('#222', a.x + dx, a.y + 3, a.w, 2); R('#222', a.x + dx, a.y + a.h - 5, a.w, 2);
   }
+  // ---------- Sitzen, Küche, Klo, Fernseher ----------
+  function sitPose() {                                // wo das sitzende Kind gezeichnet wird (Fußpunkt, nur Oberkörper sichtbar)
+    const ga = gymAct; if (!ga) return null;
+    if (ga.k === 'toilet' && !ga.fl) return { x: ga.o.x + 7, y: ga.o.y + 20 };
+    if ((ga.k === 'sit' || ga.k === 'tv') && ga.o.k === 'sofa') return { x: ga.o.x + 23, y: ga.o.y + 22 };
+    if (ga.k === 'sit') return { x: ga.o.x + 8, y: ga.o.y + 18 };
+    return null;
+  }
+  function drawCounter() {                            // Küchenzeile: Arbeitsfläche oben, Schranktüren vorne, Spüle und Schneidebrett
+    const c = spots.counter; if (!c) return;
+    R('rgba(0,0,0,.2)', c.x + 2, c.y + 2, c.w, c.h); R('#7a4a22', c.x, c.y, c.w, c.h);
+    R('#d8d2c4', c.x + 1, c.y + 1, c.w - 2, 8); R('#eeeae0', c.x + 1, c.y + 1, c.w - 2, 1);            // Arbeitsfläche
+    for (let xx = c.x + 1; xx + 10 <= c.x + c.w; xx += 11) { R('#c98a4f', xx, c.y + 10, 10, 7); R('#e0a868', xx, c.y + 10, 10, 1); R('#5a3b1c', xx + 7, c.y + 12, 1, 3); }   // Schranktüren mit Griff
+    if (c.w >= 16) { R('#8f9aa3', c.x + 3, c.y + 2, 11, 6); R('#bfe6f5', c.x + 4, c.y + 3, 9, 4); R('#9aa0a6', c.x + 8, c.y + 1, 2, 2); }   // Spüle
+    if (c.w >= 34) { R('#c98a4f', c.x + 18, c.y + 3, 10, 5); R('#e03b3b', c.x + 20, c.y + 4, 2, 2); R('#7ed957', c.x + 24, c.y + 4, 2, 3); }   // Brett mit Tomate und Gurke
+  }
+  function drawKitchenAct(time) {                     // Kühlschrank auf, Pfanne auf dem Herd (vor dem Kind)
+    const ga = gymAct; if (!ga) return;
+    if (ga.k === 'fridge') { const o = furn.find(o => o.k === 'fridge'), op = ga.t < 3.0;
+      if (op) { R('#8f9aa3', o.x - 12, o.y + 1, 12, 29); R('#ffffff', o.x - 11, o.y + 2, 10, 27); R('#cfd8de', o.x - 3, o.y + 8, 1, 14);   // Tür steht offen
+        R('#fff8d0', o.x + 1, o.y + 1, 16, 28); R('#cfd8de', o.x + 1, o.y + 10, 16, 1); R('#cfd8de', o.x + 1, o.y + 19, 16, 1);           // Licht innen, Fächer
+        R('#ffffff', o.x + 3, o.y + 3, 4, 7); R('#3fa9f5', o.x + 3, o.y + 5, 4, 2);                                                         // Milch
+        R('#ffd23f', o.x + 9, o.y + 6, 6, 4); R('#e0b000', o.x + 9, o.y + 9, 6, 1);                                                          // Käse
+        R('#e67e22', o.x + 3, o.y + 15, 7, 2); R('#7ed957', o.x + 10, o.y + 14, 2, 2);                                                      // Möhre
+        if (ga.t < 1.1) drawApple(o.x + 12, o.y + 24);
+        R('#7ed957', o.x + 3, o.y + 23, 5, 4); } }
+    if (ga.k === 'stove') { const o = furn.find(o => o.k === 'stove'), px = o.x + 1, py = o.y, fl = Math.floor(time / 90) % 2;
+      R(fl ? '#ff5a3c' : '#ff8a3c', px - 1, py - 1, 14, 10);                                                                              // Platte glüht rund um die Pfanne
+      R('#222', px, py, 12, 8); R('#555', px + 1, py + 1, 10, 6); R('#5a3b1c', px + 12, py + 3, 7, 2);                                    // Pfanne mit Stiel
+      const f = (ga.t % 1.2) / 1.2, up = ga.t > 1.0 && ga.t < 3.4 && f > 0.75 ? Math.round(Math.sin((f - 0.75) / 0.25 * Math.PI) * 12) : 0;
+      R(ga.n % 2 ? '#c98a3c' : '#f0c868', px + 2, py + 2 - up, 8, up ? 2 : 4); if (!up) R('#ffe9a8', px + 3, py + 2, 3, 1); }
+  }
+  function drawApple(x, y) { x = Math.round(x); y = Math.round(y); R('#c0392b', x, y + 1, 5, 4); R('#e74c3c', x + 1, y, 3, 5); R('#5a3b1c', x + 2, y - 1, 1, 2); R('#7ed957', x + 3, y - 1, 2, 1); }
+  function drawSteam(time) { const o = furn.find(o => o.k === 'stove'); for (let i = 0; i < 4; i++) { const k = ((time / 900) + i / 4) % 1; R(`rgba(255,255,255,${(0.7 * (1 - k)).toFixed(2)})`, Math.round(o.x + 4 + Math.sin(k * 6 + i) * 3), Math.round(o.y - k * 18), 2, 2); } }
+  function drawFlush(time) {                         // Klo: Wasser wirbelt im Becken, Bläschen steigen
+    const ga = gymAct, o = ga.o; if (!ga.fl) return;
+    const cx = o.x + 7, cy = o.y + 13, a = time / 80;
+    R('#7cc0f0', o.x + 4, o.y + 10, 6, 6);
+    for (let i = 0; i < 6; i++) { const w = a + i * Math.PI / 3; R(i % 2 ? '#1c5e9e' : '#ffffff', Math.round(cx + Math.cos(w) * 2.5) - 1, Math.round(cy + Math.sin(w) * 2.5) - 1, 2, 2); }
+    for (let i = 0; i < 3; i++) { const k = ((ga.t - 1.4) * 1.2 + i / 3) % 1; R('rgba(255,255,255,.85)', o.x + 3 + i * 4, Math.round(o.y + 8 - k * 14), 1, 1); }
+  }
+  // Fernsehen: Sofa → Fernseher wird groß, zufällige Sendung (nie zweimal dieselbe hintereinander)
+  const SHOWS = ['truck', 'fish', 'rocket', 'ball'];
+  function startShow(so) {
+    let n; do n = Math.floor(Math.random() * SHOWS.length); while (n === lastShow); lastShow = n;
+    gymAct = { k: 'tv', t: 0, o: so, show: n }; setWord('tv'); sayWord('tv'); tone(660, .06, 'square', .03);
+  }
+  function showSound(n) {
+    if (n === 0) tatuta();
+    else if (n === 1) for (let k = 0; k < 8; k++) tone(500 + k * 60, .06, 'sine', .03, k * .5);
+    else if (n === 2) { say('Drei, zwei, eins, los!'); tone(70, 2.5, 'sawtooth', .03, 1.6, 40); }
+    else { tone(1800, .25, 'square', .03); tone(1800, .5, 'square', .03, .35); }
+  }
+  function drawTV(time) {
+    const ga = gymAct, tv = furn.find(o => o.k === 'tv'); if (!tv) return;
+    const k0 = ga.t < 0.5 ? ga.t / 0.5 : ga.t > 5.5 ? Math.max(0, (6 - ga.t) / 0.5) : 1, k = k0 * k0 * (3 - 2 * k0);
+    const bw = Math.min(Math.round(W * 0.72), 340), bh = Math.round(bw * 0.62), bx = Math.round((W - bw) / 2), by = Math.round((H - bh) / 2);
+    const sx = tv.x + 4, sy = tv.y + 2, sw = 18, sh = 10;
+    const x = Math.round(sx + (bx - sx) * k), y = Math.round(sy + (by - sy) * k), w = Math.round(sw + (bw - sw) * k), h = Math.round(sh + (bh - sh) * k);
+    R(`rgba(0,0,0,${(0.55 * k).toFixed(2)})`, 0, 0, W, H);
+    const fr = Math.max(1, Math.round(6 * k)); R('#111', x - fr, y - fr, w + 2 * fr, h + 2 * fr); R('#333', x - fr, y + h + fr - 2, w + 2 * fr, 2);
+    if (k < 1) { R('#3fa9f5', x, y, w, h); return; }
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    drawShow(ga.show, x, y, w, h, Math.max(0, ga.t - 0.5), time);
+    ctx.restore();
+    R('#e03b3b', x + w - 8, y + h + 1, 3, 2);                    // Einschaltlämpchen
+  }
+  function drawShow(n, x, y, w, h, st, time) {
+    const P = (c, a, b, ww, hh) => R(c, Math.round(x + a), Math.round(y + b), Math.max(1, Math.round(ww)), Math.max(1, Math.round(hh))), u = h / 60;
+    if (n === 0) {                                     // Feuerwehrauto fährt mit Blaulicht vorbei
+      P('#9fd8ff', 0, 0, w, h); P('#ffd23f', w * 0.82, h * 0.08, 8 * u, 8 * u);
+      P('#5cb64f', 0, h * 0.62, w, h * 0.38); P('#555', 0, h * 0.72, w, h * 0.18); for (let i = 0; i < 8; i++) P('#ffffff', i * w / 8 + 4, h * 0.8, w / 20, u);
+      for (const [hx, c] of [[0.12, '#e9dcc0'], [0.55, '#f2c28a']]) { P(c, w * hx, h * 0.38, w * 0.2, h * 0.24); P('#b5442e', w * hx - 3 * u, h * 0.3, w * 0.2 + 6 * u, h * 0.09); P('#6cc4f0', w * hx + 4 * u, h * 0.44, 6 * u, 5 * u); }
+      const L = w * 0.42, th = h * 0.2, tx = -L + (w + L * 1.2) * Math.min(1, st / 4.5), ty = h * 0.72 - th + 3 * u, on = Math.floor(time / 150) % 2;
+      P('#8e1f1f', tx, ty, L, th); P('#c0392b', tx + u, ty + u, L - 2 * u, th - 2 * u); P('#f2f2f2', tx, ty + th * 0.55, L, 2 * u);
+      P('#9fe3ff', tx + L * 0.78, ty + 2 * u, L * 0.18, th * 0.4);                                   // Fenster vorne
+      P('#c8ccd0', tx + L * 0.05, ty - 3 * u, L * 0.62, 2 * u); for (let i = 0; i < 6; i++) P('#7f8388', tx + L * 0.07 + i * L * 0.1, ty - 3 * u, u, 2 * u);   // Leiter
+      P(on ? '#5cc0ff' : '#1c5e9e', tx + L * 0.8, ty - 3 * u, 4 * u, 3 * u); P(on ? '#1c5e9e' : '#5cc0ff', tx + L * 0.88, ty - 3 * u, 4 * u, 3 * u);   // Blaulichter
+      for (const wx of [0.2, 0.75]) { P('#1b1b1b', tx + L * wx - 4 * u, ty + th - 3 * u, 8 * u, 7 * u); P('#9aa0a6', tx + L * wx - 1.5 * u, ty + th - 0.5 * u, 3 * u, 3 * u); }
+    } else if (n === 1) {                              // Aquarium: Fische, Blasen, Seegras
+      P('#1c5e9e', 0, 0, w, h); P('#2a7fd0', 0, 0, w, h * 0.45); P('#e0c890', 0, h * 0.88, w, h * 0.12);
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 8; j++) P('#3f9a3f', w * (0.08 + i * 0.2) + Math.sin(st * 2 + j * 0.6 + i) * 2 * u, h * 0.86 - j * 3 * u, 2 * u, 3 * u);
+      [['#ff8a3c', 0.25, 14, 1], ['#ffd23f', 0.45, -10, 2], ['#e74c3c', 0.62, 18, 3], ['#c58af0', 0.35, -16, 4]].forEach(([c, fy, sp, o]) => {
+        const dir = sp > 0 ? 1 : -1, span = w + 30 * u, fx = ((st * Math.abs(sp) * u * 2 + o * 37 * u) % span) - 15 * u, xx = dir > 0 ? fx : w - fx, yy = h * fy + Math.sin(st * 2 + o) * 3 * u;
+        P(c, xx - 5 * u, yy - 2 * u, 10 * u, 5 * u); P(c, xx - 3 * u, yy - 3 * u, 6 * u, 7 * u); P(c, xx - dir * 8 * u - (dir < 0 ? 3 * u : 0), yy - 3 * u, 3 * u, 7 * u);   // Körper, Schwanz
+        P('#111', xx + dir * 3 * u - u / 2, yy - u, u, u); });
+      for (let i = 0; i < 6; i++) { const k = (st * 0.4 + i / 6) % 1; P('rgba(255,255,255,.8)', w * (0.15 + i * 0.14), h * (0.85 - k * 0.85), 2 * u, 2 * u); }
+    } else if (n === 2) {                              // Rakete fliegt zum Mond
+      P('#0b1030', 0, 0, w, h);
+      for (let i = 0; i < 30; i++) { const a = (i * 9301 + 49297) % 233280; if ((Math.floor(time / 300) + i) % 5) P('#ffffff', a % w, (a >> 6) % h, u, u); }
+      const mx = w * 0.8, my = h * 0.2, mr = h * 0.12; P('#f2eecb', mx - mr, my - mr * 0.7, 2 * mr, 1.4 * mr); P('#f2eecb', mx - mr * 0.7, my - mr, 1.4 * mr, 2 * mr); P('#d6d0a8', mx - mr * 0.3, my - mr * 0.2, mr * 0.4, mr * 0.4); P('#d6d0a8', mx + mr * 0.3, my + mr * 0.3, mr * 0.3, mr * 0.3);
+      const k = Math.max(0, Math.min(1, (st - 1.4) / 3)), e = k * k, rx2 = w * 0.25 + (mx - mr * 1.6 - w * 0.25) * e, ry = h * 0.95 - (h * 0.95 - my - mr * 0.4) * e, s = u * 1.2;
+      P('#ffffff', rx2 - 4 * s, ry - 18 * s, 8 * s, 16 * s); P('#e74c3c', rx2 - 2 * s, ry - 22 * s, 4 * s, 4 * s); P('#e74c3c', rx2 - 3 * s, ry - 20 * s, 6 * s, 2 * s);   // Rumpf, Spitze
+      P('#3fa9f5', rx2 - 2 * s, ry - 14 * s, 4 * s, 4 * s); P('#e74c3c', rx2 - 7 * s, ry - 6 * s, 3 * s, 6 * s); P('#e74c3c', rx2 + 4 * s, ry - 6 * s, 3 * s, 6 * s);   // Fenster, Flossen
+      if (st > 1.2 && k < 1) { const fl = Math.floor(time / 80) % 2; P(fl ? '#ffd23f' : '#ff8a3c', rx2 - 3 * s, ry - 2 * s, 6 * s, (fl ? 7 : 5) * s); P('#ffffff', rx2 - s, ry - 2 * s, 2 * s, 3 * s); }   // Flamme
+      if (k >= 1) P('#ffd23f', mx - mr * 1.6 - 2 * u, my - mr - 6 * u, 4 * u, 4 * u);              // angekommen: Stern
+    } else {                                           // Fußball: Ball rollt und hüpft ins Tor
+      for (let i = 0; i < 8; i++) P(i % 2 ? '#4fa83f' : '#5cb64f', i * w / 8, 0, w / 8 + 1, h);
+      P('#ffffff', 0, h * 0.85, w, u);
+      const gx = w * 0.8, gy = h * 0.3, gw = w * 0.15, gh = h * 0.55, wig = st > 3 && st < 4 ? Math.sin(st * 40) * 1.5 * u : 0;
+      for (let i = 0; i < 6; i++) P('#d9dde0', gx + wig + i * gw / 6, gy, u / 2, gh); for (let j = 0; j < 6; j++) P('#d9dde0', gx, gy + j * gh / 6, gw, u / 2);   // Netz
+      P('#ffffff', gx - u, gy - u, gw + 2 * u, 2 * u); P('#ffffff', gx - u, gy - u, 2 * u, gh + u);
+      const k = Math.min(1, st / 3), bx = w * 0.08 + (gx + gw * 0.5 - w * 0.08) * k, ground = h * 0.85 - 5 * u, by = ground - Math.abs(Math.sin(k * Math.PI * 3)) * h * 0.35 * (1 - k * 0.6), r = 5 * u;
+      P('rgba(0,0,0,.25)', bx - r, h * 0.85 - u, 2 * r, 2 * u);
+      P('#ffffff', bx - r, by - r * 0.7, 2 * r, 1.4 * r); P('#ffffff', bx - r * 0.7, by - r, 1.4 * r, 2 * r); const sp = Math.floor(st * 6) % 2; P('#222', bx - r * 0.3 + (sp ? r * 0.3 : 0), by - r * 0.3, r * 0.6, r * 0.6);
+      if (st > 3) for (let i = 0; i < 24; i++) { const a = (i * 7919) % 997, cx = (a * 3) % w, cy = ((st - 3) * h * 0.5 + (a % 50) * u) % h; P(['#ffd23f', '#e74c3c', '#3fa9f5', '#7ed957'][i % 4], cx, cy, 2 * u, 2 * u); }
+    }
+  }
   function drawBath(time) {                           // Waschbecken und Kabinen (Klos kommen aus moebel.js, Duschen hier)
     const k = spots.sink; R('rgba(0,0,0,.2)', k.x + 2, k.y + 2, k.w, k.h); R('#c8ccd0', k.x, k.y, k.w, k.h); R('#ffffff', k.x + 1, k.y + 1, k.w - 2, k.h - 2);
     R('#bfe6f5', k.x + 4, k.y + 5, k.w - 8, k.h - 8); R('#9aa0a6', k.x + (k.w >> 1) - 1, k.y + 1, 3, 5); R('#555', k.x + (k.w >> 1), k.y + k.h - 5, 1, 1);   // Becken, Wasserhahn, Abfluss
@@ -305,10 +416,10 @@ const Wache = (() => {
     for (const sx of [-1, 1]) { R('#e03b3b', cx + sx * 17 - 2, y - 4, 4, 10); R('#333', cx + sx * 21 - 2, y - 3, 4, 8); }
   }
   const GEAR = GEAR_PAL;
-  function drawKid(x, y) {
+  function drawKid(x, y, rows = 13) {                // rows < 13: sitzt (Beine verdeckt)
     const run = gymAct && gymAct.k === 'run', K = 2, fr = (kid.path.length || run) && Math.floor(kid.t * (run ? 14 : 8)) % 2 ? KID.b : KID.a, w = 10 * K, h = 13 * K, pal = gear ? Object.assign({}, KID.pal, GEAR) : KID.pal;
-    R('rgba(0,0,0,.25)', Math.round(x - w / 2) + K, Math.round(y) - 2 * K, w, 2 * K);
-    fr.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(pal[ch], Math.round(x - w / 2) + (kid.flip ? 9 - i : i) * K, Math.round(y - h) + j * K, K, K); }));
+    if (rows >= 13) R('rgba(0,0,0,.25)', Math.round(x - w / 2) + K, Math.round(y) - 2 * K, w, 2 * K);
+    fr.slice(0, rows).forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(pal[ch], Math.round(x - w / 2) + (kid.flip ? 9 - i : i) * K, Math.round(y - h) + j * K, K, K); }));
     if (gear) { R('#e0b000', Math.round(x - w / 2) + 2 * K, Math.round(y - h) - K, 6 * K, K); R('#ffd23f', Math.round(x - w / 2), Math.round(y - h) + 2 * K, w, K); }   // Helmkrempe und -schild
   }
 
@@ -328,6 +439,10 @@ const Wache = (() => {
       if (inR(spots.hoses, x, y, 4)) { hoseWob = 1.5; setWord('hoses'); sayWord('hoses'); sfx.clod(); return true; }
       if (inR(spots.desk, x, y, 6) || inR({ x: spots.desk.x, y: spots.desk.y - 8, w: spots.desk.w, h: 10 }, x, y, 2)) { radio(); return true; }
     }
+    if (level === 1) {                                // Fernseher antippen: sitzend = neue Sendung, sonst aufs Sofa gehen
+      const tv = furn.find(o => o.k === 'tv'), so = furn.find(o => o.k === 'sofa');
+      if (tv && so && inR(tv, x, y, 6)) { if (gymAct && gymAct.k === 'sit' && gymAct.o === so) startShow(so); else walkTo(so.x + so.w / 2, so.y + so.h - 6); return true; }
+    }
     if (level === 1 && gym) {
       const a = gym.bag; if (inR(a, x, y, 6)) { punch(); return true; }   // Boxsack antippen: schwingt
       for (const k of ['tread', 'bar']) if (inR(gym[k], x, y, 4)) { const q = gym[k]; walkTo(q.x + q.w / 2, q.y + q.h - 6); return true; }   // aufs Gerät stellen
@@ -339,7 +454,7 @@ const Wache = (() => {
   const need = () => alarm ? EINSAETZE[alarm.key].veh : [];
   function startAlarm() {
     const key = EINSATZ_KEYS[Math.floor(Math.random() * EINSATZ_KEYS.length)];
-    alarm = { key, t: 0, g: 0 }; radioT = 3; idle = 0;
+    alarm = { key, t: 0, g: 0 }; radioT = 3; idle = 0; gymAct = null;   // Alarm: aufstehen, Fernseher aus
     if (night) { kid.y = night.bed.y + night.bed.h + 8; night = null; kid.still = 0; }   // Alarm weckt auf
     setWord('alarm'); say('Alarm! ' + WORDS[EINSAETZE[key].word][1]);
   }
@@ -383,6 +498,22 @@ const Wache = (() => {
       else if (ga.k === 'shower' || ga.k === 'sink') {   // Wasser rauscht
         if (ga.t > ga.s) { ga.s += 0.06; tone(1800 + Math.random() * 2400, .04, 'sine', .01); }
         if (ga.t > (ga.k === 'sink' ? 1.6 : 3.5)) { gymAct = null; if (ga.k === 'shower') say('Sauber!'); } }
+      else if (ga.k === 'toilet') {                     // erst sitzen, dann aufstehen und spülen
+        if (!ga.fl && ga.t > 1.4) { ga.fl = true; kid.x = ga.c.x + 7; sfx.click(); for (let k = 0; k < 18; k++) tone(150 + Math.random() * 350, .08, 'sawtooth', .012, k * .06); tone(180, .3, 'sine', .05, 1.15, 90); }
+        if (ga.t > 3.2) { gymAct = null; say('Jetzt Hände waschen!'); } }
+      else if (ga.k === 'fridge') {
+        if (!ga.a && ga.t > 0.1) { ga.a = true; tone(220, .08, 'square', .04); }
+        if (!ga.b && ga.t > 1.3) { ga.b = true; say('Hm, lecker!'); }
+        if (ga.t > 3.2) { gymAct = null; tone(160, .08, 'square', .04); } }
+      else if (ga.k === 'stove') {                       // Pfannkuchen brutzeln, zweimal wenden
+        if (ga.t > ga.s) { ga.s += 0.05; tone(3000 + Math.random() * 3000, .03, 'sawtooth', .006); }
+        if (ga.n < 2 && ga.t > 1.2 * (ga.n + 1)) { ga.n++; tone(520, .1, 'triangle', .05); tone(700, .08, 'triangle', .04, .1); }
+        if (ga.t > 3.8) { gymAct = null; say('Pfannkuchen!'); for (let k = 0; k < 8; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(10, 30), rnd(-20, 20), rnd(-30, -5), .4, '#ffd23f', 30); } }
+      else if (ga.k === 'tv') { const st = ga.t - 0.5;   // Fernseher groß: 0,5 s aufzoomen, 5 s Sendung, 0,5 s zurück
+        if (!ga.snd && st > 0) { ga.snd = true; showSound(ga.show, 0); }
+        if (ga.show === 3 && !ga.goal && st > 3) { ga.goal = true; say('Tor!'); tone(880, .15, 'square', .05); tone(1175, .3, 'square', .05, .15); }
+        if (ga.t > 6) gymAct = { k: 'sit', t: 0, o: ga.o }; }
+      else if (ga.k === 'sit') { }                        // sitzt, bis das Kind woanders hin soll
       else { const rep = Math.floor((ga.t + 0.6) / 1.2);   // oben angekommen: zählen
         if (rep > ga.n && ga.n < 3) { ga.n = rep; say(['Eins', 'Zwei', 'Drei'][rep - 1]); tone(400 + rep * 120, .12, 'triangle', .06); }
         if (ga.t > 3.6) { gymAct = null; sfx.unlock(); setTimeout(() => say('Stark!'), 300); for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-14, 14), kid.y - rnd(10, 34), rnd(-20, 20), rnd(-30, -5), .4, '#ffd23f', 30); } }
@@ -411,7 +542,7 @@ const Wache = (() => {
       for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, gear ? '#ffd23f' : '#ffffff', 30); return; }
     if (level === 0 && kid.still > 0.5) {               // Bad: aufs Klo stellen = Spülung
       const c = spots.cabins.find(c => inR(c, kid.x, kid.y - 4)), sk = spots.sink;
-      if (c && c.k === 'toilet') { kid.used = true; setWord('toilet'); sayWord('toilet'); for (let k = 0; k < 14; k++) tone(250 + Math.random() * 500, .06, 'sine', .025, .3 + k * .05); return; }
+      if (c && c.k === 'toilet') { const o = furn.find(o => o.k === 'toilet' && o.y >= c.y && o.y < c.y + c.h); kid.used = true; kid.flip = false; gymAct = { k: 'toilet', t: 0, c, o }; setWord('toilet'); sayWord('toilet'); return; }
       if (c) { kid.used = true; kid.x = c.x + c.w / 2 - 2; kid.y = c.y + c.h - 3; kid.flip = false; gymAct = { k: 'shower', t: 0, s: 0, c }; setWord('shower'); sayWord('shower'); return; }
       if (inR({ x: sk.x - 4, y: sk.y, w: sk.w + 8, h: sk.h + 22 }, kid.x, kid.y)) { kid.used = true; gymAct = { k: 'sink', t: 0, s: 0 }; setWord('sink'); sayWord('sink'); return; } }
     if (level === 1 && gym && kid.still > 0.4) {      // Fitnessraum: aufs Laufband / an die Hantel stellen, neben den Boxsack = boxen
@@ -419,6 +550,15 @@ const Wache = (() => {
       if (inR(t, kid.x, kid.y - 4)) { kid.used = true; kid.x = t.x + t.w / 2; kid.y = t.y + t.h - 6; kid.flip = false; gymAct = { k: 'run', t: 0, s: 0, n: 0 }; setWord('treadmill'); sayWord('treadmill'); return; }
       if (inR(b, kid.x, kid.y - 4, 2)) { kid.used = true; kid.x = b.x + b.w / 2; kid.y = b.y + b.h - 4; kid.flip = false; gymAct = { k: 'lift', t: 0, n: 0 }; setWord('barbell'); sayWord('barbell'); return; }
       if (inR({ x: a.x - 14, y: a.y, w: a.w + 28, h: a.h + 16 }, kid.x, kid.y)) { kid.used = true; punch(); return; }
+    }
+    if (level === 1 && kid.still > 0.5) {               // Küche und Aufenthaltsraum
+      const front = o => o && inR({ x: o.x - 4, y: o.y + o.h - 4, w: o.w + 8, h: 30 }, kid.x, kid.y);   // davor stehen; das Kind tritt dann etwas zurück, damit man Herd/Kühlschrank sieht
+      const fz = furn.find(o => o.k === 'fridge'), sv = furn.find(o => o.k === 'stove'), so = furn.find(o => o.k === 'sofa');
+      if (front(fz)) { kid.used = true; kid.flip = false; kid.x = fz.x + fz.w / 2 - 4; kid.y = fz.y + fz.h + 26; gymAct = { k: 'fridge', t: 0 }; setWord('fridge'); sayWord('fridge'); return; }
+      if (front(sv)) { kid.used = true; kid.flip = false; kid.x = sv.x + sv.w / 2; kid.y = sv.y + sv.h + 26; gymAct = { k: 'stove', t: 0, s: 0, n: 0 }; setWord('stove'); sayWord('stove'); return; }
+      if (so && inR(so, kid.x, kid.y - 4, 2)) { kid.used = true; startShow(so); return; }
+      const ch = furn.find(o => o.k === 'chair' && inR(o, kid.x, kid.y - 4, 2));
+      if (ch) { kid.used = true; gymAct = { k: 'sit', t: 0, o: ch }; tone(330, .1, 'triangle', .05); setWord('chair'); sayWord('chair'); return; }
     }
     if (level === 1 && kid.still > 0.8) { const b = furn.find(o => o.k === 'bed' && kid.x > o.x + 2 && kid.x < o.x + o.w - 2 && kid.y > o.y + 4 && kid.y < o.y + o.h + 4);
       if (b) { kid.used = true; night = { t: 0, bed: b }; setWord('sleep'); say('Gute Nacht'); tone(392, .3, 'triangle', .06); tone(330, .3, 'triangle', .06, .35); tone(262, .5, 'triangle', .06, .7); } }
@@ -428,20 +568,24 @@ const Wache = (() => {
     ctx.drawImage(bg, 0, 0);
     if (level === 0) { drawHoses(time); drawLockers(); drawDesk(time); drawGates(time); for (const v of vehicles) drawVehicle(v, time); drawPole(time);
       drawBath(time); for (const o of furn) o.f.draw(R, o.x, o.y, true, time); }
-    else { if (gym) drawGym(time); for (const o of furn.slice().sort((a, b) => (a.y + a.h) - (b.y + b.h))) o.f.draw(R, o.x, o.y, true, time); }
+    else { if (gym) drawGym(time); drawCounter(); for (const o of furn.slice().sort((a, b) => (a.y + a.h) - (b.y + b.h))) o.f.draw(R, o.x, o.y, true, time); drawKitchenAct(time); }
+    if (level === 0 && gymAct && gymAct.k === 'toilet') drawFlush(time);
     if (night) {
       const t = night.t, a = t < 1.4 ? t / 1.4 : t < 3.8 ? 1 : Math.max(0, 1 - (t - 3.8) / 1.4), b = night.bed;
       R('#f1c27d', b.x + Math.round(b.w / 2) - 4, b.y + 6, 8, 7); R('#6b3e1e', b.x + Math.round(b.w / 2) - 4, b.y + 5, 8, 3);   // Kopf auf dem Kissen
       R(`rgba(10,15,40,${(a * 0.6).toFixed(2)})`, 0, 0, W, H);
       for (let k = 0; k < 3; k++) { const zt = (t * 0.8 + k * 0.33) % 1; R('#ffffff', Math.round(b.x + b.w * 0.6 + zt * 10), Math.round(b.y - zt * 22), 3, 3); }
     } else if (slide && !slide.done) { const k = 1 - slide.t / 0.4; if (k > 0.2) drawKid(kid.x, kid.y); }
-    else if (!depart) { drawKid(kid.x, kid.y);
+    else if (!depart) { const sp = sitPose(); if (sp) drawKid(sp.x, sp.y, 9); else drawKid(kid.x, kid.y);
+      if (gymAct && gymAct.k === 'fridge' && gymAct.t > 1.1 && gymAct.t < 3.2) drawApple(kid.x + 8, kid.y - 14);
+      if (gymAct && gymAct.k === 'stove') drawSteam(time);
       if (gymAct && (gymAct.k === 'shower' || gymAct.k === 'sink')) drawWater(time);
       if (gymAct && gymAct.k === 'lift') { const f = (gymAct.t % 1.2) / 1.2, up = f < 0.5 ? f * 2 : 2 - f * 2; drawBarbell(kid.x, kid.y - 12 - Math.round(up * up * (3 - 2 * up) * 22)); } }
+    if (gymAct && gymAct.k === 'tv') drawTV(time);
     if (alarm) drawAlarm(time);
     if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); R(`rgba(0,0,0,${a.toFixed(2)})`, 0, 0, W, H); }
     if (slide && !slide.done) R(`rgba(0,0,0,${(slide.t / 0.4 * 0.8).toFixed(2)})`, 0, 0, W, H);
-    if (!alarm && idle > 4 && !kid.path.length && Math.floor(time / 600) % 2 === 0) {   // Hinweis: Treppe, Loch, Ausgang
+    if (!alarm && !gymAct && idle > 4 && !kid.path.length && Math.floor(time / 600) % 2 === 0) {   // Hinweis: Treppe, Loch, Ausgang
       const pts = level ? [spots.pole, stairs] : [stairs, { x: spots.door.x, y: room.y + room.h - 12, w: spots.door.w, h: 4 }];
       for (const q of pts) { const cx = Math.round(q.x + q.w / 2), cy = q.y - 6; for (let i = 0; i < 4; i++) R('rgba(255,255,255,.85)', cx - i, cy + i, 2 * i + 1, 1); }
     }

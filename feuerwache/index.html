@@ -59,7 +59,8 @@ const Wache = (() => {
   const S = 1, WH = 24, T4 = 4, GAP = 28;
   let room, floor, level = 0, walls = [], spots = {}, stairs, kid, grid, idle = 0, swap = null, slide = null, night = null, atDoor = 0;
   let gear = false, gearT = 0, vehicles = [], gates = [0, 0], gateGoal = [0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
-  let alarm = null, nextAlarm = 12, depart = null, nag = 0;   // Alarm: { key, t, g }; depart: Fahrzeuge rücken aus
+  let ALARM_FIRST = [35, 50], ALARM_NEXT = [70, 100];   // Sekunden bis zum Alarm: nach dem Betreten / nach einem Einsatz (Michael: kamen zu schnell)
+  let alarm = null, nextAlarm = 40, depart = null, nag = 0;   // Alarm: { key, t, g }; depart: Fahrzeuge rücken aus
   let npcs = [];                                             // Kollegen (nicht steuerbar), siehe „Kollegen“ unten
   let gym = null, gymAct = null, bagSwing = 0, lastShow = -1;   // lastShow: zuletzt gezeigte Fernsehsendung               // Fitnessraum (OG): Geräte; gymAct = { k: 'run'|'lift', t, n } läuft gerade
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
@@ -76,12 +77,14 @@ const Wache = (() => {
     npcs = NPC_PALS.map((pal, i) => ({ i, pal, f: i, x: 0, y: 0, path: [], t: 0, flip: false, act: null, task: null, wait: rnd(0.5, 2), away: rnd(6, 14), gear: false, inTruck: false, alT: 0, at: 0 }));   // einer unten, einer oben
     setupLevel();
     kid = { x: spots.door.x + spots.door.w / 2, y: floor.y + floor.h - 26, path: [], t: 0, flip: false, still: 0 };
-    nextAlarm = rnd(10, 16);
+    nextAlarm = rnd(...ALARM_FIRST);
+    const qa = +new URLSearchParams(location.search).get('alarm'); if (qa > 0) { ALARM_FIRST = ALARM_NEXT = [qa, qa]; nextAlarm = qa; }   // Test: ?alarm=5 = Alarm nach 5 s
     show('ihud'); setWord('firestation');
     if (location.hash === '#einsatz') {               // zurück vom Einsatz: im Anzug neben dem Fahrzeug, nächster Alarm später
       history.replaceState(null, '', location.pathname + location.search);
       let ek = null; try { ek = sessionStorage.getItem('wache.einsatz'); } catch (e) {}
-      const vk = EINSAETZE[ek] ? EINSAETZE[ek].veh[0] : 'dlk', v = vehicles.find(v => v.key === vk) || vehicles[0]; gear = true;   // neben dem Fahrzeug des letzten Einsatzes kid.x = v.x + v.w / 2; kid.y = v.y + v.h + 10; kid.used = true; nextAlarm = rnd(25, 40);
+      const vk = EINSAETZE[ek] ? EINSAETZE[ek].veh[0] : 'dlk', v = vehicles.find(v => v.key === vk) || vehicles[0]; gear = true;   // neben dem Fahrzeug des letzten Einsatzes
+      kid.x = v.x + v.w / 2; kid.y = v.y + v.h + 10; kid.used = true; nextAlarm = rnd(...ALARM_NEXT);
       for (const n of npcs) { n.f = 0; n.gear = true; n.act = null; n.task = null; n.path = []; n.x = v.x + v.w / 2 + (n.i ? 16 : -16); n.y = v.y + v.h + 12; n.wait = rnd(0.3, 1); }   // Kollegen steigen mit aus und ziehen sich wieder um
       setTimeout(() => say('Gut gemacht!'), 400);
     } else setTimeout(() => sayWord('firestation'), 400);
@@ -566,11 +569,24 @@ const Wache = (() => {
     return true;
   }
   function punch() { bagSwing = 1; setWord('punchbag'); sayWord('punchbag'); tone(110, .12, 'square', .08); tone(70, .2, 'triangle', .1, .04); }
+  // Einsatz ziehen wie aus einem Kartenstapel: jeder Einsatz kommt einmal dran, dann wird neu gemischt
+  // (Michael: reiner Zufall wiederholte zu oft dieselben). Stapel in localStorage, damit er auch nach App-Neustart weiterläuft.
+  function drawEinsatz() {
+    let deck = [], last = null;
+    try { deck = JSON.parse(localStorage.getItem('wache.stapel') || '[]'); last = localStorage.getItem('wache.letzter'); } catch (e) {}
+    deck = Array.isArray(deck) ? deck.filter(k => EINSAETZE[k]) : [];
+    if (!deck.length) {
+      deck = EINSATZ_KEYS.slice();
+      for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+      if (deck.length > 1 && deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];   // auch über die Mischgrenze nie zweimal derselbe
+    }
+    const key = deck.shift();
+    try { localStorage.setItem('wache.stapel', JSON.stringify(deck)); localStorage.setItem('wache.letzter', key); } catch (e) {}
+    return key;
+  }
   const need = () => alarm ? EINSAETZE[alarm.key].veh : [];
   function startAlarm() {
-    let last = null; try { last = sessionStorage.getItem('wache.einsatz'); } catch (e) {}
-    const pool = EINSATZ_KEYS.length > 1 ? EINSATZ_KEYS.filter(k => k !== last) : EINSATZ_KEYS;   // nie zweimal derselbe Einsatz hintereinander
-    const key = pool[Math.floor(Math.random() * pool.length)];
+    const key = drawEinsatz();
     try { sessionStorage.setItem('wache.einsatz', key); } catch (e) {}
     alarm = { key, t: 0, g: 0 }; radioT = 3; idle = 0; gymAct = null;   // Alarm: aufstehen, Fernseher aus
     for (const n of npcs) { n.act = null; n.task = null; n.path = []; n.goal = null; n.alT = rnd(0.3, 1.2); n.at = 0; }   // Kollegen: zur Stange/zum Spind, umziehen, einsteigen

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125b">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125c">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261125b"></script>
-<script src="../gemeinsam/basis.js?v=20261125b"></script>
-<script src="../gemeinsam/bau.js?v=20261125b"></script>
+<script src="../gemeinsam/sterne.js?v=20261125c"></script>
+<script src="../gemeinsam/basis.js?v=20261125c"></script>
+<script src="../gemeinsam/bau.js?v=20261125c"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -287,6 +287,9 @@ const Hub = (() => {
       if (signWob > 5) { Hof.markHouse('signIntro'); } }
     if (!entering) moverUpdate(e.m, dt, {
       passable: passableFor(active), speed: e.speed,
+      cost: (r, c) => { const t = cellType(r, c);         // Michael: lieber über die Straße laufen als über Wiese oder fremde Bauplätze
+        if (tapGoal && 'SFPQ'.includes(t) && t === cellType(tapGoal.r, tapGoal.c)) return 1;   // den Ziel-Platz selbst direkt von der Straße aus betreten
+        return ({ '=': 1, 'y': 2, '.': 3 })[t] || 8; },
       onArrive: m => {
         const t = cellType(m.r, m.c), g = game();
         if (t !== 'S' || !g || active !== g.who) return;

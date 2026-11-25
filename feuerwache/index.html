@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124e">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125a">
 <title>Feuerwache</title>
 </head>
 <body>
@@ -30,23 +30,26 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261124e"></script>
-<script src="../gemeinsam/basis.js?v=20261124e"></script>
-<script src="../gemeinsam/moebel.js?v=20261124e"></script>
-<script src="../gemeinsam/bau.js?v=20261124e"></script>
+<script src="../gemeinsam/sterne.js?v=20261125a"></script>
+<script src="../gemeinsam/basis.js?v=20261125a"></script>
+<script src="../gemeinsam/moebel.js?v=20261125a"></script>
+<script src="../gemeinsam/bau.js?v=20261125a"></script>
+<script src="../gemeinsam/feuerwehr.js?v=20261125a"></script>
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
-   Erdgeschoss: links die Fahrzeughalle (Löschfahrzeug, Rüstwagen, Rolltore, Schläuche, unten an der Rutschstange),
-                rechts hinten die Umkleide mit Spinden, rechts vorne die Leitstelle mit Funkgerät, Haustür und Treppe.
+   Erdgeschoss: links die Fahrzeughalle (Löschfahrzeug, Drehleiter, Rolltore, Schläuche, unten an der Rutschstange),
+                in der Halle neben der Rutschstange die Spinde, rechts hinten die Leitstelle (Monitor, Funkgerät), rechts vorne Flur mit Haustür und Treppe.
    Obergeschoss: links der Schlafraum mit Betten und dem Loch der Rutschstange, rechts Küche und Aufenthaltsraum.
    Antippen: Kind läuft hin. Fahrzeug antippen = Blaulicht und Martinshorn. Rolltor antippen = auf/zu.
    Vor dem Spind stehen bleiben = Feuerwehrkleidung an/aus. Oben aufs Loch stellen = runterrutschen. Bett = schlafen.
+   ALARM (nur hier drinnen, nach einer Weile): Licht rot/blau im Wechsel, Gong, Bild des Einsatzes auf dem Monitor der Leitstelle. Erst den Feuerwehranzug anziehen, dann zum
+   leuchtenden Fahrzeug laufen (oder es antippen): einsteigen, Tor geht auf, die Fahrzeuge des Einsatzes rücken aus → spiele/einsatz/.
    ===================================================================== */
 window.HOF_URL = '../baustelle/index.html';
 const save = Hof.save;
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('wache')));
-Object.assign(WORDS, { lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], rw: ['RÜSTWAGEN', 'Rüstwagen'], locker: ['SPIND', 'Spind'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
+Object.assign(WORDS, { locker: ['SPIND', 'Spind'],
   radio: ['FUNKGERÄT', 'Funkgerät'], pole: ['RUTSCHSTANGE', 'Rutschstange'], hoses: ['SCHLÄUCHE', 'Schläuche'], up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'],
   dorm: ['SCHLAFRAUM', 'Schlafraum'], kitchen: ['KÜCHE', 'Küche'] });
 
@@ -54,6 +57,7 @@ const Wache = (() => {
   const S = 1, WH = 24, T4 = 4, GAP = 28;
   let room, floor, level = 0, walls = [], spots = {}, stairs, kid, grid, idle = 0, swap = null, slide = null, night = null, atDoor = 0;
   let gear = false, gearT = 0, vehicles = [], gates = [0, 0], gateGoal = [0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
+  let alarm = null, nextAlarm = 12, depart = null, nag = 0;   // Alarm: { key, t, g }; depart: Fahrzeuge rücken aus
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   const inR = (r, x, y, p = 0) => x > r.x - p && x < r.x + r.w + p && y > r.y - p && y < r.y + r.h + p;
 
@@ -67,8 +71,13 @@ const Wache = (() => {
     floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 };
     setupLevel();
     kid = { x: spots.door.x + spots.door.w / 2, y: floor.y + floor.h - 26, path: [], t: 0, flip: false, still: 0 };
+    nextAlarm = rnd(10, 16);
     show('ihud'); setWord('firestation');
-    setTimeout(() => sayWord('firestation'), 400);
+    if (location.hash === '#einsatz') {               // zurück vom Einsatz: im Anzug neben dem Fahrzeug, nächster Alarm später
+      history.replaceState(null, '', location.pathname + location.search);
+      const v = vehicles.find(v => v.key === 'dlk') || vehicles[0]; gear = true; kid.x = v.x + v.w / 2; kid.y = v.y + v.h + 10; kid.used = true; nextAlarm = rnd(25, 40);
+      setTimeout(() => say('Gut gemacht!'), 400);
+    } else setTimeout(() => sayWord('firestation'), 400);
   }
   function setWord(key) { const el = $('iword'); el.dataset.say = key; el.querySelector('.word').textContent = WORDS[key][0]; }
 
@@ -85,16 +94,18 @@ const Wache = (() => {
     spots = { vx, hy, pole: { x: vx - 22, y: fy + 18, w: 12, h: 12 } };
     furn = []; vehicles = [];
     if (level === 0) {
-      const hw = vx - fx, vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));
-      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'rw', cx: fx + Math.round(hw * 0.68) }]
+      const hw = vx - fx, vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));   // 2 Stellplätze (passt zu den 2 Toren außen)
+      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'dlk', cx: fx + Math.round(hw * 0.68) }]
         .map((v, i) => Object.assign(v, { i, x: v.cx - (vw >> 1), y: fb - vl - 14, w: vw, h: vl, blink: 0 }));
       spots.gates = vehicles.map(v => ({ x: v.x - 8, w: v.w + 16 }));
-      spots.lockers = { x: vx + T4 + 8, y: fy, w: Math.min(rw - 16, 4 * 16), h: 12 };
-      spots.bench = { x: spots.lockers.x + 4, y: Math.round(fy + (hy - fy) * 0.55), w: Math.min(rw - 50, 40), h: 8 };
-      const dw = Math.max(24, Math.min(rw - 60, 46)); spots.desk = { x: fr - 34 - dw, y: hy + T4 + 10, w: dw, h: 16 };   // Leitstelle hinten rechts, neben der Treppe
+      spots.lockers = { x: vx - 28 - 3 * 16, y: fy, w: 3 * 16, h: 12 };   // Spinde in der Halle, gleich links neben der Rutschstange
+      spots.bench = { x: fr - 10, y: fb - 60, w: 6, h: 8 };            // (Bank fällt weg; kleine Garderobe im Flur, nur Deko)
+      const dw = Math.max(24, Math.min(rw - 40, 48)), mk = 1, mw = 32 * mk + 6, mh = 28 * mk + 6;   // Monitor: zeigt beim Alarm das Bild des Einsatzes
+      spots.desk = { x: vx + T4 + Math.max(14, Math.round((rw - dw) / 2)), y: Math.min(fy + mh + 2, hy - 18), w: dw, h: 16 };   // Leitstelle hat jetzt den Raum hinten rechts für sich
+      spots.mon = { x: spots.desk.x + Math.round((dw - mw) / 2), y: spots.desk.y - mh + 2, w: mw, h: mh, k: mk };
       spots.hoses = { x: fx + 4, y: room.y + 2, w: Math.min(44, Math.round(hw * 0.22)), h: WH + 6 };
       spots.door = { x: Math.round(vx + T4 + Math.max(4, (rw - 2 * G - 34) * 0.4)), w: 2 * G };
-      walls.push(...vehicles, spots.lockers, spots.bench, spots.desk);
+      walls.push(...vehicles, spots.lockers, spots.desk);
     } else {
       spots.door = { x: Math.round(vx + T4 + Math.max(4, (rw - 2 * G - 34) * 0.4)), w: 2 * G };
       const hw = vx - fx, n = Math.max(2, Math.min(4, Math.floor((hw - 40) / 36)));
@@ -178,27 +189,9 @@ const Wache = (() => {
   }
 
   // ---------- Zeichnen der Dinge ----------
-  function drawVehicle(v, time) {                     // von oben, Front (Fahrerhaus) nach unten zu den Toren
-    const { x, y, w, h } = v, cab = Math.round(h * 0.26), on = v.blink > 0 && Math.floor(time / 150) % 2;
-    R('rgba(0,0,0,.25)', x + 3, y + 4, w, h);
-    for (const yy of [y + Math.round(h * 0.15), y + Math.round(h * 0.45), y + h - cab + 4]) { R('#1b1b1b', x - 2, yy, 3, 10); R('#1b1b1b', x + w - 1, yy, 3, 10); }   // Räder
-    R('#8e1f1f', x, y, w, h); R('#c0392b', x + 1, y + 1, w - 2, h - 2);
-    R('#f2f2f2', x + 1, y + h - cab - 3, w - 2, 2); R('#ffd23f', x + 1, y + h - cab - 1, w - 2, 1);   // Streifen zwischen Aufbau und Fahrerhaus
-    R('#a92f22', x + 2, y + h - cab + 1, w - 4, cab - 7); R('#1c3f6e', x + 3, y + h - 6, w - 6, 4); R('#6cc4f0', x + 4, y + h - 6, w - 8, 1);   // Fahrerhaus-Dach, Frontscheibe
-    R('#333', x - 3, y + h - cab + 3, 3, 3); R('#333', x + w, y + h - cab + 3, 3, 3);                 // Spiegel
-    const lb = Math.round(w * 0.5); R('#333', x + (w - lb) / 2, y + h - cab + 2, lb, 4);            // Blaulichtbalken
-    R(on ? '#3fa9f5' : '#1c5e9e', x + (w - lb) / 2 + 1, y + h - cab + 3, (lb >> 1) - 1, 2); R(on ? '#1c5e9e' : '#3fa9f5', x + w / 2, y + h - cab + 3, (lb >> 1) - 1, 2);
-    if (v.blink > 0) { const g = on ? 'rgba(63,169,245,.35)' : 'rgba(63,169,245,.15)'; R(g, x - 8, y + h - cab - 6, w + 16, 16); }
-    const top = y + 3, bh = h - cab - 9;
-    if (v.key === 'lf') {                               // Löschfahrzeug: Leiter und Schlauchhaspel auf dem Dach
-      R('#9aa0a6', x + 4, top, w - 8, bh); R('#c8ccd0', x + 6, top + 2, 3, bh - 4); R('#c8ccd0', x + w - 9, top + 2, 3, bh - 4);
-      for (let yy = top + 5; yy < top + bh - 3; yy += 6) R('#c8ccd0', x + 9, yy, w - 18, 2);
-      const r = Math.round(w * 0.18); R('#555', x + w / 2 - r, top + bh - 2 * r - 4, 2 * r, 2 * r); R('#e8e2d0', x + w / 2 - r + 2, top + bh - 2 * r - 2, 2 * r - 4, 2 * r - 4); R('#555', x + w / 2 - 2, top + bh - r - 6, 4, 4);
-    } else {                                            // Rüstwagen: Geräteboxen und Lichtmast
-      for (let i = 0; i < 3; i++) { const by = top + i * Math.round(bh / 3); R('#e8e8e8', x + 4, by + 1, w - 8, Math.round(bh / 3) - 3); R('#b8b8b8', x + 4, by + Math.round(bh / 3) - 3, w - 8, 1); }
-      R('#555', x + w / 2 - 3, top + 4, 6, 6); R('#ffd23f', x + w / 2 - 2, top + 5, 4, 4);
-    }
-    R('#ffd23f', x, y + Math.round(h * 0.3), 1, Math.round(h * 0.4)); R('#ffd23f', x + w - 1, y + Math.round(h * 0.3), 1, Math.round(h * 0.4));   // Warnstreifen
+  function drawVehicle(v, time) {                     // von oben, Fahrerhaus unten zu den Toren (feuerwehr.js)
+    const lit = v.blink > 0 || (depart && depart.vs.includes(v)) || (alarm && !depart && need().includes(v.key));
+    drawFireTruck(R, v.x, v.y, v.h, v.w, v.key, 'down', lit && Math.floor(time / 150) % 2 === 1, lit);
   }
   function drawGates(time) {                            // Rolltore in der Vorderwand: offen = man sieht die Straße
     const yb = room.y + room.h;
@@ -217,12 +210,15 @@ const Wache = (() => {
   function drawLockers() {
     const l = spots.lockers, n = Math.max(2, Math.floor(l.w / 16));
     for (let i = 0; i < n; i++) { const x = l.x + i * 16; R('#2c3e50', x, l.y, 15, l.h); R('#c0392b', x + 1, l.y + 1, 13, l.h - 2); R('#e9dcc0', x + 10, l.y + 5, 2, 3); R('#8e1f1f', x + 3, l.y + 3, 6, 1); }
-    const b = spots.bench; R('#5a3b1c', b.x, b.y, b.w, b.h); R('#a0673a', b.x + 1, b.y + 1, b.w - 2, b.h - 3);
   }
   function drawDesk(time) {
     const d = spots.desk, on = radioT > 0 && Math.floor(time / 120) % 2;
     R('#5a3b1c', d.x, d.y, d.w, d.h); R('#a0673a', d.x + 1, d.y + 1, d.w - 2, d.h - 3);
-    R('#222', d.x + 4, d.y - 6, 16, 10); R('#3fa9f5', d.x + 5, d.y - 5, 14, 7); R('#7ed957', d.x + 6, d.y - 4, 6, 1); R('#7ed957', d.x + 6, d.y - 2, 9, 1);   // Bildschirm
+    const m = spots.mon, k = m.k, blink = Math.floor(time / 250) % 2;   // großer Monitor: normal blau mit grünen Zeilen, beim Alarm das Einsatz-Bild
+    R('#555', m.x + Math.round(m.w / 2) - 3, m.y + m.h - 2, 6, 4);
+    R(alarm ? (blink ? '#ff3b2f' : '#3fa9f5') : '#222', m.x - 2, m.y - 2, m.w + 4, m.h + 2); R('#222', m.x, m.y, m.w, m.h - 2);
+    if (alarm) { R('#ffffff', m.x + 2, m.y + 2, m.w - 4, m.h - 6); drawEinsatzIcon((c, a, b, w, h) => R(c, m.x + 3 + a * k, m.y + 3 + 4 * k + b * k, w * k, h * k), 0, 0, alarm.key); }
+    else { R('#1c5e9e', m.x + 2, m.y + 2, m.w - 4, m.h - 6); for (let i = 0; i < 4; i++) R('#7ed957', m.x + 4, m.y + 5 + i * 4 * k, Math.round((m.w - 8) * [0.6, 0.85, 0.4, 0.7][i]), k); }
     R('#333', d.x + d.w - 16, d.y + 2, 12, 8); R(on ? '#ff5a3c' : '#7a2218', d.x + d.w - 14, d.y + 4, 3, 3); R('#555', d.x + d.w - 6, d.y - 6, 1, 8);   // Funkgerät mit Antenne
     if (radioT > 0) for (let k = 0; k < 3; k++) { const r = 4 + ((time / 90 + k * 4) % 12); R('rgba(255,255,255,.7)', d.x + d.w - 6 - r, d.y - 8 - r / 2, 2, 1); R('rgba(255,255,255,.7)', d.x + d.w - 6 + r, d.y - 8 - r / 2, 2, 1); }
   }
@@ -230,7 +226,7 @@ const Wache = (() => {
     if (level !== 0) return; const p = spots.pole, cx = p.x + p.w / 2;
     R('#9aa0a6', cx - 1, room.y + 2, 3, p.y + p.h / 2 - room.y - 2); R('#e8eef2', cx - 1, room.y + 2, 1, p.y + p.h / 2 - room.y - 2);
   }
-  const GEAR = { h: '#ffd23f', r: '#24346b', w: '#ffd23f', b: '#24346b', n: '#111' };
+  const GEAR = GEAR_PAL;
   function drawKid(x, y) {
     const K = 2, fr = kid.path.length && Math.floor(kid.t * 8) % 2 ? KID.b : KID.a, w = 10 * K, h = 13 * K, pal = gear ? Object.assign({}, KID.pal, GEAR) : KID.pal;
     R('rgba(0,0,0,.25)', Math.round(x - w / 2) + K, Math.round(y) - 2 * K, w, 2 * K);
@@ -240,10 +236,14 @@ const Wache = (() => {
 
   // ---------- Bedienung ----------
   function onPointer(type, x, y) {
-    if (type !== 'down' || swap || slide || night) return true;
+    if (type !== 'down' || swap || slide || night || depart) return true;
     idle = 0;
     if (level === 0) {
+      if (inR(spots.lockers, x, y, 4)) { walkTo(spots.lockers.x + spots.lockers.w / 2, spots.lockers.y + spots.lockers.h + 12); return true; }   // Spind antippen: davor stellen
       const v = vehicles.find(v => inR(v, x, y, 4));
+      if (v && alarm && need().includes(v.key)) {      // Alarm: mit Anzug hinlaufen und einsteigen, ohne Anzug erst umziehen
+        if (gear) walkTo(v.x + v.w / 2, v.y + v.h + 10);   // vor das Fahrzeug (zwischen den Fahrzeugen ist kein Platz) else { nag = 2.5; setWord('gear'); sayWord('gear'); sfx.bonk(); }
+        return true; }
       if (v) { v.blink = 3; sayWord(v.key); setWord(v.key); tatuta(); return true; }
       const gi = spots.gates.findIndex(g => x > g.x - 4 && x < g.x + g.w + 4 && y > room.y + room.h - 14 && y < room.y + room.h + 12);
       if (gi >= 0) { gateGoal[gi] = gateGoal[gi] ? 0 : 1; sfx.click(); for (let k = 0; k < 6; k++) tone(180 + k * 10, .05, 'square', .03, k * .08); setWord('rolltor'); sayWord('rolltor'); return true; }
@@ -253,6 +253,19 @@ const Wache = (() => {
     walkTo(x, y);
     return true;
   }
+  const need = () => alarm ? EINSAETZE[alarm.key].veh : [];
+  function startAlarm() {
+    const key = EINSATZ_KEYS[Math.floor(Math.random() * EINSATZ_KEYS.length)];
+    alarm = { key, t: 0, g: 0 }; radioT = 3; idle = 0;
+    if (night) { kid.y = night.bed.y + night.bed.h + 8; night = null; kid.still = 0; }   // Alarm weckt auf
+    setWord('alarm'); say('Alarm! ' + WORDS[EINSAETZE[key].word][1]);
+  }
+  function board() {                                   // einsteigen: alle Fahrzeuge des Einsatzes rücken aus
+    const vs = vehicles.filter(v => need().includes(v.key));
+    depart = { t: 0, vs }; kid.path = []; tatuta(); sfx.enter();
+    for (const v of vs) gateGoal[v.i] = 1;
+    setWord(vs[0].key); sayWord(vs[0].key);
+  }
   function tatuta() { for (let k = 0; k < 4; k++) { tone(466, .32, 'square', .05, k * .7); tone(622, .32, 'square', .05, k * .7 + .35); } }
   function radio() { radioT = 2; setWord('radio'); sayWord('radio'); for (let k = 0; k < 10; k++) tone(300 + Math.random() * 900, .04, 'sawtooth', .02, k * .05); tone(1200, .08, 'sine', .04, .6); }
 
@@ -260,8 +273,16 @@ const Wache = (() => {
   function update(dt) {
     idle += dt; hoseWob = Math.max(0, hoseWob - dt); radioT = Math.max(0, radioT - dt); gearT = Math.max(0, gearT - dt);
     for (const v of vehicles) v.blink = Math.max(0, v.blink - dt);
-    for (let i = 0; i < 2; i++) gates[i] = approach(gates[i], gateGoal[i], dt / 1.2);
+    for (let i = 0; i < gates.length; i++) gates[i] = approach(gates[i], gateGoal[i], dt / 1.2);
     if (!kid) return;
+    nag = Math.max(0, nag - dt);
+    if (depart) {                                      // Tor auf, dann fahren die Fahrzeuge hinaus, danach zum Einsatz
+      depart.t += dt;
+      if (depart.t > 1.2) for (const v of depart.vs) v.y += 110 * dt;
+      if (!depart.go && depart.vs.every(v => v.y > room.y + room.h + 6)) { depart.go = true; location.href = 'spiele/einsatz/index.html?e=' + alarm.key; }
+      return; }
+    if (alarm) { alarm.t += dt; if (alarm.t > alarm.g) { alarm.g += 2.6; tone(784, .35, 'triangle', .07); tone(587, .5, 'triangle', .07, .35); } }
+    else if (!swap && !slide) { nextAlarm -= dt; if (nextAlarm <= 0) startAlarm(); }
     if (swap) { swap.t += dt;
       if (swap.t > 0.35 && !swap.done) { swap.done = true; level = 1 - level; setupLevel(); kid.x = stairs.x - 14; kid.y = stairs.y + stairs.h - 2; kid.flip = true; kid.path = []; kid.still = 0; const w = level ? 'up' : 'down'; setWord(w); sayWord(w); }
       if (swap.t > 0.7) swap = null; return; }
@@ -281,12 +302,17 @@ const Wache = (() => {
       return;
     }
     kid.still += dt;
-    if (kid.used) return;                               // jede Stelle löst einmal aus, bis das Kind weiterläuft
+    if (kid.used) return;                               // (nach dem Anziehen erst loslaufen, dann einsteigen)
+    if (alarm && gear && level === 0 && kid.still > 0.2) {   // neben dem gebrauchten Fahrzeug: einsteigen
+      const v = vehicles.find(v => need().includes(v.key) && inR(v, kid.x, kid.y - 8, 16));
+      if (v) { board(); return; } }                               // jede Stelle löst einmal aus, bis das Kind weiterläuft
     if (kid.still > 0.3 && inR(stairs, kid.x, kid.y, 2)) { kid.used = true; swap = { t: 0 }; sfx.enter(); return; }
     const p = spots.pole;
     if (level === 1 && kid.still > 0.35 && inR(p, kid.x, kid.y - 4, 4)) { kid.used = true; slide = { t: 0 }; sayWord('pole'); tone(880, .9, 'sine', .05, 0, 220); return; }
     if (level === 0 && kid.still > 0.5 && kid.x > spots.lockers.x - 4 && kid.x < spots.lockers.x + spots.lockers.w + 4 && kid.y < spots.lockers.y + spots.lockers.h + 26) {
-      kid.used = true; gear = !gear; gearT = 0.6; sfx.unlock(); setWord(gear ? 'gear' : 'locker'); sayWord(gear ? 'gear' : 'locker');
+      kid.used = true; gear = !gear; gearT = 0.6; sfx.unlock(); setWord(gear ? 'gear' : 'locker');
+      if (gear && alarm) { const k = need()[0]; setTimeout(() => sayWord(k), 900); }
+      sayWord(gear ? 'gear' : 'locker');
       for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, gear ? '#ffd23f' : '#ffffff', 30); return; }
     if (level === 1 && kid.still > 0.8) { const b = furn.find(o => o.k === 'bed' && kid.x > o.x + 2 && kid.x < o.x + o.w - 2 && kid.y > o.y + 4 && kid.y < o.y + o.h + 4);
       if (b) { kid.used = true; night = { t: 0, bed: b }; setWord('sleep'); say('Gute Nacht'); tone(392, .3, 'triangle', .06); tone(330, .3, 'triangle', .06, .35); tone(262, .5, 'triangle', .06, .7); } }
@@ -302,16 +328,31 @@ const Wache = (() => {
       R(`rgba(10,15,40,${(a * 0.6).toFixed(2)})`, 0, 0, W, H);
       for (let k = 0; k < 3; k++) { const zt = (t * 0.8 + k * 0.33) % 1; R('#ffffff', Math.round(b.x + b.w * 0.6 + zt * 10), Math.round(b.y - zt * 22), 3, 3); }
     } else if (slide && !slide.done) { const k = 1 - slide.t / 0.4; if (k > 0.2) drawKid(kid.x, kid.y); }
-    else drawKid(kid.x, kid.y);
+    else if (!depart) drawKid(kid.x, kid.y);
+    if (alarm) drawAlarm(time);
     if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); R(`rgba(0,0,0,${a.toFixed(2)})`, 0, 0, W, H); }
     if (slide && !slide.done) R(`rgba(0,0,0,${(slide.t / 0.4 * 0.8).toFixed(2)})`, 0, 0, W, H);
-    if (idle > 4 && !kid.path.length && Math.floor(time / 600) % 2 === 0) {   // Hinweis: Treppe, Loch, Ausgang
+    if (!alarm && idle > 4 && !kid.path.length && Math.floor(time / 600) % 2 === 0) {   // Hinweis: Treppe, Loch, Ausgang
       const pts = level ? [spots.pole, stairs] : [stairs, { x: spots.door.x, y: room.y + room.h - 12, w: spots.door.w, h: 4 }];
       for (const q of pts) { const cx = Math.round(q.x + q.w / 2), cy = q.y - 6; for (let i = 0; i < 4; i++) R('rgba(255,255,255,.85)', cx - i, cy + i, 2 * i + 1, 1); }
     }
   }
+  // Alarm: rotes Blinken, Lampen an der Rückwand, Bild des Einsatzes oben, Pfeil zum nächsten Ziel (Spind, Rutschstange, Fahrzeug)
+  function drawAlarm(time) {
+    const on = Math.floor(time / 250) % 2, a = 0.08 + 0.08 * Math.abs(Math.sin(time / 250));   // rot und blau im Wechsel
+    R(on ? `rgba(255,40,30,${a.toFixed(3)})` : `rgba(40,110,255,${a.toFixed(3)})`, 0, 0, W, H);
+    for (let lx = room.x + 30, i = 0; lx < room.x + room.w - 10; lx += 70, i++) { R('#333', lx - 2, room.y, 10, 8); R((on + i) % 2 ? '#ff3b2f' : '#3fa9f5', lx - 1, room.y + 1, 8, 6); }
+    if (level === 0 && !depart) { const m = spots.mon; R(on ? 'rgba(255,59,47,.5)' : 'rgba(63,169,245,.5)', m.x - 5, m.y - 5, m.w + 10, 3); }   // Monitor leuchtet mit
+    if (depart) return;
+    let tg = null;
+    if (!gear) tg = level ? spots.pole : spots.lockers;
+    else if (level) tg = spots.pole;
+    else { const v = vehicles.find(v => need().includes(v.key)); tg = { x: v.x, y: v.y + v.h - 12, w: v.w, h: 8 }; }
+    if (tg) drawArrow(Math.round(tg.x + tg.w / 2 - 3), Math.round(tg.y - 16 - Math.abs(Math.sin(time / 220)) * 4));
+    if (nag > 0 && !gear) { const l = spots.lockers; R(on ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.4)', l.x - 2, l.y - 2, l.w + 4, l.h + 4); }
+  }
   function resize() { const l = level; layout(false); level = l; if (room) { const cols = Math.min(gc - 1, 16); room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - G - 12 }; floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 }; setupLevel(); kid.path = []; kid.x = clamp(kid.x, floor.x + 8, floor.x + floor.w - 8); kid.y = clamp(kid.y, floor.y + 14, floor.y + floor.h); } }
-  return { enter, update, draw, resize, onPointer, _dbg: () => ({ level, gear, kid: kid && { x: kid.x, y: kid.y, n: kid.path.length }, spots, stairs, vehicles, gates, room, floor, furn: furn.map(o => [o.k, o.x, o.y, o.w, o.h]) }) };
+  return { enter, update, draw, resize, onPointer, _alarm: () => startAlarm(), _dbg: () => ({ alarm, depart: !!depart, level, gear, kid: kid && { x: kid.x, y: kid.y, n: kid.path.length }, spots, stairs, vehicles, gates, room, floor, furn: furn.map(o => [o.k, o.x, o.y, o.w, o.h]) }) };
 })();
 startLoop(Wache);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

@@ -5,11 +5,13 @@
 Object.assign(WORDS, {
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
-  cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke']
+  cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
+  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
   katze: { word: 'cattree', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },
+  muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
 };
 const EINSATZ_KEYS = Object.keys(EINSAETZE);
 // Feuerwehranzug fürs Kind (KID aus moebel.js): gelber Helm, dunkelblaue Jacke mit gelbem Streifen
@@ -106,5 +108,17 @@ function drawEinsatzIcon(F, x, y, key) {
   if (key === 'katze') {
     F('#6b4423', x + 13, y + 14, 4, 10); F('#24561f', x + 4, y + 2, 22, 14); F('#3f8f37', x + 5, y + 3, 20, 12); F('#5cb64f', x + 7, y + 4, 8, 4);
     drawCat(F, x + 10, y - 4, 1);
+  } else if (key === 'muell') {
+    F('#4a4d50', x + 9, y + 10, 13, 14); F('#6a6e72', x + 10, y + 11, 11, 12); F('#333', x + 8, y + 9, 15, 2);   // Tonne
+    F('#e74c3c', x + 10, y + 1, 11, 8); F('#ff8a3c', x + 12, y + 3, 7, 6); F('#ffd23f', x + 14, y + 5, 3, 4); F('#e74c3c', x + 13, y - 2, 4, 3);   // Flammen
+  }
+}
+// Flammen (Fußpunkt-Mitte x, y; Breite w, Höhe h; k 0..1 = Stärke), flackern über time
+function drawFlames(F, x, y, w, h, k, time) {
+  if (k <= 0) return;
+  const n = Math.max(3, Math.round(w / 6)), cols = ['#e74c3c', '#ff8a3c', '#ffd23f'];
+  for (let i = 0; i < n; i++) {
+    const fx = x - w / 2 + (i + 0.5) * w / n, f = 0.65 + 0.35 * Math.sin(time / 90 + i * 1.7) + 0.15 * Math.sin(time / 37 + i), fh = Math.max(3, h * k * f * (i % 2 ? 0.8 : 1)), fw = Math.max(3, w / n + 2);
+    cols.forEach((c, j) => { const hh = fh * (1 - j * 0.3), ww = Math.max(1, fw * (1 - j * 0.35)); F(c, Math.round(fx - ww / 2), Math.round(y - hh), Math.round(ww), Math.round(hh)); });
   }
 }

@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125c">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125d">
 <title>Feuerwache</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261125c"></script>
-<script src="../gemeinsam/basis.js?v=20261125c"></script>
-<script src="../gemeinsam/moebel.js?v=20261125c"></script>
-<script src="../gemeinsam/bau.js?v=20261125c"></script>
-<script src="../gemeinsam/feuerwehr.js?v=20261125c"></script>
+<script src="../gemeinsam/sterne.js?v=20261125d"></script>
+<script src="../gemeinsam/basis.js?v=20261125d"></script>
+<script src="../gemeinsam/moebel.js?v=20261125d"></script>
+<script src="../gemeinsam/bau.js?v=20261125d"></script>
+<script src="../gemeinsam/feuerwehr.js?v=20261125d"></script>
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
@@ -80,7 +80,8 @@ const Wache = (() => {
     show('ihud'); setWord('firestation');
     if (location.hash === '#einsatz') {               // zurück vom Einsatz: im Anzug neben dem Fahrzeug, nächster Alarm später
       history.replaceState(null, '', location.pathname + location.search);
-      const v = vehicles.find(v => v.key === 'dlk') || vehicles[0]; gear = true; kid.x = v.x + v.w / 2; kid.y = v.y + v.h + 10; kid.used = true; nextAlarm = rnd(25, 40);
+      let ek = null; try { ek = sessionStorage.getItem('wache.einsatz'); } catch (e) {}
+      const vk = EINSAETZE[ek] ? EINSAETZE[ek].veh[0] : 'dlk', v = vehicles.find(v => v.key === vk) || vehicles[0]; gear = true;   // neben dem Fahrzeug des letzten Einsatzes kid.x = v.x + v.w / 2; kid.y = v.y + v.h + 10; kid.used = true; nextAlarm = rnd(25, 40);
       for (const n of npcs) { n.f = 0; n.gear = true; n.act = null; n.task = null; n.path = []; n.x = v.x + v.w / 2 + (n.i ? 16 : -16); n.y = v.y + v.h + 12; n.wait = rnd(0.3, 1); }   // Kollegen steigen mit aus und ziehen sich wieder um
       setTimeout(() => say('Gut gemacht!'), 400);
     } else setTimeout(() => sayWord('firestation'), 400);
@@ -567,7 +568,10 @@ const Wache = (() => {
   function punch() { bagSwing = 1; setWord('punchbag'); sayWord('punchbag'); tone(110, .12, 'square', .08); tone(70, .2, 'triangle', .1, .04); }
   const need = () => alarm ? EINSAETZE[alarm.key].veh : [];
   function startAlarm() {
-    const key = EINSATZ_KEYS[Math.floor(Math.random() * EINSATZ_KEYS.length)];
+    let last = null; try { last = sessionStorage.getItem('wache.einsatz'); } catch (e) {}
+    const pool = EINSATZ_KEYS.length > 1 ? EINSATZ_KEYS.filter(k => k !== last) : EINSATZ_KEYS;   // nie zweimal derselbe Einsatz hintereinander
+    const key = pool[Math.floor(Math.random() * pool.length)];
+    try { sessionStorage.setItem('wache.einsatz', key); } catch (e) {}
     alarm = { key, t: 0, g: 0 }; radioT = 3; idle = 0; gymAct = null;   // Alarm: aufstehen, Fernseher aus
     for (const n of npcs) { n.act = null; n.task = null; n.path = []; n.goal = null; n.alT = rnd(0.3, 1.2); n.at = 0; }   // Kollegen: zur Stange/zum Spind, umziehen, einsteigen
     if (night) { kid.y = night.bed.y + night.bed.h + 8; night = null; kid.still = 0; }   // Alarm weckt auf

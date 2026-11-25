@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125f">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125g">
 <title>Einsatz</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="alarm" style="pointer-events:auto"><span class="word">ALARM</span></div>
 </div>
 <script>window.NO_PAD = true;</script>
-<script src="../../../gemeinsam/sterne.js?v=20261125f"></script>
-<script src="../../../gemeinsam/basis.js?v=20261125f"></script>
-<script src="../../../gemeinsam/moebel.js?v=20261125f"></script>
-<script src="../../../gemeinsam/bau.js?v=20261125f"></script>
-<script src="../../../gemeinsam/feuerwehr.js?v=20261125f"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261125g"></script>
+<script src="../../../gemeinsam/basis.js?v=20261125g"></script>
+<script src="../../../gemeinsam/moebel.js?v=20261125g"></script>
+<script src="../../../gemeinsam/bau.js?v=20261125g"></script>
+<script src="../../../gemeinsam/feuerwehr.js?v=20261125g"></script>
 <script>
 /* =====================================================================
    FEUERWEHR-EINSATZ (eine Szene je Einsatz, ?e=katze). Kommt aus der Wache, geht danach zurück (#einsatz).
@@ -52,18 +52,23 @@ window.addEventListener('error', function (e) {
    BAUM AUF DER STRASSE (?e=baum, Löschfahrzeug, Kettensäge): Ein umgestürzter Baum liegt auf der unteren Fahrspur, rechts wartet ein Auto.
    3 gelbe Schnittlinien am Stamm: über die Linie wischen (hin und her) oder antippen = sägen (Sägespäne, Brummen); jede Linie durch = Stamm bricht dort.
    Dann die 4 Stücke (3 Stammstücke, Krone) antippen → sie kommen auf die Wiese am Rand (Holzstapel). Straße frei → das Auto fährt vorbei, hupt, „Danke!“.
+   AUTOUNFALL (?e=unfall, Löschfahrzeug, Rettungsschere): Ein rotes Auto ist gegen eine Laterne gerollt (Warnblinker, etwas Dampf, keine Verletzten).
+   Die Fahrertür klemmt, der Fahrer winkt. Nach der Wahl der Schere leuchten 3 Punkte an der Tür (2 Scharniere, Schloss): Punkt antippen und
+   gedrückt halten (oder mehrmals tippen) = Schere schneidet (Hydraulik, Funken). Alle 3 durch → Tür fällt ab, der Fahrer steigt aus und bedankt sich.
    Geschafft: 1 Stern (Hof.addStars), fire.missions + 1. Danach fährt das Auto weg, zurück in die Wache.
    ===================================================================== */
 window.HOF_URL = '../../index.html';
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('einsatz')));
 const KEY = EINSAETZE[new URLSearchParams(location.search).get('e')] ? new URLSearchParams(location.search).get('e') : 'katze';
 const E = EINSAETZE[KEY];
-const MUELL = KEY === 'muell', HAUS = KEY === 'haus', BAUM = KEY === 'baum', FIRE = MUELL || HAUS;   // FIRE = Einsatz mit Löschen
+const MUELL = KEY === 'muell', HAUS = KEY === 'haus', BAUM = KEY === 'baum', UNFALL = KEY === 'unfall', FIRE = MUELL || HAUS;   // FIRE = Einsatz mit Löschen
 
 const Einsatz = (() => {
   const L = 80, WD = 30, GIRL = { h: '#e0a040', r: '#ff6b8a', w: '#ffffff', b: '#6a4c93' };
   let roadY, tree, cat, spots, truck, girl, bar, phase, t = 0, wrong = 0, react = null, idle = 0, meow = 3, hearts = [], drops = [], starGiven = false;
   let BAR = 54, RH = 48, basket = null, target = null, pivot, Lmax, kid = { x: 0, y: 0, show: false, step: false };
+  let crash = null, cuts = [], holdPt = null, driver = null, sparks = [];   // Autounfall: Auto, Schnittpunkte an der Tür, Fahrer
+  const DRIVER = { h: '#2a1a10', s: '#c68642', r: '#3fa9f5', w: '#ffffff', b: '#34495e' };
   let trunk = null, marks = [], pieces = [], car = null, sawT = 0, walkTo = null;   // Baum: Stamm, Schnittlinien, Stücke, wartendes Auto
   let bins = null, fires = [], house = null, family = [], sprayAt = null, aim = null, spraying = 0, steam = [], backFrom = null, owner = null;   // Mülltonne: Tonnen, Feuer { hp }, Spritzstelle, Zielpunkt
   const OWNER = { h: '#cfcfcf', r: '#3f8f37', w: '#ffffff', b: '#5a4a3a' }, MOM = { h: '#5a3b1c', r: '#8e44ad', w: '#ffffff', b: '#2c3e50' }, CHILD = { h: '#e0a040', r: '#ffd23f', w: '#ffffff', b: '#3fa9f5' };
@@ -112,6 +117,18 @@ const Einsatz = (() => {
       car = { x: Math.min(W - 24, ce + 26), y: roadY + RH - 3, go: false };
       cat.on = 'none'; owner = { x: car.x, y: car.y - 16 }; girl = owner;
     }
+    if (UNFALL) {                                      // Auto steht schräg auf dem Bordstein, vorne an der Laterne; Feuerwehr hält links davon
+      // Auto als Pixelbild im Raster 64 × 26 Einheiten (u Pixel je Einheit), Front rechts an der Laterne; Fahrertür = Einheiten x 30–44, y 6–23
+      const u = 0.8, cl = Math.round(64 * u),   // Michael: Auto kleiner als das Feuerwehrauto (L = 80 → Auto etwa 51 lang)
+      cx = Math.round(W * 0.62), by = roadY + 3, cx0 = cx - Math.round(cl / 2);
+      crash = { x: cx0, w: cl, h: Math.round(26 * u), u, by, post: cx0 + cl + 2, doorK: 0 };
+      const P = (ux, uy) => ({ x: cx0 + Math.round(ux * u), y: by - Math.round(uy * u) });
+      crash.P = P; crash.door = { x: P(30, 0).x, w: Math.round(14 * u), top: P(0, 23).y, bot: P(0, 6).y };
+      cuts = [{ ...P(43.5, 20), p: 0 }, { ...P(43.5, 9), p: 0 }, { ...P(30.5, 13), p: 0 }];   // Scharnier oben/unten (vorne), Schloss (hinten)
+      driver = { x: P(37, 0).x, y: P(0, 16).y, out: false };
+      truck.park = Math.max(4, crash.x - L - 26);
+      cat.on = 'none'; owner = { x: driver.x, y: by }; girl = owner;
+    }
     pivot = { x: truck.park + Math.round(L * 0.32), y: truck.y + WD / 2 };
     Lmax = Math.max(...spots.map(p => Math.hypot(p.x + 10 - pivot.x, p.y + 9 - pivot.y))) + 30;
     const n = E.tools.length, gap = W < 240 ? 6 : 10, sw = Math.min(46, Math.floor((W - 12 - (n - 1) * gap) / n)), x0 = Math.round(W / 2 - (n * sw + (n - 1) * gap) / 2);   // schmal: Kästchen kleiner
@@ -127,7 +144,7 @@ const Einsatz = (() => {
     for (let y = roadY; y < roadY + RH; y += T) for (let x = 0; x < W; x += T) bctx.drawImage(pick(tiles.road), x, y);
     B('#cfc8b8', 0, roadY - 3, W, 3); B('#cfc8b8', 0, roadY + RH, W, 3);   // Bordstein
     { const hw = Math.min(90, Math.round(W * 0.22)), hx = Math.round(Math.min(W * 0.12, tree.x - tree.r - 50 - hw)), hy = roadY - 74, rz = 34, fz = 30;   // Haus des Mädchens
-      if (hx > 2 && !MUELL && !BAUM && (!HAUS || hx + hw < house.x - 30)) {   // beim Hausbrand als Nachbarhaus, wenn Platz ist
+      if (hx > 2 && !MUELL && !BAUM && !UNFALL && (!HAUS || hx + hw < house.x - 30)) {   // beim Hausbrand als Nachbarhaus, wenn Platz ist
         B('rgba(0,0,0,.25)', hx + 3, hy + 5, hw, rz + fz);
         B('#7a2218', hx - 2, hy, hw + 4, rz); B('#b5442e', hx, hy + 1, hw, rz - 2); for (let yy = hy + 4; yy < hy + rz - 2; yy += 5) B('#9a3826', hx, yy, hw, 1);
         B('#7a2218', hx, hy + Math.round(rz / 2) - 1, hw, 2);                                            // First
@@ -135,6 +152,14 @@ const Einsatz = (() => {
         B('#6b4423', hx + Math.round(hw / 2) - 6, hy + rz + 8, 12, fz - 8); B('#ffd23f', hx + Math.round(hw / 2) + 3, hy + rz + 18, 2, 2);   // Tür
         for (const wx of [hx + 8, hx + hw - 24]) { B('#5a3b1c', wx, hy + rz + 7, 16, 12); B('#9fe3ff', wx + 2, hy + rz + 9, 12, 8); B('#5a3b1c', wx + 7, hy + rz + 9, 2, 8); }
       } }
+    if (UNFALL) {                                      // Wiese mit Hecke und Laterne (die Laterne steht vorne am Auto)
+      const hx = Math.round(W * 0.06), hw = Math.round(W * 0.3);
+      B('#24561f', hx, roadY - 30, hw, 14); B('#3f8f37', hx + 1, roadY - 29, hw - 2, 10); for (let i = 0; i < hw; i += 7) B('#5cb64f', hx + i + 2, roadY - 28 + (i % 3) * 3, 4, 3);
+      const px = crash.post; B('rgba(0,0,0,.2)', px - 2, roadY - 2, 10, 3);
+      B('#4a4d50', px - 2, roadY - 64, 4, 62); B('#6a6e72', px - 1, roadY - 64, 1, 62); B('#4a4d50', px - 2, roadY - 66, 12, 3); B('#ffe9a8', px + 5, roadY - 64, 6, 3);   // Laterne
+      B('#1f2b33', 0, H - BAR, W, BAR); B('#33444f', 0, H - BAR, W, 2);
+      return;
+    }
     if (BAUM) {                                        // Wiese oben mit ein paar Bäumen; rechts oben ein kleines Haus
       for (const [fx, r] of [[0.12, 16], [0.24, 12], [0.58, 14]]) { const x = Math.round(W * fx), y = roadY - 46;
         B('#4a2e14', x - 3, y + r - 4, 6, 34 - r); B('rgba(0,0,0,.2)', x - r + 4, roadY - 12, 2 * r - 4, 5);
@@ -185,6 +210,12 @@ const Einsatz = (() => {
   const nozzle = () => ({ x: kid.x + 12, y: kid.y - 14 });                          // Strahlrohr in der Hand des Kindes
   function onPointer(type, x, y) {
     idle = 0;
+    if (phase === 'cut') {                            // Rettungsschere: Punkt antippen und halten (oder mehrmals tippen)
+      if (type === 'down') { const c = cuts.filter(c => c.p < 1).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+        if (c && Math.hypot(c.x - x, c.y - y) < 22) { holdPt = c; c.p = Math.min(1, c.p + 0.12); tone(160, .08, 'square', .04); } }
+      if (type === 'move' && holdPt && Math.hypot(holdPt.x - x, holdPt.y - y) > 30) holdPt = null;
+      if (type === 'up') holdPt = null;
+      return true; }
     if (phase === 'saw') {                            // Kettensäge: über die Schnittlinie wischen oder antippen
       if ((type === 'down' || type === 'move') && y < H - BAR && Math.abs(y - trunk.y) < 34) {
         const m = marks.filter(m => !m.done).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
@@ -208,10 +239,12 @@ const Einsatz = (() => {
       return true; }
     if (type !== 'down' || phase !== 'choose' || react) return true;
     const s = bar.find(b => x > b.x - 4 && x < b.x + b.w + 4 && y > b.y - 6 && y < b.y + b.h + 6);
-    if (!s) { if (BAUM) { if (Math.abs(y - trunk.y) < 30 && x > trunk.x0 && x < trunk.ce) { setWord('tree'); sayWord('tree'); } return true; }
+    if (!s) { if (UNFALL) { if (x > crash.x && x < crash.x + crash.w && y > crash.by - crash.h - 10 && y < crash.by) { setWord('car'); sayWord('car'); } return true; }
+      if (BAUM) { if (Math.abs(y - trunk.y) < 30 && x > trunk.x0 && x < trunk.ce) { setWord('tree'); sayWord('tree'); } return true; }
       if (FIRE) { if (fires.some(f => Math.hypot(x - f.x, y - f.y + f.h / 2) < 26)) { setWord('fire'); sayWord('fire'); } return true; }
       const c = catC(); if (Math.hypot(x - c.x, y - c.y) < 24) { miau(); sayWord('cat'); } return true; }
     sfx.click(); setWord(s.k);
+    if (s.k === E.tool && UNFALL) { go('cut'); sayWord(s.k); sfx.unlock(); setTimeout(() => say('Schneide die Tür auf!'), 900); return true; }
     if (s.k === E.tool && BAUM) { go('saw'); sayWord(s.k); sfx.unlock(); setTimeout(() => say('Säg den Baum durch!'), 900); return true; }
     if (s.k === E.tool && FIRE) { go('hoseup'); sayWord(s.k); sfx.unlock(); return true; }
     if (s.k === E.tool) { go('board'); sayWord(s.k); sfx.unlock(); truck.deployed = true; tone(220, .5, 'square', .03); return true; }
@@ -228,17 +261,19 @@ const Einsatz = (() => {
         d.t = 9; fh.hp = Math.max(0, fh.hp - fh.dmg); if (Math.random() < 0.3) steam.push({ x: fh.x + rnd(-10, 10), y: fh.y - rnd(0, 16), t: 0 }); if (fh.hp <= 0) { tone(600, .15, 'triangle', .05); for (let k = 0; k < 6; k++) steam.push({ x: fh.x + rnd(-10, 10), y: fh.y - rnd(0, 20), t: -k * 0.08 }); } if (Math.random() < 0.15) tone(2500 + Math.random() * 2500, .04, 'sawtooth', .008); }
       if (d.g && d.y > roadY + 2) d.t = 9; }
     drops = drops.filter(d => d.t < 1);
+    for (const p of sparks) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 200 * dt; } sparks = sparks.filter(p => p.t < 0.5);
+    if (UNFALL && !crash.doorDown && Math.random() < dt * 3) steam.push({ x: crash.x + 55 * crash.u + rnd(-3, 3), y: crash.by - 17 * crash.u, t: 0 });   // etwas Dampf aus der Motorhaube
     for (const p of steam) { p.t += dt; p.y -= 22 * dt; p.x += Math.sin(p.t * 5) * 6 * dt; } steam = steam.filter(p => p.t < 1.4);
     if (cat.on === 'tree' && !cat.anim && (meow -= dt) < 0) { meow = 4 + Math.random() * 2; miau(); }
     if (cat.anim) { const a = cat.anim; a.t += dt; const k = clamp(a.t / a.d, 0, 1), p = lerp(a.from, a.to(), k);
       cat.x = p.x; cat.y = p.y - Math.sin(k * Math.PI) * 10; if (k >= 1) { cat.anim = null; if (a.done) a.done(); } }
     if (react) { react.t += dt;
-      if (react.k === 'hose' && react.t < 1.2) for (let k = 0; k < 3; k++) drops.push({ x: stand().x, y: stand().y - 16, vx: ((BAUM ? (trunk.x0 + trunk.ce) / 2 : tree.x) - stand().x) * 1.1 + rnd(-20, 20), vy: -(stand().y - (BAUM ? trunk.y - 40 : tree.y)) * 1.3 + rnd(-30, 10), t: 0 });
+      if (react.k === 'hose' && react.t < 1.2) for (let k = 0; k < 3; k++) drops.push({ x: stand().x, y: stand().y - 16, vx: ((UNFALL ? crash.x + crash.w / 2 : BAUM ? (trunk.x0 + trunk.ce) / 2 : tree.x) - stand().x) * 1.1 + rnd(-20, 20), vy: -(stand().y - (UNFALL ? crash.by - 50 : BAUM ? trunk.y - 40 : tree.y)) * 1.3 + rnd(-30, 10), t: 0 });
       if (react.t > 1.6) react = null; }
     switch (phase) {
       case 'arrive': truck.x = approach(truck.x, truck.park, 130 * dt); if (truck.x === truck.park) { go('exit'); sfx.honk(); } break;
       case 'exit': kid.show = true; kid.step = true; { const p = lerp(door(), stand(), clamp(t / 0.8, 0, 1)); kid.x = p.x; kid.y = p.y; }   // Tür auf, Kind steigt aus
-        if (t > 0.9) { go('choose'); kid.step = false; sfx.clod(); setTimeout(() => say('Welches Werkzeug brauchen wir?'), 300); } break;
+        if (t > 0.9) { go('choose'); kid.step = false; sfx.clod(); setTimeout(() => say(UNFALL ? 'Die Tür klemmt! Welches Werkzeug brauchen wir?' : 'Welches Werkzeug brauchen wir?'), 300); } break;
       case 'board': { const p = lerp(stand(), pivot, clamp(t / 0.9, 0, 1)); kid.x = p.x; kid.y = p.y; kid.step = true; }   // zum Drehkranz, in den Korb
         if (t > 1) { kid.show = false; basket = { x: pivot.x, y: pivot.y - 12 }; target = null; go('steer'); setWord('basket'); say('Fahr den Korb zur Katze!'); } break;
       case 'steer': {
@@ -261,6 +296,22 @@ const Einsatz = (() => {
         if (t > 1.4) { cat.on = 'girl'; go('thanks'); say('Danke!'); confetti(); sfx.win();
           for (let k = 0; k < 6; k++) hearts.push({ x: girl.x + rnd(-12, 12), y: girl.y - 30 - rnd(0, 10), t: -k * 0.15 });
           if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
+      case 'cut': {                                   // Kind läuft zum gedrückten Punkt, Schere schließt sich langsam
+        const c = holdPt || cuts.find(c => c.p > 0 && c.p < 1) || null;
+        if (c) { const tx = crash.x - 8; kid.x = approach(kid.x, tx, 90 * dt); kid.y = approach(kid.y, crash.by + 14, 90 * dt); kid.step = Math.abs(kid.x - tx) > 1; }   // links neben der Tür, damit man die Punkte sieht
+        if (holdPt && holdPt.p < 1) { holdPt.p = Math.min(1, holdPt.p + dt * 0.6);
+          if (Math.floor(t * 6) !== Math.floor((t - dt) * 6)) tone(90 + holdPt.p * 60, .14, 'sawtooth', .025); }
+        for (const q of cuts) if (q.p >= 1 && !q.done) { q.done = true; if (holdPt === q) holdPt = null; tone(900, .06, 'square', .05); tone(300, .12, 'square', .05, .05); sfx.clod();
+          for (let k = 0; k < 10; k++) sparks.push({ x: q.x, y: q.y, vx: rnd(-60, 60), vy: rnd(-80, -10), t: 0 }); }
+        if (cuts.every(q => q.done)) { go('door'); holdPt = null; kid.step = false; say('Die Tür ist ab!'); }
+        break; }
+      case 'door': crash.doorK = clamp(t / 0.8, 0, 1); if (t > 0.85 && !crash.doorDown) { crash.doorDown = true; sfx.clod(); }   // Tür kippt weg und liegt am Boden
+        if (t > 1.1) go('outcar'); break;
+      case 'outcar': { const k = clamp(t / 1.2, 0, 1); driver.out = true; driver.x = crash.door.x + crash.door.w / 2 - k * 40; driver.y = crash.by + 2 + k * 8;   // Fahrer steigt aus
+        if (t > 1.3 && !starGiven) { starGiven = true; say('Danke, liebe Feuerwehr!'); sfx.win(); confetti(); owner.x = driver.x; owner.y = driver.y;
+          for (let k2 = 0; k2 < 6; k2++) hearts.push({ x: driver.x + rnd(-12, 12), y: driver.y - 30 - rnd(0, 10), t: -k2 * 0.15 });
+          Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1700); }
+        if (t > 1.6) go('thanks'); break; }
       case 'saw': {                                   // Kind läuft zur gerade gesägten Linie, Säge brummt, Späne fliegen
         if (walkTo != null) { kid.x = approach(kid.x, walkTo, 90 * dt); kid.y = approach(kid.y, trunk.y - 10, 90 * dt); kid.step = Math.abs(kid.x - walkTo) > 1; }
         sawT = Math.max(0, sawT - dt);
@@ -322,6 +373,43 @@ const Einsatz = (() => {
       for (let yy = 0; yy < hh; yy += 3) R(blink ? '#fff08a' : '#ffd23f', m.x - 1, yt + yy, 2, 2);
       if (m.p > 0) R('#2a1a10', m.x - 1, yt + 3, 2, Math.round((hh - 6) * m.p)); }
   }
+  function drawCrash(time) {                           // Unfallauto von der Seite als Pixelbild (Einheiten 64 × 26), Front rechts eingedrückt an der Laterne
+    const c = crash, u = c.u, blink = Math.floor(time / 350) % 2, ox0 = c.x, by = c.by;
+    const RU = (col, x0, y0, x1, y1) => { const a = Math.round(x0 * u), b = Math.round(x1 * u), c0 = Math.round(y0 * u), c1 = Math.round(y1 * u); R(col, ox0 + a, by - c1, Math.max(1, b - a), Math.max(1, c1 - c0)); };   // Rechteck in Einheiten (y nach oben), lückenlos gerundet
+    const k = c.doorK || 0, off = k > 0 && k < 1 ? { x: -k * 14, y: -k * 4 } : null;
+    R('rgba(0,0,0,.25)', Math.round(ox0 + 2 * u), by - 1, Math.round(60 * u), 2);
+    // Unterteil (vorne eingedrückt) und Motorhaube
+    for (let y = 5; y < 14; y++) { const l = 2 + (y < 7 || y > 12 ? 1 : 0), r = 62 - (y > 12 ? 2 : 0) - (y >= 8 && y <= 11 ? 3 : 0) - (y === 7 || y === 12 ? 1 : 0);
+      RU(y === 13 ? '#ef7a6e' : y < 7 ? '#a93226' : '#d9534f', l, y, r, y + 1); }
+    RU('#d9534f', 44, 14, 58, 15); RU('#b8433a', 52, 15, 57, 16);                     // Haube, hochgebogene Kante
+    for (let y = 14; y < 24; y++) { const l = 12 + (y - 14) * 0.8, r = 46 - (y - 14) * 0.9; RU(y === 23 ? '#a93226' : '#d9534f', l, y, r, y + 1); }   // Kabine mit schrägen Scheiben
+    for (let y = 16; y < 22; y++) { const l = 14 + (y - 14) * 0.8, r = 44 - (y - 14) * 0.9; RU('#9fe3ff', l, y, 28, y + 1); RU('#9fe3ff', 31, y, r, y + 1); }   // hinteres und vorderes Fenster
+    RU('#cfefff', 16, 20, 20, 21);
+    for (const wx of [14, 50]) { RU('#3a1a14', wx - 6, 5, wx + 6, 10); }                // Radkästen
+    for (const wx of [14, 50]) { RU('#1b1b1b', wx - 5, 0, wx + 5, 9); RU('#1b1b1b', wx - 4, -1, wx + 4, 10); RU('#9aa0a6', wx - 2, 3, wx + 2, 6); }   // Räder
+    RU('#9aa0a6', 0, 6, 3, 8);                                                          // Stoßstange hinten
+    for (let i = 0; i < 4; i++) RU('#9aa0a6', 59 + i, 6 - i, 61 + i, 7 - i);            // Stoßstange vorne hängt schräg herunter
+    RU('#ffe9a8', 58, 10, 60, 12); RU('#333', 59, 10, 60, 11);                          // Scheinwerfer mit Sprung
+    RU('#7a1a12', 56, 8, 57, 12); RU('#7a1a12', 57, 12, 59, 13);                        // Knautschfalten
+    RU('#e03b3b', 2, 10, 4, 12); RU(blink ? '#ff9f1a' : '#7a4a10', 60, 12, 62, 13); RU(blink ? '#ff9f1a' : '#7a4a10', 1, 12, 3, 13);   // Rücklicht, Warnblinker
+    // Fahrertür: Fugen, Griff; wird abgeschnitten → kippt weg und liegt am Boden, dahinter die Öffnung mit Sitz
+    if (off || k >= 1) { RU('#2a2a2a', 30, 6, 44, 23); RU('#5a4a3a', 33, 7, 41, 15); RU('#4a3a2a', 39, 12, 42, 21); }
+    if (!driver.out) { const hx = Math.round(ox0 + 34 * u), hy = Math.round(by - 21 * u);   // Fahrer winkt im Fenster
+      R(DRIVER.s, hx, hy + 1, 4, 4); R(DRIVER.h, hx, hy, 4, 2); R('#222', hx + 1, hy + 2, 1, 1); R('#222', hx + 3, hy + 2, 1, 1);
+      if (Math.floor(time / 400) % 2) R(DRIVER.s, hx + 5, hy - 1, 2, 3); }
+    const drawDoor = (dx, dy) => { const X = v => v + dx, Y = v => v + dy;
+      RU('#d9534f', X(30), Y(6), X(44), Y(14)); RU('#ef7a6e', X(30), Y(13), X(44), Y(14));
+      for (let y = 14; y < 23; y++) { const r = 46 - (y - 14) * 0.9; RU('#d9534f', X(30), Y(y), X(Math.min(44, r)), Y(y + 1)); }
+      if (driver.out || dx || dy) for (let y = 16; y < 22; y++) { const r = 44 - (y - 14) * 0.9; RU('#9fe3ff', X(31), Y(y), X(r), Y(y + 1)); }
+      RU('#7a1a12', X(30), Y(6), X(30.5), Y(23)); RU('#7a1a12', X(43.5), Y(6), X(44), Y(21)); RU('#333', X(32), Y(11), X(35), Y(12)); };
+    if (k <= 0) { if (driver.out) drawDoor(0, 0); else { RU('#7a1a12', 30, 6, 30.5, 23); RU('#7a1a12', 43.5, 6, 44, 21); RU('#333', 32, 11, 35, 12); } }   // Tür zu: nur Fugen und Griff (Fenster bleibt fürs Gesicht)
+    else if (k < 1) drawDoor(off.x, off.y);
+    else { R('#8e2a20', Math.round(ox0 + 12 * u), by - 2, Math.round(16 * u), 2); R('#d9534f', Math.round(ox0 + 12 * u), by - 2, Math.round(16 * u), 1); }   // Tür liegt flach am Boden
+    if (phase === 'cut') for (const q of cuts) if (!q.done) {   // leuchtende Schnittpunkte erst mit der Schere
+      const pul = Math.abs(Math.sin(time / 220)); R(`rgba(255,210,63,${(0.4 + pul * 0.5).toFixed(2)})`, q.x - 3, q.y - 3, 7, 7); R('#ffd23f', q.x - 2, q.y - 2, 5, 5);   // klein, damit sie sich am kleineren Auto nicht überdecken
+      if (q.p > 0) R('#2a1a10', q.x - 2, q.y - 2, Math.round(5 * q.p), 5); }
+    if (driver.out) drawKidPal(R, driver.x, driver.y, DRIVER, 2, false, phase === 'outcar' && Math.floor(time / 120) % 2 === 1);
+  }
   function drawCar() {                                 // wartendes Auto von der Seite (fährt nach links), Fahrer im Fenster
     const x = Math.round(car.x), y = Math.round(car.y);
     R('rgba(0,0,0,.25)', x - 18, y - 2, 38, 3);
@@ -376,11 +464,12 @@ const Einsatz = (() => {
     if (MUELL) drawBins(time);
     if (HAUS) { drawHouseFire(time); for (const p of family) drawKidPal(R, p.x, p.y, p.pal, 2, false, false);
       R('#8a5a2b', family[1].x + 14, roadY - 12, 10, 6); R('#5a3b1c', family[1].x + 22, roadY - 15, 5, 5); R('#222', family[1].x + 25, roadY - 14, 1, 1); R('#8a5a2b', family[1].x + 14, roadY - 7, 2, 3); R('#8a5a2b', family[1].x + 21, roadY - 7, 2, 3);   // Hund
-    } else if (!BAUM) drawKidPal(R, girl.x, girl.y, MUELL ? OWNER : GIRL, 2, false, false);   // beim Baum sitzt der Fahrer im Auto
+    } else if (!BAUM && !UNFALL) drawKidPal(R, girl.x, girl.y, MUELL ? OWNER : GIRL, 2, false, false);   // beim Baum sitzt der Fahrer im Auto
     if (cat.on === 'girl') drawCat(R, Math.round(girl.x - 34), Math.round(girl.y - 18), cat.s);   // Katze sitzt wieder neben dem Mädchen
     const on = Math.floor(time / 150) % 2 === 1;
     drawFireTruck(R, truck.x, truck.y, L, WD, E.veh[0], 'right', on, false, truck.deployed);
-    if (BAUM) { drawTree(time); drawCar(); }          // untere Spur liegt vor dem Feuerwehrauto (oben): Baum und Auto danach zeichnen
+    if (BAUM) { drawTree(time); drawCar(); }
+    if (UNFALL) drawCrash(time);          // untere Spur liegt vor dem Feuerwehrauto (oben): Baum und Auto danach zeichnen
     if (FIRE && ['hoseup', 'spray', 'out', 'thanks'].includes(phase)) { const a = { x: truck.x + Math.round(L * 0.4), y: truck.y + 2 }, b = nozzle();   // Schlauch vom Auto zum Strahlrohr
       pixLine(R, a.x, a.y, b.x - 6, b.y + 10, 2, '#d8cfb4'); pixLine(R, b.x - 6, b.y + 10, b.x, b.y, 2, '#d8cfb4'); R('#9aa0a6', a.x - 2, a.y - 2, 5, 5); }
     if (phase === 'exit' || phase === 'back') R('#f2f2f2', Math.round(truck.x + L - 22), Math.round(truck.y - 4), 10, 4);   // offene Fahrertür
@@ -389,6 +478,8 @@ const Einsatz = (() => {
       const shake = react && react.k !== 'hose' && react.t < 1.2 ? Math.floor(react.t * 8) % 2 === 1 : false;
       drawKidPal(R, kid.x, kid.y, GEAR_PAL, 2, shake, kid.step && Math.floor(time / 120) % 2 === 1, true);
       if (cat.on === 'kid') drawCat(R, Math.round(kid.x - 10), Math.round(kid.y - 30), cat.s);
+      if (UNFALL && phase === 'cut') { const c = holdPt || cuts.find(c => c.p > 0 && c.p < 1); const x = Math.round(kid.x + 6), y = Math.round(kid.y - 16), op = c ? Math.round((1 - c.p) * 4) : 4;   // Rettungsschere in der Hand
+        R('#ffd23f', x, y, 6, 8); R('#e0b000', x, y + 6, 6, 2); R('#222', x + 6, y - op, 6, 3); R('#222', x + 6, y + 5 + op, 6, 3); }
       if (BAUM && phase === 'saw') { const x = Math.round(kid.x + 6), y = Math.round(kid.y - 14), sh = sawT > 0 ? Math.round(Math.sin(time / 25)) : 0;   // Kettensäge in der Hand
         R('#e67e22', x, y + sh, 8, 6); R('#f39c33', x + 1, y + 1 + sh, 6, 2); R('#333', x + 1, y - 2 + sh, 5, 2); R('#9aa0a6', x + 7, y + 3 + sh, 9, 3); R('#c8ccd0', x + 7, y + 3 + sh, 9, 1); }
       if (FIRE && ['spray', 'out', 'thanks'].includes(phase)) { const nz = nozzle(); R('#5a5a5a', nz.x - 7, nz.y - 1, 8, 3); R('#c48a00', nz.x, nz.y - 1, 4, 3); }   // Strahlrohr
@@ -397,6 +488,8 @@ const Einsatz = (() => {
     if (cat.anim && cat.anim.jump) drawCat(R, Math.round(cat.x), Math.round(cat.y), cat.s);
     for (const d of drops) R(d.dust ? '#e0c890' : d.t < 0.6 ? '#6cc4f0' : 'rgba(108,196,240,.5)', Math.round(d.x), Math.round(d.y), d.dust ? 2 : 3, d.dust ? 2 : 3);
     for (const p of steam) if (p.t > 0) R(`rgba(240,240,240,${(0.8 * (1 - p.t / 1.4)).toFixed(2)})`, Math.round(p.x - 3), Math.round(p.y - 3), 6, 5);
+    if (UNFALL && phase === 'cut' && idle > 4 && !holdPt) { const c = cuts.find(c => c.p < 1); if (c) drawArrow(Math.round(c.x - 3), Math.round(c.y - 22 - Math.abs(Math.sin(time / 220)) * 4)); }
+    for (const p of sparks) R(p.t < 0.25 ? '#fff6a0' : '#ffb347', Math.round(p.x), Math.round(p.y), 2, 2);
     if (BAUM && phase === 'saw' && idle > 4) { const m = marks.find(m => !m.done); if (m) drawArrow(Math.round(m.x - 3), Math.round(trunk.y - trunk.th - 26 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (BAUM && phase === 'clear' && idle > 4) { const q = pieces.find(q => !q.gone && !q.anim); if (q) drawArrow(Math.round((q.a + (q.crown ? trunk.ce : q.b)) / 2 - 3), Math.round(trunk.y - trunk.th - 26 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (FIRE && phase === 'spray' && (idle > 4 || !aim)) { const f = fires.find(f => f.hp > 0); if (f) drawArrow(Math.round(f.x - 3), Math.round(f.y - f.h - 6 - Math.abs(Math.sin(time / 220)) * 4)); }   // Hinweis: aufs nächste Feuer
@@ -415,7 +508,7 @@ const Einsatz = (() => {
     if (phase === 'steer' && idle > 4 && cat.on === 'tree' && !cat.anim) { const c = catC(); drawArrow(Math.round(c.x - 3), Math.round(c.y - 26 - pulse * 4)); }
   }
   function resize() { layout(false); }
-  return { enter, update, draw, resize, onPointer, _dbg: () => ({ phase, t, wrong, cat: { on: cat.on, i: cat.i, x: cat.x, y: cat.y }, basket, bar, stars: Hof.save.stars, marks, pieces: pieces.map(q => ({ a: q.a, b: q.b, gone: q.gone })), trunk, fires: fires.map(f => ({ x: f.x, y: f.y, h: f.h, hp: f.hp })), kid }) };
+  return { enter, update, draw, resize, onPointer, _dbg: () => ({ phase, t, wrong, cat: { on: cat.on, i: cat.i, x: cat.x, y: cat.y }, basket, bar, stars: Hof.save.stars, cuts, crash, marks, pieces: pieces.map(q => ({ a: q.a, b: q.b, gone: q.gone })), trunk, fires: fires.map(f => ({ x: f.x, y: f.y, h: f.h, hp: f.hp })), kid }) };
 })();
 startLoop(Einsatz);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

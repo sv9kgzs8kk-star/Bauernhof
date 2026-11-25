@@ -6,12 +6,13 @@ Object.assign(WORDS, {
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
-  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
+  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
   katze: { word: 'cattree', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },
   haus: { word: 'housefire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // Einfamilienhaus: 3 Fenster brennen (Löschfahrzeug)
+  unfall: { word: 'crash', veh: ['lf'], tool: 'cutter', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // Autounfall: Tür klemmt (Rettungsschere ist im Löschfahrzeug)
   baum: { word: 'treeroad', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] }, // umgestürzter Baum (Kettensäge ist im Löschfahrzeug)
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
 };
@@ -115,6 +116,10 @@ function drawEinsatzIcon(F, x, y, key) {
     F('#ff8a3c', x + 8, y + 13, 5, 4); F('#ff8a3c', x + 17, y + 13, 5, 4); F('#6b4423', x + 13, y + 18, 4, 6);
     F('#e74c3c', x + 7, y + 8, 7, 5); F('#ffd23f', x + 9, y + 10, 3, 3); F('#e74c3c', x + 16, y + 8, 7, 5); F('#ffd23f', x + 18, y + 10, 3, 3);   // Flammen
     F('rgba(90,90,90,.8)', x + 14, y - 2, 6, 4);
+  } else if (key === 'unfall') {
+    F('#4a4d50', x + 25, y - 2, 2, 22); F('#ffe9a8', x + 25, y - 3, 4, 2);                                   // Laterne
+    F('#c0453a', x + 2, y + 10, 22, 8); F('#c0453a', x + 7, y + 5, 12, 6); F('#9fe3ff', x + 9, y + 6, 8, 3);   // Auto
+    F('#5a1a12', x + 22, y + 11, 2, 5); F('#ff9f1a', x + 2, y + 12, 2, 2); F('#222', x + 5, y + 17, 4, 4); F('#222', x + 17, y + 17, 4, 4);
   } else if (key === 'baum') {
     F('#555', x, y + 16, 30, 8); F('#ffffff', x + 3, y + 19, 4, 1); F('#ffffff', x + 12, y + 19, 4, 1); F('#ffffff', x + 21, y + 19, 4, 1);   // Straße
     F('#6b4423', x + 2, y + 13, 18, 5); F('#4a2e14', x + 2, y + 13, 18, 1); F('#24561f', x + 17, y + 6, 12, 12); F('#3f8f37', x + 18, y + 7, 10, 9);   // Stamm, Krone

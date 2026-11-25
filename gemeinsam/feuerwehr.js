@@ -6,12 +6,13 @@ Object.assign(WORDS, {
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
-  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
+  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], ballroof: ['BALL AUF DEM DACH', 'Ball auf dem Dach'], ball: ['BALL', 'Ball'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
   katze: { word: 'cattree', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },
   haus: { word: 'housefire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // Einfamilienhaus: 3 Fenster brennen (Löschfahrzeug)
+  ball: { word: 'ballroof', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // kleiner Einsatz: Ball auf dem Dach (Drehleiter)
   unfall: { word: 'crash', veh: ['lf'], tool: 'cutter', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // Autounfall: Tür klemmt (Rettungsschere ist im Löschfahrzeug)
   baum: { word: 'treeroad', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] }, // umgestürzter Baum (Kettensäge ist im Löschfahrzeug)
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
@@ -116,6 +117,9 @@ function drawEinsatzIcon(F, x, y, key) {
     F('#ff8a3c', x + 8, y + 13, 5, 4); F('#ff8a3c', x + 17, y + 13, 5, 4); F('#6b4423', x + 13, y + 18, 4, 6);
     F('#e74c3c', x + 7, y + 8, 7, 5); F('#ffd23f', x + 9, y + 10, 3, 3); F('#e74c3c', x + 16, y + 8, 7, 5); F('#ffd23f', x + 18, y + 10, 3, 3);   // Flammen
     F('rgba(90,90,90,.8)', x + 14, y - 2, 6, 4);
+  } else if (key === 'ball') {
+    F('#f2e6c8', x + 4, y + 12, 22, 12); F('#4f79b0', x + 2, y + 8, 26, 4); F('#4f79b0', x + 6, y + 4, 18, 4); F('#8a4a2b', x + 20, y + 1, 4, 6);   // Haus, Dach, Schornstein
+    F('#e74c3c', x + 13, y - 1, 6, 3); F('#ffffff', x + 13, y + 2, 6, 2); F('#3fa9f5', x + 14, y + 4, 4, 1);   // Ball
   } else if (key === 'unfall') {
     F('#4a4d50', x + 25, y - 2, 2, 22); F('#ffe9a8', x + 25, y - 3, 4, 2);                                   // Laterne
     F('#c0453a', x + 2, y + 10, 22, 8); F('#c0453a', x + 7, y + 5, 12, 6); F('#9fe3ff', x + 9, y + 6, 8, 3);   // Auto

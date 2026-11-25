@@ -692,19 +692,20 @@ function garageSlots(gg) {
     { x: x + hw, y: y + Math.round(d / 2), len: w, ang: 0, roof: true, w: w + 4, h: d + 4 },
   ];
 }
-const PANEL_COL = { base: '#d9d3c5', edge: '#8f887a', light: '#f0ebe0', joint: '#b8b1a2', red: '#c0392b', redD: '#8e1f1f' };
+// Michael: Feuerwache außen rot (vorher beige wie der Betonhof). Wände rot, Streifen weiß, Rolltore silbern, damit sie sich abheben
+const PANEL_COL = { base: '#c0392b', edge: '#7a1a12', light: '#e0604c', joint: '#a5321f', red: '#f2f2f2', redD: '#7f858b', gate: '#b8bec4' };
 // Wandplatte von oben als Balken (Mitte cx,cy, Länge len, Winkel ang); lift 0..1 = Höhe (Schatten wandert)
 function drawPanelTop(F, cx, cy, len, ang, lift = 0) {
   const ca = Math.cos(ang) * len / 2, sa = Math.sin(ang) * len / 2, sh = Math.round(2 + lift * 6);
   pixLine(F, cx - ca + sh, cy - sa + sh, cx + ca + sh, cy + sa + sh, 5, 'rgba(0,0,0,.22)');
   pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 6, PANEL_COL.edge); pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 4, PANEL_COL.base); pixLine(F, cx - ca, cy - sa, cx + ca, cy + sa, 1, PANEL_COL.light);
 }
-// Flachdach-Platte von oben (Mitte cx,cy, Größe w×h)
+// Flachdach-Platte von oben (Mitte cx,cy, Größe w×h): Kies in der Mitte, rote Attika (Dachrand) rundherum
 function drawFlatRoof(F, cx, cy, w, h) {
   const x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
-  F('#5f646a', x, y, w, h); F('#8d9196', x + 1, y + 1, w - 2, h - 2); F('#a8aeb4', x + 1, y + 1, w - 2, 1);
-  for (let i = 0, k = x * 7 + y * 3; i < w * h / 30; i++) { k = (k * 9301 + 49297) % 233280; F(k % 2 ? '#7a7f85' : '#9ca2a8', x + 2 + k % Math.max(1, w - 4), y + 2 + (k >> 5) % Math.max(1, h - 4), 1, 1); }   // Kies
-  F('#5f646a', x + 2, y + 2, w - 4, 1); F('#5f646a', x + 2, y + h - 3, w - 4, 1); F('#5f646a', x + 2, y + 2, 1, h - 4); F('#5f646a', x + w - 3, y + 2, 1, h - 4);   // Attika
+  F('#7a1a12', x, y, w, h); F('#c0392b', x + 1, y + 1, w - 2, h - 2); F('#e0604c', x + 1, y + 1, w - 2, 1);   // rote Attika
+  F('#5f646a', x + 3, y + 3, w - 6, h - 6); F('#8d9196', x + 4, y + 4, w - 8, h - 8);
+  for (let i = 0, k = x * 7 + y * 3; i < w * h / 30; i++) { k = (k * 9301 + 49297) % 233280; F(k % 2 ? '#7a7f85' : '#9ca2a8', x + 5 + k % Math.max(1, w - 10), y + 5 + (k >> 5) % Math.max(1, h - 10), 1, 1); }   // Kies
 }
 // Fahrzeughalle zeichnen; o: { parts 0..6 (gesetzte Teile), gates [k0, k1] (0 = offen, 1 = Rolltor ganz unten), time }
 function drawGarage(F, gg, o = {}) {
@@ -717,12 +718,12 @@ function drawGarage(F, gg, o = {}) {
   for (const [i, px, pw, gi] of [[3, x, hw, 0], [4, x + hw, w - hw, 1]]) if (n > i) {   // Vorderwand links/rechts: Krone und Fassade mit Torloch
     F(C.edge, px, y + d - t, pw, t); F(C.light, px, y + d - t, pw, 1);
     F(C.edge, px, y + d, pw, fh); F(C.base, px + (i === 3 ? 1 : 0), y + d, pw - 1, fh - 1);
-    F(C.red, px, y + d + 1, pw, Math.max(1, Math.round(fh * 0.12))); F(C.edge, px + pw - 1, y + d, 1, fh);   // roter Streifen, Fuge
+    F(C.red, px, y + d + 1, pw, Math.max(1, Math.round(fh * 0.12))); F(C.edge, px + pw - 1, y + d, 1, fh);   // weißer Streifen, Fuge
     const [gx, gy, gW, gH] = gates[gi];
     F('#2a2a2a', gx, gy, gW, gH); F('#444', gx + 1, gy + gH - 2, gW - 2, 2);   // Torloch (Halle innen dunkel)
     const k = clamp(gk[gi] || 0, 0, 1), rh = Math.round(gH * k);
     if (rh > 0) {                                     // Rolltor kommt von oben herunter
-      F(C.redD, gx, gy, gW, rh); F(C.red, gx + 1, gy, gW - 2, rh);
+      F(C.redD, gx, gy, gW, rh); F(C.gate, gx + 1, gy, gW - 2, rh);
       for (let yy = gy + 2; yy < gy + rh; yy += 3) F(C.redD, gx + 1, yy, gW - 2, 1);
       if (k >= 1 && gH > 10) { const wy = gy + Math.round(gH * 0.3); for (let wx = gx + 2; wx + 3 < gx + gW - 1; wx += 5) F('#9fe3ff', wx, wy, 3, 2); }   // Fensterreihe
       F('#555', gx, gy + rh - 1, gW, 1);
@@ -751,6 +752,7 @@ function drawFireBrick(F, x, y, w, h) {
 // Hauptgebäude zeichnen; o: { built: fertige Reihen 0..5 (Steine + Mauerkrone in dieser Höhe), done (Dach, Fenster, Tür, Wappen), roofK 0..1 (Dach senkt sich), time }
 function drawMain(F, m, o = {}) {
   const built = o.done ? MAIN_ROWS : (o.built || 0), cells = mainCells(m), rh = m.fh / MAIN_ROWS;
+  if (o.done) F(FIRE_BRICK[1], m.x, Math.round(m.bot - m.fh), m.w, Math.round(m.fh));   // fertig: Fassade ganz rot hinterlegt (keine Lücken zwischen den Steinen)
   for (const k of cells) if (k.r < built) {
     if (!k.open) drawFireBrick(F, k.x, k.y, k.w, k.h);
     else if (!o.done) F('#2e1f10', k.x, k.y, k.w, k.h);

@@ -16,25 +16,42 @@ const EINSATZ_KEYS = Object.keys(EINSAETZE);
 const GEAR_PAL = { h: '#ffd23f', r: '#24346b', w: '#ffd23f', b: '#24346b', n: '#111' };
 
 // Feuerwehrauto von oben. x0,y0 = linke obere Ecke, L = Länge, Wd = Breite.
-// dir 'down': Fahrerhaus unten (steht in der Halle vor dem Tor), 'right': fährt nach rechts. on = Blaulicht an, glow = Schein drumherum
+// dir 'down': Fahrerhaus unten (steht in der Halle vor dem Tor), 'right': fährt nach rechts.
+// on = Blaulicht-Takt (true/false wechseln = blinkt; null = Blaulichter aus), glow = blauer Schein drumherum
 // deployed (nur Drehleiter): Leiter ist vom Dach weg (ausgefahren), Stützen stehen seitlich heraus
+// Michael: richtige Windschutzscheibe, Blaulichter an den 4 Ecken, rund statt eckig
 function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = false, deployed = false) {
   const P = dir === 'right' ? (c, u, v, du, dv) => F(c, Math.round(x0 + u), Math.round(y0 + v), du, dv) : (c, u, v, du, dv) => F(c, Math.round(x0 + v), Math.round(y0 + u), dv, du);
-  const h = L, w = Wd, cab = Math.round(h * 0.26);
+  const h = L, w = Wd, cab = Math.round(h * 0.26), s = clamp(Math.round(w * 0.13), 4, 7);   // s = Größe eines Blaulichts
+  const ws = Math.max(5, Math.round(cab * 0.42)), u0 = h - 2 - ws;                         // Windschutzscheibe: ws tief, beginnt bei u0
   P('rgba(0,0,0,.25)', 4, 3, h, w);
+  if (glow) P(on ? 'rgba(63,169,245,.45)' : 'rgba(63,169,245,.22)', -6, -7, h + 12, w + 14);
   for (const u of [Math.round(h * 0.15), Math.round(h * 0.45), h - cab + 4]) { P('#1b1b1b', u, -2, 10, 3); P('#1b1b1b', u, w - 1, 10, 3); }   // Räder
-  P('#8e1f1f', 0, 0, h, w); P('#c0392b', 1, 1, h - 2, w - 2);
+  P('#7a1a12', 0, 0, h, w); P('#c0392b', 1, 1, h - 2, w - 2); P('#e0604c', 1, 1, h - 2, 1); P('#a93226', 1, w - 3, h - 2, 2);   // Aufbau mit Licht- und Schattenkante
+  P('#555', 0, 2, 2, w - 4);                                                                                        // Trittbrett hinten
   P('#f2f2f2', h - cab - 3, 1, 2, w - 2); P('#ffd23f', h - cab - 1, 1, 1, w - 2);                                   // Streifen vor dem Fahrerhaus
-  P('#a92f22', h - cab + 1, 2, cab - 7, w - 4); P('#1c3f6e', h - 6, 3, 4, w - 6); P('#6cc4f0', h - 6, 4, 1, w - 8);   // Fahrerhaus-Dach, Frontscheibe
-  P('#333', h - cab + 3, -3, 3, 3); P('#333', h - cab + 3, w, 3, 3);                                               // Spiegel
-  const lb = Math.round(w * 0.5), l0 = Math.round((w - lb) / 2);
-  P('#333', h - cab + 2, l0, 4, lb); P(on ? '#3fa9f5' : '#1c5e9e', h - cab + 3, l0 + 1, 2, (lb >> 1) - 1); P(on ? '#1c5e9e' : '#3fa9f5', h - cab + 3, Math.round(w / 2), 2, (lb >> 1) - 1);
-  if (glow) P(on ? 'rgba(63,169,245,.35)' : 'rgba(63,169,245,.15)', h - cab - 6, -8, 16, w + 16);
-  const top = 3, bh = h - cab - 9;
+  P('#b23527', h - cab + 1, 2, u0 - (h - cab + 1) - 1, w - 4); P('#cf4a3a', h - cab + 1, 2, 1, w - 4);              // Fahrerhaus-Dach
+  // Windschutzscheibe: dunkler Rahmen, blaues Glas, zwei helle Spiegelungen schräg, Scheibenwischer
+  P('#1c2430', u0 - 1, 2, ws + 1, w - 4); P('#3d8fc9', u0, 3, ws - 1, w - 6); P('#6cc4f0', u0, 3, Math.max(1, ws >> 1), w - 6);
+  for (let i = 0; i < ws - 1; i++) { P('#d6f2ff', u0 + i, 5 + (ws - 2 - i), 1, 2); if (w > 30) P('#bfe9ff', u0 + i, 10 + (ws - 2 - i), 1, 1); }
+  P('#222', u0 + ws - 2, Math.round(w * 0.28), 1, Math.round(w * 0.16)); P('#222', u0 + ws - 2, Math.round(w * 0.58), 1, Math.round(w * 0.16));
+  P('#3a3a3a', h - 2, 1, 2, w - 2); P('#fff6c0', h - 2, 2, 2, 3); P('#fff6c0', h - 2, w - 5, 2, 3);                 // Stoßstange, Scheinwerfer
+  P('#333', u0 - 2, -3, 3, 3); P('#333', u0 - 2, w, 3, 3);                                                         // Spiegel
+  // Blaulichter an den 4 Ecken (abgerundet): vorne direkt hinter der Scheibe, hinten an den Ecken; blinken über Kreuz
+  const lamp = (u, v, lit) => {
+    P('#163a63', u, v + 1, s, s - 2); P('#163a63', u + 1, v, s - 2, s);
+    const c = lit ? '#5cc0ff' : '#1c5e9e'; P(c, u + 1, v + 2, s - 2, s - 4); P(c, u + 2, v + 1, s - 4, s - 2);
+    P(lit ? '#e6f6ff' : '#3f7fbf', u + 1 + (s > 5 ? 1 : 0), v + 1 + (s > 5 ? 1 : 0), 1, 1);
+    if (lit) P('rgba(92,192,255,.35)', u - 2, v - 2, s + 4, s + 4);
+  };
+  const active = on !== null, fu = u0 - s - 2;
+  const top = s + 4, bh = h - cab - 6 - top;
   if (key === 'dlk') {                                 // Drehleiter: Drehkranz hinten, Leiterpaket nach vorne übers Fahrerhaus, Korb vorne
     if (deployed) for (const u of [8, h - cab - 8]) { P('#555', u, -9, 4, 9); P('#555', u, w, 4, 9); P('#333', u - 1, -11, 6, 3); P('#333', u - 1, w + 8, 6, 3); }   // Stützen
     const tu = top + Math.round(bh * 0.28), tr = Math.round(w * 0.32), c = Math.round(w / 2);
-    P('#555', tu - tr, c - tr, 2 * tr, 2 * tr); P('#8a8f94', tu - tr + 2, c - tr + 2, 2 * tr - 4, 2 * tr - 4); P('#c0392b', tu - 3, c - 3, 6, 6);   // Drehkranz
+    for (let i = -tr; i < tr; i++) { const q = Math.round(Math.sqrt(tr * tr - (i + 0.5) ** 2));   // Drehkranz rund
+      P('#555', tu + i, c - q, 1, 2 * q); if (q > 2) P(i < -tr / 3 ? '#a8adb2' : '#8a8f94', tu + i, c - q + 2, 1, 2 * q - 4); }
+    P('#c0392b', tu - 3, c - 3, 6, 6);
     if (!deployed) {
       P('#7f8388', tu, c - 6, h - tu + 2, 12); P('#c8ccd0', tu, c - 5, h - tu + 2, 2); P('#c8ccd0', tu, c + 3, h - tu + 2, 2);
       for (let u = tu + 4; u < h; u += 5) P('#c8ccd0', u, c - 3, 1, 6);
@@ -51,6 +68,7 @@ function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = f
     P('#555', top + 4, Math.round(w / 2) - 3, 6, 6); P('#ffd23f', top + 5, Math.round(w / 2) - 2, 4, 4);
   }
   P('#ffd23f', Math.round(h * 0.3), 0, Math.round(h * 0.4), 1); P('#ffd23f', Math.round(h * 0.3), w - 1, Math.round(h * 0.4), 1);   // Warnstreifen
+  lamp(fu, 2, active && on); lamp(fu, w - 2 - s, active && !on); lamp(2, 2, active && !on); lamp(2, w - 2 - s, active && on);
 }
 
 // Werkzeug-Bild (16×16 Raster, Pixelgröße s) für die Werkzeugleiste

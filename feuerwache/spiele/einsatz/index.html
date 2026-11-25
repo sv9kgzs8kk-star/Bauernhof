@@ -509,13 +509,12 @@ const Einsatz = (() => {
         if (P.done) P.open = P.t - P.tDone > 1.8 ? clamp(P.open - dt * 4, 0, 1) : 1;
         if (P.done && P.t - P.tDone > 2.2) { amb.plastered = true; go('amb'); }
         break; }
-      case 'tow': {                                   // Abschleppwagen kommt rückwärts von rechts, piept; die beiden gehen zurück, damit man das Auto sieht
-        walkP(kid, home, 85 * dt); walkP(mate, { x: home.x - 16, y: home.y }, 85 * dt);
+      case 'tow': {                                   // Abschleppwagen kommt rückwärts von rechts, piept (die beiden bleiben auf der Wiese, Michael)
         tow.beep += dt; if (Math.floor(tow.beep * 2.5) !== Math.floor((tow.beep - dt) * 2.5)) tone(1200, .12, 'square', .025);
         tow.x = approach(tow.x, tow.stop, 70 * dt);
         if (tow.x === tow.stop) { const b = towBase(); crane = { tip: { x: b.x - 8, y: b.y - 10 }, target: null, hooked: false, R: Math.hypot(carTop().x - b.x, carTop().y - 14 - b.y) + 34 };
           go('crane'); tone(220, .3, 'square', .03); setWord('crane'); say('Fahr den Haken zum Auto!'); } break; }
-      case 'crane': { const c = crane, b = towBase(); walkP(kid, home, 85 * dt); walkP(mate, { x: home.x - 16, y: home.y }, 85 * dt);   // Spitze folgt dem Finger (Reichweite um die Kransäule), Haken hängt 14 darunter
+      case 'crane': { const c = crane, b = towBase();   // Spitze folgt dem Finger (Reichweite um die Kransäule), Haken hängt 14 darunter
         if (c.target) { const d = Math.hypot(c.target.x - c.tip.x, c.target.y - c.tip.y), v = 120 * dt;
           if (d > v) { c.tip.x += (c.target.x - c.tip.x) / d * v; c.tip.y += (c.target.y - c.tip.y) / d * v; } else { c.tip.x = c.target.x; c.tip.y = c.target.y; }
           if (Math.floor(t * 6) !== Math.floor((t - dt) * 6) && d > 1) tone(130, .06, 'square', .015); }

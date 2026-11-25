@@ -53,7 +53,7 @@ document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click'
 Object.assign(WORDS, { locker: ['SPIND', 'Spind'],
   radio: ['FUNKGERÄT', 'Funkgerät'], pole: ['RUTSCHSTANGE', 'Rutschstange'], hoses: ['SCHLÄUCHE', 'Schläuche'], up: ['OBEN', 'Oben'], down: ['UNTEN', 'Unten'],
   dorm: ['SCHLAFRAUM', 'Schlafraum'], kitchen: ['KÜCHE', 'Küche'],
-  gym: ['FITNESSRAUM', 'Fitnessraum'], treadmill: ['LAUFBAND', 'Laufband'], barbell: ['HANTEL', 'Hantel'], punchbag: ['BOXSACK', 'Boxsack'] });
+  gym: ['FITNESSRAUM', 'Fitnessraum'], shower: ['DUSCHE', 'Dusche'], sink: ['WASCHBECKEN', 'Waschbecken'], treadmill: ['LAUFBAND', 'Laufband'], barbell: ['HANTEL', 'Hantel'], punchbag: ['BOXSACK', 'Boxsack'] });
 
 const Wache = (() => {
   const S = 1, WH = 24, T4 = 4, GAP = 28;
@@ -117,9 +117,14 @@ const Wache = (() => {
       const ddw = Math.max(24, Math.min(rw - 16, 48)), mk = 1, mw = 32 * mk + 6, mh = 28 * mk + 6;   // Monitor: zeigt beim Alarm das Bild des Einsatzes
       spots.desk = { x: rx + Math.max(4, Math.round((rw - ddw) / 2)), y: Math.min(fy + mh + 2, hy - 18), w: ddw, h: 16 };
       spots.mon = { x: spots.desk.x + Math.round((ddw - mw) / 2), y: spots.desk.y - mh + 2, w: mw, h: mh, k: mk };
-      furn.push({ k: 'tub', x: fr - 44, y: fb - 26 }, { k: 'toilet', x: fr - 18, y: hy + T4 + 6 });   // Bad
+      // Bad (Michael): Waschbecken an der Wand oben, rechts 4 Kabinen übereinander: 2 Klos, 2 Duschen (Trennwände = Wände, vorne offen)
+      const by = hy + T4, ch = clamp(Math.floor((fb - by - 4) / 4), 24, 40), cabW = 30, kx = fr - cabW;
+      spots.cabins = [0, 1, 2, 3].map(i => ({ x: kx, y: by + 2 + i * ch, w: cabW, h: ch, k: i < 2 ? 'toilet' : 'shower' }));
+      for (let i = 1; i < 4; i++) walls.push({ x: kx, y: by + 1 + i * ch, w: fr + 4 - kx, h: 2 });
+      for (const c of spots.cabins) if (c.k === 'toilet') furn.push({ k: 'toilet', x: fr - 16, y: c.y + Math.max(1, Math.round((ch - 20) / 2)) });
+      spots.sink = { x: rx + Math.max(4, Math.round((kx - rx - 24) / 2)), y: by + 2, w: 24, h: 16 };
       furn = furn.filter(o => BY[o.k]).map(o => Object.assign(o, { f: BY[o.k], w: BY[o.k].w, h: BY[o.k].h }));
-      walls.push(...vehicles, spots.lockers, spots.desk, ...furn.filter(o => o.k === 'tub'));
+      walls.push(...vehicles, spots.lockers, spots.desk);
     } else {
       const dormDoor = fy + 44, fitDoor = Math.round(hy + T4 + (fb - hy) * 0.3);
       vwall(vx, [[dormDoor, dormDoor + GAP], [fitDoor, fitDoor + GAP]]);   // Flur | Schlafraum und Fitnessraum
@@ -278,6 +283,22 @@ const Wache = (() => {
     R('#7a1a12', a.x + dx, a.y, a.w, a.h); R('#c0392b', a.x + dx + 1, a.y + 1, a.w - 2, a.h - 2); R('#e0604c', a.x + dx + 2, a.y + 2, 2, a.h - 4);
     R('#222', a.x + dx, a.y + 3, a.w, 2); R('#222', a.x + dx, a.y + a.h - 5, a.w, 2);
   }
+  function drawBath(time) {                           // Waschbecken und Kabinen (Klos kommen aus moebel.js, Duschen hier)
+    const k = spots.sink; R('rgba(0,0,0,.2)', k.x + 2, k.y + 2, k.w, k.h); R('#c8ccd0', k.x, k.y, k.w, k.h); R('#ffffff', k.x + 1, k.y + 1, k.w - 2, k.h - 2);
+    R('#bfe6f5', k.x + 4, k.y + 5, k.w - 8, k.h - 8); R('#9aa0a6', k.x + (k.w >> 1) - 1, k.y + 1, 3, 5); R('#555', k.x + (k.w >> 1), k.y + k.h - 5, 1, 1);   // Becken, Wasserhahn, Abfluss
+    R('#9fe3ff', k.x + 3, k.y - 2, k.w - 6, 2);                                                   // Spiegel an der Wand
+    for (const c of spots.cabins) {
+      if (c.k === 'shower') { R('#2a6fdb', c.x, c.y + 1, c.w, c.h - 1); for (let yy = c.y + 1; yy < c.y + c.h; yy += 6) R('#5a9be8', c.x, yy, c.w, 1); for (let xx = c.x + 5; xx < c.x + c.w; xx += 6) R('#5a9be8', xx, c.y + 1, 1, c.h - 1);
+        R('#555', c.x + (c.w >> 1) - 1, c.y + c.h - 6, 3, 2); R('#9aa0a6', c.x + c.w - 6, c.y + 3, 5, 5); R('#e8eef2', c.x + c.w - 5, c.y + 4, 3, 3);   // Abfluss, Duschkopf
+        R('rgba(159,227,255,.55)', c.x, c.y + 1, 2, Math.round(c.h * 0.45)); }                    // Glaswand vorne (halb offen)
+      else { R('#a0673a', c.x, c.y + 1, 2, Math.round(c.h * 0.4)); R('#c98a4f', c.x - 8, c.y + 1, 8, 2); }   // Kabinentür steht offen
+    }
+  }
+  function drawWater(time) {                          // Tropfen: Dusche über dem Kind, Waschbecken aus dem Hahn
+    const ga = gymAct;
+    if (ga.k === 'shower') for (let i = 0; i < 14; i++) { const x = Math.round(kid.x - 12 + ((i * 7) % 24)), y = Math.round(kid.y - 36 + ((time / 3 + i * 13) % 34)); R('#9fe3ff', x, y, 1, 3); }
+    else { const k = spots.sink, x = k.x + (k.w >> 1); for (let i = 0; i < 3; i++) R('#6cc4f0', x, k.y + 5 + ((Math.floor(time / 60) + i * 2) % 6), 1, 2); }
+  }
   function drawBarbell(cx, y) {                       // Hantelstange mit roten und blauen Scheiben, Mitte cx, Höhe y
     cx = Math.round(cx); y = Math.round(y);
     R('#c8ccd0', cx - 22, y, 44, 2); R('#9aa0a6', cx - 22, y + 1, 44, 1);
@@ -359,6 +380,9 @@ const Wache = (() => {
     if (gymAct) { const ga = gymAct; ga.t += dt;
       if (ga.k === 'run') { kid.t += dt; if (ga.t > ga.s) { ga.s += 0.18; tone(ga.n++ % 2 ? 140 : 120, .05, 'square', .03); }
         if (ga.t > 4) { gymAct = null; say('Super!'); for (let k = 0; k < 8; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, '#7ed957', 30); } }
+      else if (ga.k === 'shower' || ga.k === 'sink') {   // Wasser rauscht
+        if (ga.t > ga.s) { ga.s += 0.06; tone(1800 + Math.random() * 2400, .04, 'sine', .01); }
+        if (ga.t > (ga.k === 'sink' ? 1.6 : 3.5)) { gymAct = null; if (ga.k === 'shower') say('Sauber!'); } }
       else { const rep = Math.floor((ga.t + 0.6) / 1.2);   // oben angekommen: zählen
         if (rep > ga.n && ga.n < 3) { ga.n = rep; say(['Eins', 'Zwei', 'Drei'][rep - 1]); tone(400 + rep * 120, .12, 'triangle', .06); }
         if (ga.t > 3.6) { gymAct = null; sfx.unlock(); setTimeout(() => say('Stark!'), 300); for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-14, 14), kid.y - rnd(10, 34), rnd(-20, 20), rnd(-30, -5), .4, '#ffd23f', 30); } }
@@ -386,8 +410,10 @@ const Wache = (() => {
       sayWord(gear ? 'gear' : 'locker');
       for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, gear ? '#ffd23f' : '#ffffff', 30); return; }
     if (level === 0 && kid.still > 0.5) {               // Bad: aufs Klo stellen = Spülung
-      const t = furn.find(o => o.k === 'toilet' && inR({ x: o.x - 6, y: o.y, w: o.w + 12, h: o.h + 14 }, kid.x, kid.y));
-      if (t) { kid.used = true; setWord('toilet'); sayWord('toilet'); for (let k = 0; k < 14; k++) tone(250 + Math.random() * 500, .06, 'sine', .025, .3 + k * .05); return; } }
+      const c = spots.cabins.find(c => inR(c, kid.x, kid.y - 4)), sk = spots.sink;
+      if (c && c.k === 'toilet') { kid.used = true; setWord('toilet'); sayWord('toilet'); for (let k = 0; k < 14; k++) tone(250 + Math.random() * 500, .06, 'sine', .025, .3 + k * .05); return; }
+      if (c) { kid.used = true; kid.x = c.x + c.w / 2 - 2; kid.y = c.y + c.h - 3; kid.flip = false; gymAct = { k: 'shower', t: 0, s: 0, c }; setWord('shower'); sayWord('shower'); return; }
+      if (inR({ x: sk.x - 4, y: sk.y, w: sk.w + 8, h: sk.h + 22 }, kid.x, kid.y)) { kid.used = true; gymAct = { k: 'sink', t: 0, s: 0 }; setWord('sink'); sayWord('sink'); return; } }
     if (level === 1 && gym && kid.still > 0.4) {      // Fitnessraum: aufs Laufband / an die Hantel stellen, neben den Boxsack = boxen
       const t = gym.tread, b = gym.bar, a = gym.bag;
       if (inR(t, kid.x, kid.y - 4)) { kid.used = true; kid.x = t.x + t.w / 2; kid.y = t.y + t.h - 6; kid.flip = false; gymAct = { k: 'run', t: 0, s: 0, n: 0 }; setWord('treadmill'); sayWord('treadmill'); return; }
@@ -401,7 +427,7 @@ const Wache = (() => {
     if (!room) return;
     ctx.drawImage(bg, 0, 0);
     if (level === 0) { drawHoses(time); drawLockers(); drawDesk(time); drawGates(time); for (const v of vehicles) drawVehicle(v, time); drawPole(time);
-      for (const o of furn) o.f.draw(R, o.x, o.y, true, time); }
+      drawBath(time); for (const o of furn) o.f.draw(R, o.x, o.y, true, time); }
     else { if (gym) drawGym(time); for (const o of furn.slice().sort((a, b) => (a.y + a.h) - (b.y + b.h))) o.f.draw(R, o.x, o.y, true, time); }
     if (night) {
       const t = night.t, a = t < 1.4 ? t / 1.4 : t < 3.8 ? 1 : Math.max(0, 1 - (t - 3.8) / 1.4), b = night.bed;
@@ -410,6 +436,7 @@ const Wache = (() => {
       for (let k = 0; k < 3; k++) { const zt = (t * 0.8 + k * 0.33) % 1; R('#ffffff', Math.round(b.x + b.w * 0.6 + zt * 10), Math.round(b.y - zt * 22), 3, 3); }
     } else if (slide && !slide.done) { const k = 1 - slide.t / 0.4; if (k > 0.2) drawKid(kid.x, kid.y); }
     else if (!depart) { drawKid(kid.x, kid.y);
+      if (gymAct && (gymAct.k === 'shower' || gymAct.k === 'sink')) drawWater(time);
       if (gymAct && gymAct.k === 'lift') { const f = (gymAct.t % 1.2) / 1.2, up = f < 0.5 ? f * 2 : 2 - f * 2; drawBarbell(kid.x, kid.y - 12 - Math.round(up * up * (3 - 2 * up) * 22)); } }
     if (alarm) drawAlarm(time);
     if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); R(`rgba(0,0,0,${a.toFixed(2)})`, 0, 0, W, H); }

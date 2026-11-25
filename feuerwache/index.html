@@ -38,7 +38,7 @@ window.addEventListener('error', function (e) {
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
-   Erdgeschoss: links die Fahrzeughalle (Löschfahrzeug, Rüstwagen, Rolltore, Schläuche, unten an der Rutschstange),
+   Erdgeschoss: links die Fahrzeughalle (Löschfahrzeug, Drehleiter, Rolltore, Schläuche, unten an der Rutschstange),
                 rechts hinten die Umkleide mit Spinden, rechts vorne die Leitstelle mit Funkgerät, Haustür und Treppe.
    Obergeschoss: links der Schlafraum mit Betten und dem Loch der Rutschstange, rechts Küche und Aufenthaltsraum.
    Antippen: Kind läuft hin. Fahrzeug antippen = Blaulicht und Martinshorn. Rolltor antippen = auf/zu.
@@ -56,7 +56,7 @@ Object.assign(WORDS, { locker: ['SPIND', 'Spind'],
 const Wache = (() => {
   const S = 1, WH = 24, T4 = 4, GAP = 28;
   let room, floor, level = 0, walls = [], spots = {}, stairs, kid, grid, idle = 0, swap = null, slide = null, night = null, atDoor = 0;
-  let gear = false, gearT = 0, vehicles = [], gates = [0, 0, 0], gateGoal = [0, 0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
+  let gear = false, gearT = 0, vehicles = [], gates = [0, 0], gateGoal = [0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
   let alarm = null, nextAlarm = 12, depart = null, nag = 0;   // Alarm: { key, t, g }; depart: Fahrzeuge rücken aus
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   const inR = (r, x, y, p = 0) => x > r.x - p && x < r.x + r.w + p && y > r.y - p && y < r.y + r.h + p;
@@ -94,8 +94,8 @@ const Wache = (() => {
     spots = { vx, hy, pole: { x: vx - 22, y: fy + 18, w: 12, h: 12 } };
     furn = []; vehicles = [];
     if (level === 0) {
-      const hw = vx - fx, vw = Math.max(22, Math.min(50, Math.round(hw * 0.22))), vl = Math.max(50, Math.min(104, fh - 46));   // 3 Stellplätze
-      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.17) }, { key: 'dlk', cx: fx + Math.round(hw * 0.47) }, { key: 'rw', cx: fx + Math.round(hw * 0.77) }]
+      const hw = vx - fx, vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));   // 2 Stellplätze (passt zu den 2 Toren außen)
+      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'dlk', cx: fx + Math.round(hw * 0.68) }]
         .map((v, i) => Object.assign(v, { i, x: v.cx - (vw >> 1), y: fb - vl - 14, w: vw, h: vl, blink: 0 }));
       spots.gates = vehicles.map(v => ({ x: v.x - 8, w: v.w + 16 }));
       spots.lockers = { x: vx + T4 + 8, y: fy, w: Math.min(rw - 16, 4 * 16), h: 12 };

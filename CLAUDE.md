@@ -38,7 +38,7 @@ baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): b
                               Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)
 feuerwache/index.html       ← Feuerwache innen (HOF_URL = '../baustelle/index.html', zurück nach `#wache`): fertige Wache (fire.step 5) in der Stadt betreten,
                               einmal für `FIRE_PRICE` Sterne freischalten (`Hof.unlockFire`, `save.fire.unlocked`). Zum Entdecken, Alarme kommen später (nur hier drinnen).
-                              EG: links Fahrzeughalle mit 3 Stellplätzen (Löschfahrzeug `lf`, Drehleiter `dlk`, Rüstwagen `rw`: antippen = Blaulicht + Martinshorn; 3 Rolltore in der Vorderwand antippen = auf/zu;
+                              EG: links Fahrzeughalle mit 2 Stellplätzen (Löschfahrzeug `lf`, Drehleiter `dlk`; Rüstwagen `rw` ist gezeichnet, aber noch nicht in der Halle (Michael): antippen = Blaulicht + Martinshorn; 2 Rolltore in der Vorderwand antippen = auf/zu;
                               Schläuche hinten links antippen = wackeln; Landematte der Rutschstange), rechts hinten Umkleide (vor den Spinden 0,5 s stehen = Feuerwehranzug an/aus, `gear`),
                               rechts vorne Leitstelle (Funkgerät antippen), Haustür, Treppe unten rechts. OG: Schlafraum (Betten = schlafen), Loch der Rutschstange (0,35 s drauf = runterrutschen),
                               Küche, Aufenthaltsraum. Kind und Wegesuche wie im Wohnhaus. Test: `?wache=5&sterne=20`.

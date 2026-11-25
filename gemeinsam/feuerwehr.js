@@ -11,7 +11,7 @@ Object.assign(WORDS, {
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
   katze: { word: 'cattree', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },
-  haus: { word: 'housefire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // Einfamilienhaus: 3 Fenster brennen (Löschfahrzeug)
+  haus: { word: 'housefire', veh: ['lf', 'dlk'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // Mehrfamilienhaus: Löschfahrzeug + Drehleiter, erst Feuer unter der Person, Person retten, dann Rest löschen
   ball: { word: 'ballroof', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // kleiner Einsatz: Ball auf dem Dach (Drehleiter)
   unfall: { word: 'crash', veh: ['lf'], tool: 'cutter', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // Autounfall: Tür klemmt (Rettungsschere ist im Löschfahrzeug)
   baum: { word: 'treeroad', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] }, // umgestürzter Baum (Kettensäge ist im Löschfahrzeug)

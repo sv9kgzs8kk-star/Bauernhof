@@ -6,7 +6,7 @@ Object.assign(WORDS, {
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
-  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], ballroof: ['BALL AUF DEM DACH', 'Ball auf dem Dach'], astcar: ['AST AUF AUTO', 'Ast auf Auto'], branch: ['AST', 'Ast'], amb: ['KRANKENWAGEN', 'Krankenwagen'], tow: ['ABSCHLEPPWAGEN', 'Abschleppwagen'], ball: ['BALL', 'Ball'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
+  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], ballroof: ['BALL AUF DEM DACH', 'Ball auf dem Dach'], astcar: ['AST AUF AUTO', 'Ast auf Auto'], branch: ['AST', 'Ast'], amb: ['KRANKENWAGEN', 'Krankenwagen'], tow: ['ABSCHLEPPWAGEN', 'Abschleppwagen'], plaster: ['PFLASTER', 'Pflaster'], crane: ['KRAN', 'Kran'], ball: ['BALL', 'Ball'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {

@@ -60,6 +60,7 @@ const Wache = (() => {
   let room, floor, level = 0, walls = [], spots = {}, stairs, kid, grid, idle = 0, swap = null, slide = null, night = null, atDoor = 0;
   let gear = false, gearT = 0, vehicles = [], gates = [0, 0], gateGoal = [0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
   let alarm = null, nextAlarm = 12, depart = null, nag = 0;   // Alarm: { key, t, g }; depart: Fahrzeuge rücken aus
+  let npcs = [];                                             // Kollegen (nicht steuerbar), siehe „Kollegen“ unten
   let gym = null, gymAct = null, bagSwing = 0, lastShow = -1;   // lastShow: zuletzt gezeigte Fernsehsendung               // Fitnessraum (OG): Geräte; gymAct = { k: 'run'|'lift', t, n } läuft gerade
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   const inR = (r, x, y, p = 0) => x > r.x - p && x < r.x + r.w + p && y > r.y - p && y < r.y + r.h + p;
@@ -72,6 +73,7 @@ const Wache = (() => {
     const cols = Math.min(gc - 1, 16);
     room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - G - 12 };
     floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 };
+    npcs = NPC_PALS.map((pal, i) => ({ i, pal, f: i, x: 0, y: 0, path: [], t: 0, flip: false, act: null, task: null, wait: rnd(0.5, 2), away: rnd(6, 14), gear: false, inTruck: false, alT: 0, at: 0 }));   // einer unten, einer oben
     setupLevel();
     kid = { x: spots.door.x + spots.door.w / 2, y: floor.y + floor.h - 26, path: [], t: 0, flip: false, still: 0 };
     nextAlarm = rnd(10, 16);
@@ -79,6 +81,7 @@ const Wache = (() => {
     if (location.hash === '#einsatz') {               // zurück vom Einsatz: im Anzug neben dem Fahrzeug, nächster Alarm später
       history.replaceState(null, '', location.pathname + location.search);
       const v = vehicles.find(v => v.key === 'dlk') || vehicles[0]; gear = true; kid.x = v.x + v.w / 2; kid.y = v.y + v.h + 10; kid.used = true; nextAlarm = rnd(25, 40);
+      for (const n of npcs) { n.f = 0; n.gear = true; n.act = null; n.task = null; n.path = []; n.x = v.x + v.w / 2 + (n.i ? 16 : -16); n.y = v.y + v.h + 12; n.wait = rnd(0.3, 1); }   // Kollegen steigen mit aus und ziehen sich wieder um
       setTimeout(() => say('Gut gemacht!'), 400);
     } else setTimeout(() => sayWord('firestation'), 400);
   }
@@ -153,7 +156,7 @@ const Wache = (() => {
       furn = furn.filter(o => BY[o.k]).map(o => Object.assign(o, { f: BY[o.k], w: BY[o.k].w, h: BY[o.k].h }));
       walls.push(spots.counter, ...furn.filter(o => !['bed', 'tv', 'chair', 'sofa'].includes(o.k)));   // auf Stühle und Sofa kann man sich setzen
     }
-    buildGrid(); paint();
+    buildGrid(); paint(); placeNpcs();
   }
   function buildGrid() {
     const c = 4, cols = Math.floor(floor.w / c), rows = Math.floor(floor.h / c), ok = [];
@@ -165,8 +168,8 @@ const Wache = (() => {
     grid = { c, cols, rows, ok };
   }
   const cellOf = (x, y) => [clamp(Math.floor((y - floor.y) / grid.c), 0, grid.rows - 1), clamp(Math.floor((x - floor.x) / grid.c), 0, grid.cols - 1)];
-  function findPath(tx, ty) {
-    const [sr, sc] = cellOf(kid.x, kid.y); let [er, ec] = cellOf(tx, ty);
+  function findPath(tx, ty, who = kid) {
+    const [sr, sc] = cellOf(who.x, who.y); let [er, ec] = cellOf(tx, ty);
     const idx = (r, c) => r * grid.cols + c;
     if (!grid.ok[idx(er, ec)]) { let best = null, bd = 1e9;
       for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) if (grid.ok[idx(r, c)]) { const d = (r - er) ** 2 + (c - ec) ** 2; if (d < bd) { bd = d; best = [r, c]; } }
@@ -271,15 +274,15 @@ const Wache = (() => {
   }
   // Fitnessraum: Laufband (draufstellen = laufen), Hantel auf blauer Matte (draufstellen = 3 × stemmen, zählen), Boxsack (antippen = schwingt)
   function drawGym(time) {
-    const g = gym, t = g.tread, run = gymAct && gymAct.k === 'run';
+    const g = gym, t = g.tread, runA = levelActs().find(a => a.k === 'run'), run = !!runA;
     R('rgba(0,0,0,.25)', t.x + 3, t.y + 3, t.w, t.h); R('#2c2c2c', t.x, t.y, t.w, t.h); R('#9aa0a6', t.x + 1, t.y + 12, 3, t.h - 14); R('#9aa0a6', t.x + t.w - 4, t.y + 12, 3, t.h - 14);   // Rahmen, Seitenleisten
     R('#141414', t.x + 5, t.y + 12, t.w - 10, t.h - 15);
     const off = run ? Math.floor(time / 40) % 6 : 0; for (let yy = t.y + 12 + off; yy < t.y + t.h - 3; yy += 6) R('#3a3a3a', t.x + 5, yy, t.w - 10, 1);   // Band läuft nach unten
     R('#c8ccd0', t.x + 1, t.y + 9, t.w - 2, 2); R('#555', t.x + 3, t.y, t.w - 6, 9); R('#123', t.x + 5, t.y + 2, t.w - 10, 5);   // Griff, Bedienpult
-    if (run) { const k = clamp(gymAct.t / 4, 0, 1); R('#7ed957', t.x + 6, t.y + 3, Math.max(1, Math.round((t.w - 12) * k)), 3); } else R('#2f4f2f', t.x + 6, t.y + 4, 3, 1);
+    if (run) { const k = clamp(runA.t / 4, 0, 1); R('#7ed957', t.x + 6, t.y + 3, Math.max(1, Math.round((t.w - 12) * k)), 3); } else R('#2f4f2f', t.x + 6, t.y + 4, 3, 1);
     const b = g.bar; R('#173f80', b.x, b.y, b.w, b.h); R('#2a6fdb', b.x + 1, b.y + 1, b.w - 2, b.h - 2); R('#6aa0f0', b.x + 1, b.y + 1, b.w - 2, 1);   // Matte
     R('#333', b.x + 3, b.y + 2, 4, 7); R('#333', b.x + b.w - 7, b.y + 2, 4, 7);   // Ablage
-    if (!(gymAct && gymAct.k === 'lift')) drawBarbell(b.x + b.w / 2, b.y + 5);
+    if (!levelActs().some(a => a.k === 'lift')) drawBarbell(b.x + b.w / 2, b.y + 5);
     const a = g.bag, dx = Math.round(Math.sin(time / 90) * 4 * bagSwing);
     R('rgba(0,0,0,.22)', a.x + 1, a.y + a.h + 6, a.w, 4);                                   // Schatten am Boden
     R('#555', a.x + (a.w >> 1), a.y - 10, 1, 10); R('#555', a.x + (a.w >> 1) - 3, a.y - 11, 7, 2);   // Kette, Deckenhaken
@@ -287,8 +290,9 @@ const Wache = (() => {
     R('#222', a.x + dx, a.y + 3, a.w, 2); R('#222', a.x + dx, a.y + a.h - 5, a.w, 2);
   }
   // ---------- Sitzen, Küche, Klo, Fernseher ----------
-  function sitPose() {                                // wo das sitzende Kind gezeichnet wird (Fußpunkt, nur Oberkörper sichtbar)
-    const ga = gymAct; if (!ga) return null;
+  function sitPose(ga) {                              // wo eine sitzende Person gezeichnet wird (Fußpunkt, nur Oberkörper sichtbar)
+    if (!ga) return null;
+    if (ga.k === 'sit' && ga.o.k === 'sofa' && ga.seat) return { x: ga.o.x + 23 + ga.seat * 12, y: ga.o.y + 22 };   // Kollegen links/rechts, Kind in der Mitte
     if (ga.k === 'toilet' && !ga.fl) return { x: ga.o.x + 7, y: ga.o.y + 20 };
     if ((ga.k === 'sit' || ga.k === 'tv') && ga.o.k === 'sofa') return { x: ga.o.x + 23, y: ga.o.y + 22 };
     if (ga.k === 'sit') return { x: ga.o.x + 8, y: ga.o.y + 18 };
@@ -302,8 +306,8 @@ const Wache = (() => {
     if (c.w >= 16) { R('#8f9aa3', c.x + 3, c.y + 2, 11, 6); R('#bfe6f5', c.x + 4, c.y + 3, 9, 4); R('#9aa0a6', c.x + 8, c.y + 1, 2, 2); }   // Spüle
     if (c.w >= 34) { R('#c98a4f', c.x + 18, c.y + 3, 10, 5); R('#e03b3b', c.x + 20, c.y + 4, 2, 2); R('#7ed957', c.x + 24, c.y + 4, 2, 3); }   // Brett mit Tomate und Gurke
   }
-  function drawKitchenAct(time) {                     // Kühlschrank auf, Pfanne auf dem Herd (vor dem Kind)
-    const ga = gymAct; if (!ga) return;
+  function drawKitchenAct(time) { for (const a of levelActs()) drawKitchenOne(a, time); }
+  function drawKitchenOne(ga, time) {                 // Kühlschrank auf, Pfanne auf dem Herd (vor der Person)
     if (ga.k === 'fridge') { const o = furn.find(o => o.k === 'fridge'), op = ga.t < 3.0;
       if (op) { R('#8f9aa3', o.x - 12, o.y + 1, 12, 29); R('#ffffff', o.x - 11, o.y + 2, 10, 27); R('#cfd8de', o.x - 3, o.y + 8, 1, 14);   // Tür steht offen
         R('#fff8d0', o.x + 1, o.y + 1, 16, 28); R('#cfd8de', o.x + 1, o.y + 10, 16, 1); R('#cfd8de', o.x + 1, o.y + 19, 16, 1);           // Licht innen, Fächer
@@ -320,8 +324,9 @@ const Wache = (() => {
   }
   function drawApple(x, y) { x = Math.round(x); y = Math.round(y); R('#c0392b', x, y + 1, 5, 4); R('#e74c3c', x + 1, y, 3, 5); R('#5a3b1c', x + 2, y - 1, 1, 2); R('#7ed957', x + 3, y - 1, 2, 1); }
   function drawSteam(time) { const o = furn.find(o => o.k === 'stove'); for (let i = 0; i < 4; i++) { const k = ((time / 900) + i / 4) % 1; R(`rgba(255,255,255,${(0.7 * (1 - k)).toFixed(2)})`, Math.round(o.x + 4 + Math.sin(k * 6 + i) * 3), Math.round(o.y - k * 18), 2, 2); } }
-  function drawFlush(time) {                         // Klo: Wasser wirbelt im Becken, Bläschen steigen
-    const ga = gymAct, o = ga.o; if (!ga.fl) return;
+  function drawFlush(time) { for (const a of levelActs()) if (a.k === 'toilet') drawFlushOne(a, time); }
+  function drawFlushOne(ga, time) {                  // Klo: Wasser wirbelt im Becken, Bläschen steigen
+    const o = ga.o; if (!ga.fl) return;
     const cx = o.x + 7, cy = o.y + 13, a = time / 80;
     R('#7cc0f0', o.x + 4, o.y + 10, 6, 6);
     for (let i = 0; i < 6; i++) { const w = a + i * Math.PI / 3; R(i % 2 ? '#1c5e9e' : '#ffffff', Math.round(cx + Math.cos(w) * 2.5) - 1, Math.round(cy + Math.sin(w) * 2.5) - 1, 2, 2); }
@@ -405,9 +410,8 @@ const Wache = (() => {
       else { R('#a0673a', c.x, c.y + 1, 2, Math.round(c.h * 0.4)); R('#c98a4f', c.x - 8, c.y + 1, 8, 2); }   // Kabinentür steht offen
     }
   }
-  function drawWater(time) {                          // Tropfen: Dusche über dem Kind, Waschbecken aus dem Hahn
-    const ga = gymAct;
-    if (ga.k === 'shower') for (let i = 0; i < 14; i++) { const x = Math.round(kid.x - 12 + ((i * 7) % 24)), y = Math.round(kid.y - 36 + ((time / 3 + i * 13) % 34)); R('#9fe3ff', x, y, 1, 3); }
+  function drawWater(ga, p, time) {                   // Tropfen: Dusche über der Person, Waschbecken aus dem Hahn
+    if (ga.k === 'shower') for (let i = 0; i < 14; i++) { const x = Math.round(p.x - 12 + ((i * 7) % 24)), y = Math.round(p.y - 36 + ((time / 3 + i * 13) % 34)); R('#9fe3ff', x, y, 1, 3); }
     else { const k = spots.sink, x = k.x + (k.w >> 1); for (let i = 0; i < 3; i++) R('#6cc4f0', x, k.y + 5 + ((Math.floor(time / 60) + i * 2) % 6), 1, 2); }
   }
   function drawBarbell(cx, y) {                       // Hantelstange mit roten und blauen Scheiben, Mitte cx, Höhe y
@@ -416,11 +420,121 @@ const Wache = (() => {
     for (const sx of [-1, 1]) { R('#e03b3b', cx + sx * 17 - 2, y - 4, 4, 10); R('#333', cx + sx * 21 - 2, y - 3, 4, 8); }
   }
   const GEAR = GEAR_PAL;
-  function drawKid(x, y, rows = 13) {                // rows < 13: sitzt (Beine verdeckt)
-    const run = gymAct && gymAct.k === 'run', K = 2, fr = (kid.path.length || run) && Math.floor(kid.t * (run ? 14 : 8)) % 2 ? KID.b : KID.a, w = 10 * K, h = 13 * K, pal = gear ? Object.assign({}, KID.pal, GEAR) : KID.pal;
+  function drawKid(x, y, rows = 13) { drawPerson(kid, x, y, rows); }
+  function drawPerson(p, x, y, rows = 13) {           // Kind oder Kollege; rows < 13: sitzt (Beine verdeckt)
+    const me = p === kid, a = me ? gymAct : p.act, run = a && a.k === 'run', g = me ? gear : p.gear;
+    const K = 2, fr = (p.path.length || run) && Math.floor(p.t * (run ? 14 : 8)) % 2 ? KID.b : KID.a, w = 10 * K, h = 13 * K, pal = Object.assign({}, KID.pal, p.pal || {}, g ? GEAR : {});
     if (rows >= 13) R('rgba(0,0,0,.25)', Math.round(x - w / 2) + K, Math.round(y) - 2 * K, w, 2 * K);
-    fr.slice(0, rows).forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(pal[ch], Math.round(x - w / 2) + (kid.flip ? 9 - i : i) * K, Math.round(y - h) + j * K, K, K); }));
-    if (gear) { R('#e0b000', Math.round(x - w / 2) + 2 * K, Math.round(y - h) - K, 6 * K, K); R('#ffd23f', Math.round(x - w / 2), Math.round(y - h) + 2 * K, w, K); }   // Helmkrempe und -schild
+    fr.slice(0, rows).forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') R(pal[ch], Math.round(x - w / 2) + (p.flip ? 9 - i : i) * K, Math.round(y - h) + j * K, K, K); }));
+    if (g) { R('#e0b000', Math.round(x - w / 2) + 2 * K, Math.round(y - h) - K, 6 * K, K); R('#ffd23f', Math.round(x - w / 2), Math.round(y - h) + 2 * K, w, K); }   // Helmkrempe und -schild
+  }
+
+  // ---------- Kollegen: 2 Feuerwehrleute laufen herum, benutzen Dinge, rücken beim Alarm mit aus ----------
+  // Auf der Etage des Kindes laufen sie wirklich (Wegesuche wie das Kind); auf der anderen Etage nur „unsichtbar“ mit Zeitzählern.
+  // Kommt das Kind auf ihre Etage, stehen sie gleich mitten in einer Beschäftigung (placeNpcs). Ein Kollege setzt sich nie so aufs Sofa, dass der Fernseher groß wird.
+  const NPC_PALS = [{ h: '#e0b040', s: '#f1c27d', r: '#24346b', w: '#c0392b', b: '#1c2540', n: '#222' },
+                    { h: '#2a1a10', s: '#c68642', r: '#24346b', w: '#c0392b', b: '#1c2540', n: '#222' }];
+  const levelActs = () => [gymAct, ...npcs.filter(n => n.f === level && !n.inTruck).map(n => n.act)].filter(Boolean);
+  function tgOf(a) {                                  // „Ort“ einer Aktion, damit sich niemand gegenseitig im Weg ist
+    if (!a) return null;
+    if (a.tg) return a.tg;
+    if (a.k === 'run') return 'tread'; if (a.k === 'lift') return 'bar';
+    if (a.k === 'toilet' || a.k === 'shower') return 'c' + spots.cabins.indexOf(a.c);
+    if ((a.k === 'sit' || a.k === 'tv') && a.o) return a.o.k === 'sofa' ? 'sofaM' : 'o' + furn.indexOf(a.o);
+    return a.k;
+  }
+  function yieldTo(tg) {                              // das Kind will dorthin: Kollege macht Platz
+    if (!tg) return;
+    for (const n of npcs) if (n.f === level && (tgOf(n.act) === tg || (n.task && n.task.tg === tg))) { n.act = null; n.task = null; n.path = []; n.wait = 0.3; }
+  }
+  const usedTg = me => new Set([tgOf(gymAct), night ? 'o' + furn.indexOf(night.bed) : null, ...npcs.filter(n => n !== me && n.f === level).flatMap(n => [tgOf(n.act), n.task && n.task.tg])]);
+  function npcTasks() {                               // was ein Kollege auf dieser Etage machen kann: Ziel-Stelle und Aktion
+    const out = [], add = (tg, x, y, make) => out.push({ tg, x, y, make });
+    if (level === 0) {
+      const d = spots.desk; add('desk', d.x + d.w / 2, d.y + d.h + 12, () => ({ k: 'stand', t: 0, dur: rnd(4, 7), tg: 'desk' }));
+      spots.cabins.forEach((c, i) => add('c' + i, c.x + c.w / 2 - 2, c.y + c.h - 3, () => c.k === 'toilet' ? { k: 'toilet', t: 0, c, o: furn.find(o => o.k === 'toilet' && o.y >= c.y && o.y < c.y + c.h) } : { k: 'shower', t: 0, s: 0, c }));
+      const k = spots.sink; add('sink', k.x + k.w / 2, k.y + k.h + 14, () => ({ k: 'sink', t: 0, s: 0 }));
+      vehicles.forEach((v, i) => add('veh' + i, v.x + v.w / 2, v.y + v.h + 10, () => ({ k: 'stand', t: 0, dur: rnd(3, 5), tg: 'veh' + i })));
+    } else {
+      const t = gym.tread, b = gym.bar, a = gym.bag;
+      add('tread', t.x + t.w / 2, t.y + t.h - 6, () => ({ k: 'run', t: 0, s: 0, n: 0 }));
+      add('bar', b.x + b.w / 2, b.y + b.h - 4, () => ({ k: 'lift', t: 0, n: 0 }));
+      add('bag', a.x - 10, a.y + a.h + 12, () => ({ k: 'box', t: 0, s: 0.2, tg: 'bag' }));
+      const fz = furn.find(o => o.k === 'fridge'), sv = furn.find(o => o.k === 'stove');
+      if (fz) add('fridge', fz.x + fz.w / 2 - 4, fz.y + fz.h + 26, () => ({ k: 'fridge', t: 0 }));
+      if (sv) add('stove', sv.x + sv.w / 2, sv.y + sv.h + 26, () => ({ k: 'stove', t: 0, s: 0, n: 0 }));
+      furn.forEach((o, i) => {
+        if (o.k === 'chair') add('o' + i, o.x + 8, o.y + 18, () => ({ k: 'sit', t: 0, o, dur: rnd(4, 8) }));
+        if (o.k === 'bed') add('o' + i, o.x + o.w / 2, o.y + o.h + 6, () => ({ k: 'sleep', t: 0, o, dur: rnd(6, 10) }));
+        if (o.k === 'sofa') for (const seat of [-1, 1]) add(seat < 0 ? 'sofaL' : 'sofaR', o.x + 23 + seat * 12, o.y + o.h - 4, () => ({ k: 'sit', t: 0, o, seat, dur: rnd(5, 10), tg: seat < 0 ? 'sofaL' : 'sofaR' }));
+      });
+    }
+    return out;
+  }
+  function startTask(n, c) { const a = c.make(); a.tg = a.tg || c.tg; return a; }
+  function placeNpcs() {                              // Kollegen auf dieser Etage: gleich bei einer Beschäftigung (oder beim Alarm unterwegs)
+    for (const n of npcs) {
+      if (n.f !== level || n.inTruck) continue;
+      n.path = []; n.task = null; n.act = null; n.goal = null; n.wait = rnd(0.5, 2);
+      if (alarm && level === 0) { const l = spots.lockers; n.x = l.x + 8 + (n.i + 1) * 16; n.y = l.y + l.h + 12; n.at = 0; continue; }
+      const free = npcTasks().filter(c => !usedTg(n).has(c.tg));
+      if (!free.length || Math.random() < 0.25) { n.x = floor.x + rnd(20, floor.w - 20); n.y = floor.y + rnd(20, floor.h - 10); const pth = findPath(n.x, n.y, { x: stairs.x - 14, y: stairs.y + stairs.h - 2 }); if (pth.length) { const q = pth[pth.length - 1]; n.x = q.x; n.y = q.y; } continue; }
+      const c = free[Math.floor(Math.random() * free.length)];
+      n.x = c.x; n.y = c.y; n.act = startTask(n, c); n.act.t = n.act.dur ? rnd(0, n.act.dur * 0.5) : 0;
+    }
+  }
+  function movePerson(p, dt, sp) {                    // ein Stück auf dem Weg weiter; true = angekommen
+    const tgt = p.path[0], dx = tgt.x - p.x, dy = tgt.y - p.y, d = Math.hypot(dx, dy), s = sp * dt;
+    if (Math.abs(dx) > 0.5) p.flip = dx < 0;
+    if (d <= s) { p.x = tgt.x; p.y = tgt.y; p.path.shift(); } else { p.x += dx / d * s; p.y += dy / d * s; }
+    p.t += dt; return !p.path.length;
+  }
+  function npcGo(n, x, y, key) { if (n.goal !== key) { n.goal = key; n.path = findPath(x, y, n); n.at = 0; } }
+  function npcTick(n, dt) {
+    if (n.inTruck) return;
+    const here = n.f === level;
+    if (alarm) return npcAlarm(n, dt, here);
+    if (!here) {                                       // andere Etage: ab und zu über die Treppe herkommen
+      n.away -= dt;
+      if (n.away <= 0 && !swap && !slide) { if (Math.random() < 0.5) { n.f = level; n.x = stairs.x - 14; n.y = stairs.y + stairs.h - 2; n.act = null; n.task = null; n.path = []; n.wait = rnd(0.5, 1.5); } n.away = rnd(10, 22); }
+      return; }
+    if (n.act) { if (!tickAct(n.act, n, dt, false)) { n.act = null; n.wait = rnd(1, 3); } return; }
+    if (n.path.length) { if (movePerson(n, dt, 50)) arriveNpc(n); return; }
+    if (n.wait > 0) { n.wait -= dt; return; }
+    if (n.gear) { const l = spots.lockers; if (level === 0) { n.task = { tg: 'locker', x: l.x + 8 + (n.i + 1) * 16, y: l.y + l.h + 12, undress: true }; n.path = findPath(n.task.x, n.task.y, n); if (!n.path.length) arriveNpc(n); } else n.gear = false; return; }   // nach dem Einsatz: Anzug zurück in den Spind
+    const r = Math.random();
+    if (r < 0.12) { n.task = { tg: 'stairs', x: stairs.x + stairs.w / 2, y: stairs.y + stairs.h / 2, stairs: true }; n.path = findPath(n.task.x, n.task.y, n); return; }
+    const free = npcTasks().filter(c => !usedTg(n).has(c.tg) && c.tg !== n.lastTg);   // nicht zweimal dasselbe hintereinander
+    if (r < 0.3 || !free.length) { n.task = null; n.path = findPath(floor.x + rnd(16, floor.w - 16), floor.y + rnd(16, floor.h - 8), n); n.wait = rnd(1, 3); return; }   // ein bisschen herumlaufen
+    n.task = free[Math.floor(Math.random() * free.length)]; n.path = findPath(n.task.x, n.task.y, n);
+    if (!n.path.length) arriveNpc(n);
+  }
+  function arriveNpc(n) {
+    const c = n.task; n.task = null; if (!c) return;
+    if (c.stairs) { n.f = 1 - n.f; n.away = rnd(10, 22); return; }                        // nach oben/unten verschwinden
+    if (c.undress) { n.gear = false; for (let k = 0; k < 6; k++) spawn(n.x + rnd(-8, 8), n.y - rnd(4, 20), rnd(-15, 15), rnd(-25, -5), .4, '#ffffff', 30); n.wait = rnd(1, 2); return; }
+    if (usedTg(n).has(c.tg)) { n.wait = 0.5; return; }                                     // inzwischen besetzt (z. B. vom Kind)
+    n.x = c.x; n.y = c.y; n.flip = false; n.act = startTask(n, c); n.lastTg = c.tg;
+  }
+  // Alarm: oben → zur Stange und runterrutschen; unten → Spind, Anzug an, zum Fahrzeug, einsteigen. Auf der anderen Etage nur nach Zeit.
+  function npcAlarm(n, dt, here) {
+    n.alT -= dt; if (n.act) { n.act = null; n.task = null; }
+    const v = vehicles.find(v => need().includes(v.key)) || vehicles[0];
+    if (n.f === 1) {
+      if (!here) { if (n.alT <= 0) { n.f = 0; n.alT = rnd(1.5, 2.5); if (level === 0) { const p = spots.pole; n.slide = { t: 0 }; n.x = p.x + p.w / 2 - 6; n.y = room.y + WH; } } return; }
+      const p = spots.pole; npcGo(n, p.x + p.w / 2, p.y + p.h, 'pole');
+      if (n.path.length) { movePerson(n, dt, 90); return; }
+      n.f = 0; n.alT = rnd(1.5, 2.5); return; }
+    if (!here) { if (n.alT <= 0) { if (!n.gear) { n.gear = true; n.alT = rnd(1.5, 2.5); } else n.inTruck = true; } return; }   // unten, Kind ist oben
+    if (n.slide) { n.slide.t += dt; const p = spots.pole, k = clamp(n.slide.t / 0.7, 0, 1); n.y = room.y + WH + (p.y + p.h + 6 - room.y - WH) * k; if (k >= 1) n.slide = null; return; }
+    if (n.alT > 0) return;                             // kurz erschrecken, dann los
+    const l = spots.lockers;
+    if (!n.gear) { npcGo(n, l.x + 8 + (n.i + 1) * 16, l.y + l.h + 12, 'locker');
+      if (n.path.length) { movePerson(n, dt, 85); return; }
+      n.at += dt; if (n.at > 0.6) { n.gear = true; for (let k = 0; k < 8; k++) spawn(n.x + rnd(-8, 8), n.y - rnd(4, 22), rnd(-15, 15), rnd(-25, -5), .4, '#ffd23f', 30); } return; }
+    npcGo(n, v.x + v.w / 2 + (n.i ? 14 : -14), v.y + v.h + 12, 'truck');
+    if (n.path.length) { movePerson(n, dt, depart ? 120 : 85); return; }
+    n.at += dt; if (n.at > 0.3) { n.inTruck = true; sfx.click(); }
   }
 
   // ---------- Bedienung ----------
@@ -455,6 +569,7 @@ const Wache = (() => {
   function startAlarm() {
     const key = EINSATZ_KEYS[Math.floor(Math.random() * EINSATZ_KEYS.length)];
     alarm = { key, t: 0, g: 0 }; radioT = 3; idle = 0; gymAct = null;   // Alarm: aufstehen, Fernseher aus
+    for (const n of npcs) { n.act = null; n.task = null; n.path = []; n.goal = null; n.alT = rnd(0.3, 1.2); n.at = 0; }   // Kollegen: zur Stange/zum Spind, umziehen, einsteigen
     if (night) { kid.y = night.bed.y + night.bed.h + 8; night = null; kid.still = 0; }   // Alarm weckt auf
     setWord('alarm'); say('Alarm! ' + WORDS[EINSAETZE[key].word][1]);
   }
@@ -467,6 +582,36 @@ const Wache = (() => {
   function tatuta() { for (let k = 0; k < 4; k++) { tone(466, .32, 'square', .05, k * .7); tone(622, .32, 'square', .05, k * .7 + .35); } }
   function radio() { radioT = 2; setWord('radio'); sayWord('radio'); for (let k = 0; k < 10; k++) tone(300 + Math.random() * 900, .04, 'sawtooth', .02, k * .05); tone(1200, .08, 'sine', .04, .6); }
 
+  // Eine Aktion weiterlaufen lassen (Kind: me = true mit Ton und Sprache; Kollegen leise). false = fertig
+  function tickAct(ga, p, dt, me) {
+    ga.t += dt;
+      if (ga.k === 'run') { p.t += dt; if (ga.t > ga.s) { ga.s += 0.18; me && tone(ga.n++ % 2 ? 140 : 120, .05, 'square', .03); }
+        if (ga.t > 4) { me && say('Super!'); for (let k = 0; k < 8; k++) spawn(p.x + rnd(-10, 10), p.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, '#7ed957', 30); return false; } }
+      else if (ga.k === 'shower' || ga.k === 'sink') {   // Wasser rauscht
+        if (ga.t > ga.s) { ga.s += 0.06; me && tone(1800 + Math.random() * 2400, .04, 'sine', .01); }
+        if (ga.t > (ga.k === 'sink' ? 1.6 : 3.5)) { if (ga.k === 'shower') me && say('Sauber!'); return false; } }
+      else if (ga.k === 'toilet') {                     // erst sitzen, dann aufstehen und spülen
+        if (!ga.fl && ga.t > 1.4) { ga.fl = true; p.x = ga.c.x + 7; me && sfx.click(); for (let k = 0; k < 18; k++) me && tone(150 + Math.random() * 350, .08, 'sawtooth', .012, k * .06); me && tone(180, .3, 'sine', .05, 1.15, 90); }
+        if (ga.t > 3.2) { me && say('Jetzt Hände waschen!'); return false; } }
+      else if (ga.k === 'fridge') {
+        if (!ga.a && ga.t > 0.1) { ga.a = true; me && tone(220, .08, 'square', .04); }
+        if (!ga.b && ga.t > 1.3) { ga.b = true; me && say('Hm, lecker!'); }
+        if (ga.t > 3.2) { me && tone(160, .08, 'square', .04); return false; } }
+      else if (ga.k === 'stove') {                       // Pfannkuchen brutzeln, zweimal wenden
+        if (ga.t > ga.s) { ga.s += 0.05; me && tone(3000 + Math.random() * 3000, .03, 'sawtooth', .006); }
+        if (ga.n < 2 && ga.t > 1.2 * (ga.n + 1)) { ga.n++; me && tone(520, .1, 'triangle', .05); me && tone(700, .08, 'triangle', .04, .1); }
+        if (ga.t > 3.8) { me && say('Pfannkuchen!'); for (let k = 0; k < 8; k++) spawn(p.x + rnd(-10, 10), p.y - rnd(10, 30), rnd(-20, 20), rnd(-30, -5), .4, '#ffd23f', 30); return false; } }
+      else if (ga.k === 'tv') { const st = ga.t - 0.5;   // Fernseher groß: 0,5 s aufzoomen, 5 s Sendung, 0,5 s zurück
+        if (!ga.snd && st > 0) { ga.snd = true; me && showSound(ga.show, 0); }
+        if (ga.show === 3 && !ga.goal && st > 3) { ga.goal = true; me && say('Tor!'); me && tone(880, .15, 'square', .05); me && tone(1175, .3, 'square', .05, .15); }
+        if (ga.t > 6) { ga.k = 'sit'; ga.t = 0; } }
+      else if (ga.k === 'sit' || ga.k === 'sleep' || ga.k === 'stand') { if (ga.dur && ga.t > ga.dur) return false; }   // Kind sitzt, bis es woanders hin soll; Kollegen nur ga.dur Sekunden
+      else if (ga.k === 'box') { if (ga.t > ga.s) { ga.s += 0.9; bagSwing = 1; if (me) punch(); } if (ga.t > 3) return false; }
+      else { const rep = Math.floor((ga.t + 0.6) / 1.2);   // oben angekommen: zählen
+        if (rep > ga.n && ga.n < 3) { ga.n = rep; me && say(['Eins', 'Zwei', 'Drei'][rep - 1]); me && tone(400 + rep * 120, .12, 'triangle', .06); }
+        if (ga.t > 3.6) { me && sfx.unlock(); me && setTimeout(() => say('Stark!'), 300); for (let k = 0; k < 10; k++) spawn(p.x + rnd(-14, 14), p.y - rnd(10, 34), rnd(-20, 20), rnd(-30, -5), .4, '#ffd23f', 30); return false; } }
+    return true;
+  }
   // ---------- Ablauf ----------
   function update(dt) {
     idle += dt; hoseWob = Math.max(0, hoseWob - dt); radioT = Math.max(0, radioT - dt); gearT = Math.max(0, gearT - dt);
@@ -475,7 +620,9 @@ const Wache = (() => {
     for (let i = 0; i < gates.length; i++) gates[i] = approach(gates[i], gateGoal[i], dt / 1.2);
     if (!kid) return;
     nag = Math.max(0, nag - dt);
-    if (depart) {                                      // Tor auf, dann fahren die Fahrzeuge hinaus, danach zum Einsatz
+    for (const n of npcs) npcTick(n, dt);
+    if (depart) {                                      // Kollegen steigen noch ein (höchstens 6 s), dann Tor auf und raus zum Einsatz
+      if (npcs.some(n => !n.inTruck)) { depart.wait = (depart.wait || 0) + dt; if (depart.wait < 6) return; for (const n of npcs) n.inTruck = true; }
       depart.t += dt;
       if (depart.t > 1.2) for (const v of depart.vs) v.y += 110 * dt;
       if (!depart.go && depart.vs.every(v => v.y > room.y + room.h + 6)) { depart.go = true; location.href = 'spiele/einsatz/index.html?e=' + alarm.key; }
@@ -489,35 +636,10 @@ const Wache = (() => {
       if (slide.t > 0.4 && !slide.done) { slide.done = true; level = 0; setupLevel(); kid.path = []; kid.flip = false; }
       if (slide.done) { const p = spots.pole, k = clamp((slide.t - 0.4) / 0.7, 0, 1); kid.x = p.x + p.w / 2 + 6; kid.y = room.y + WH + (p.y + p.h + 6 - room.y - WH) * k; }
       if (slide.t > 1.2) { slide = null; kid.still = 0; sfx.clod(); setWord('pole'); } return; }
-    if (night) { night.t += dt; if (night.t > 4.2 && !night.morning) { night.morning = true; tone(523, .15, 'triangle', .08); tone(659, .15, 'triangle', .08, .15); tone(784, .25, 'triangle', .08, .3); setTimeout(() => say('Guten Morgen'), 400); }
+    if (night) { yieldTo('o' + furn.indexOf(night.bed)); night.t += dt; if (night.t > 4.2 && !night.morning) { night.morning = true; tone(523, .15, 'triangle', .08); tone(659, .15, 'triangle', .08, .15); tone(784, .25, 'triangle', .08, .3); setTimeout(() => say('Guten Morgen'), 400); }
       if (night.t > 5.4) { kid.y = night.bed.y + night.bed.h + 8; night = null; kid.still = 0; } return; }
     if (gymAct && kid.path.length) gymAct = null;      // woanders hin getippt: aufhören
-    if (gymAct) { const ga = gymAct; ga.t += dt;
-      if (ga.k === 'run') { kid.t += dt; if (ga.t > ga.s) { ga.s += 0.18; tone(ga.n++ % 2 ? 140 : 120, .05, 'square', .03); }
-        if (ga.t > 4) { gymAct = null; say('Super!'); for (let k = 0; k < 8; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, '#7ed957', 30); } }
-      else if (ga.k === 'shower' || ga.k === 'sink') {   // Wasser rauscht
-        if (ga.t > ga.s) { ga.s += 0.06; tone(1800 + Math.random() * 2400, .04, 'sine', .01); }
-        if (ga.t > (ga.k === 'sink' ? 1.6 : 3.5)) { gymAct = null; if (ga.k === 'shower') say('Sauber!'); } }
-      else if (ga.k === 'toilet') {                     // erst sitzen, dann aufstehen und spülen
-        if (!ga.fl && ga.t > 1.4) { ga.fl = true; kid.x = ga.c.x + 7; sfx.click(); for (let k = 0; k < 18; k++) tone(150 + Math.random() * 350, .08, 'sawtooth', .012, k * .06); tone(180, .3, 'sine', .05, 1.15, 90); }
-        if (ga.t > 3.2) { gymAct = null; say('Jetzt Hände waschen!'); } }
-      else if (ga.k === 'fridge') {
-        if (!ga.a && ga.t > 0.1) { ga.a = true; tone(220, .08, 'square', .04); }
-        if (!ga.b && ga.t > 1.3) { ga.b = true; say('Hm, lecker!'); }
-        if (ga.t > 3.2) { gymAct = null; tone(160, .08, 'square', .04); } }
-      else if (ga.k === 'stove') {                       // Pfannkuchen brutzeln, zweimal wenden
-        if (ga.t > ga.s) { ga.s += 0.05; tone(3000 + Math.random() * 3000, .03, 'sawtooth', .006); }
-        if (ga.n < 2 && ga.t > 1.2 * (ga.n + 1)) { ga.n++; tone(520, .1, 'triangle', .05); tone(700, .08, 'triangle', .04, .1); }
-        if (ga.t > 3.8) { gymAct = null; say('Pfannkuchen!'); for (let k = 0; k < 8; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(10, 30), rnd(-20, 20), rnd(-30, -5), .4, '#ffd23f', 30); } }
-      else if (ga.k === 'tv') { const st = ga.t - 0.5;   // Fernseher groß: 0,5 s aufzoomen, 5 s Sendung, 0,5 s zurück
-        if (!ga.snd && st > 0) { ga.snd = true; showSound(ga.show, 0); }
-        if (ga.show === 3 && !ga.goal && st > 3) { ga.goal = true; say('Tor!'); tone(880, .15, 'square', .05); tone(1175, .3, 'square', .05, .15); }
-        if (ga.t > 6) gymAct = { k: 'sit', t: 0, o: ga.o }; }
-      else if (ga.k === 'sit') { }                        // sitzt, bis das Kind woanders hin soll
-      else { const rep = Math.floor((ga.t + 0.6) / 1.2);   // oben angekommen: zählen
-        if (rep > ga.n && ga.n < 3) { ga.n = rep; say(['Eins', 'Zwei', 'Drei'][rep - 1]); tone(400 + rep * 120, .12, 'triangle', .06); }
-        if (ga.t > 3.6) { gymAct = null; sfx.unlock(); setTimeout(() => say('Stark!'), 300); for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-14, 14), kid.y - rnd(10, 34), rnd(-20, 20), rnd(-30, -5), .4, '#ffd23f', 30); } }
-      return; }
+    if (gymAct) { yieldTo(tgOf(gymAct)); if (!tickAct(gymAct, kid, dt, true)) gymAct = null; return; }
     if (level === 0 && !kid.path.length && kid.y > floor.y + floor.h - 8 && kid.x > spots.door.x + 2 && kid.x < spots.door.x + spots.door.w - 2) {
       atDoor += dt; if (atDoor > 0.6) { atDoor = -99; sfx.enter(); goHof('wache'); return; } } else if (atDoor > 0) atDoor = 0;
     if (kid.path.length) {
@@ -569,18 +691,18 @@ const Wache = (() => {
     if (level === 0) { drawHoses(time); drawLockers(); drawDesk(time); drawGates(time); for (const v of vehicles) drawVehicle(v, time); drawPole(time);
       drawBath(time); for (const o of furn) o.f.draw(R, o.x, o.y, true, time); }
     else { if (gym) drawGym(time); drawCounter(); for (const o of furn.slice().sort((a, b) => (a.y + a.h) - (b.y + b.h))) o.f.draw(R, o.x, o.y, true, time); drawKitchenAct(time); }
-    if (level === 0 && gymAct && gymAct.k === 'toilet') drawFlush(time);
+    if (level === 0) drawFlush(time);
     if (night) {
       const t = night.t, a = t < 1.4 ? t / 1.4 : t < 3.8 ? 1 : Math.max(0, 1 - (t - 3.8) / 1.4), b = night.bed;
       R('#f1c27d', b.x + Math.round(b.w / 2) - 4, b.y + 6, 8, 7); R('#6b3e1e', b.x + Math.round(b.w / 2) - 4, b.y + 5, 8, 3);   // Kopf auf dem Kissen
       R(`rgba(10,15,40,${(a * 0.6).toFixed(2)})`, 0, 0, W, H);
       for (let k = 0; k < 3; k++) { const zt = (t * 0.8 + k * 0.33) % 1; R('#ffffff', Math.round(b.x + b.w * 0.6 + zt * 10), Math.round(b.y - zt * 22), 3, 3); }
-    } else if (slide && !slide.done) { const k = 1 - slide.t / 0.4; if (k > 0.2) drawKid(kid.x, kid.y); }
-    else if (!depart) { const sp = sitPose(); if (sp) drawKid(sp.x, sp.y, 9); else drawKid(kid.x, kid.y);
-      if (gymAct && gymAct.k === 'fridge' && gymAct.t > 1.1 && gymAct.t < 3.2) drawApple(kid.x + 8, kid.y - 14);
-      if (gymAct && gymAct.k === 'stove') drawSteam(time);
-      if (gymAct && (gymAct.k === 'shower' || gymAct.k === 'sink')) drawWater(time);
-      if (gymAct && gymAct.k === 'lift') { const f = (gymAct.t % 1.2) / 1.2, up = f < 0.5 ? f * 2 : 2 - f * 2; drawBarbell(kid.x, kid.y - 12 - Math.round(up * up * (3 - 2 * up) * 22)); } }
+    }
+    { const people = [];                               // Kind und Kollegen, von hinten nach vorne
+      if (!night && !(slide && !slide.done && 1 - slide.t / 0.4 <= 0.2) && !depart) people.push({ p: kid, a: gymAct });
+      for (const n of npcs) if (n.f === level && !n.inTruck) people.push({ p: n, a: n.act });
+      const yOf = e => { const sp = sitPose(e.a); return sp ? sp.y : e.p.y; };
+      for (const e of people.sort((a, b) => yOf(a) - yOf(b))) drawEntry(e, time); }
     if (gymAct && gymAct.k === 'tv') drawTV(time);
     if (alarm) drawAlarm(time);
     if (swap) { const a = swap.t < 0.35 ? swap.t / 0.35 : Math.max(0, 1 - (swap.t - 0.35) / 0.35); R(`rgba(0,0,0,${a.toFixed(2)})`, 0, 0, W, H); }
@@ -589,6 +711,18 @@ const Wache = (() => {
       const pts = level ? [spots.pole, stairs] : [stairs, { x: spots.door.x, y: room.y + room.h - 12, w: spots.door.w, h: 4 }];
       for (const q of pts) { const cx = Math.round(q.x + q.w / 2), cy = q.y - 6; for (let i = 0; i < 4; i++) R('rgba(255,255,255,.85)', cx - i, cy + i, 2 * i + 1, 1); }
     }
+  }
+  function drawEntry(e, time) {                       // eine Person mit allem, was zu ihrer Aktion gehört
+    const { p, a } = e;
+    if (a && a.k === 'sleep') { const b = a.o; R(p.pal.s, b.x + Math.round(b.w / 2) - 4, b.y + 6, 8, 7); R(p.pal.h, b.x + Math.round(b.w / 2) - 4, b.y + 5, 8, 3);   // Kollege schläft: Kopf auf dem Kissen
+      R(p.pal.r, b.x + 3, b.y + 17, b.w - 6, 3);
+      for (let k = 0; k < 3; k++) { const zt = (a.t * 0.8 + k * 0.33) % 1; R('#ffffff', Math.round(b.x + b.w * 0.6 + zt * 10), Math.round(b.y - zt * 22), 2, 2); } return; }
+    const sp = sitPose(a); if (sp) drawPerson(p, sp.x, sp.y, 9); else drawPerson(p, p.x, p.y);
+    if (!a) return;
+    if (a.k === 'fridge' && a.t > 1.1 && a.t < 3.2) drawApple(p.x + 8, p.y - 14);
+    if (a.k === 'stove') drawSteam(time);
+    if (a.k === 'shower' || a.k === 'sink') drawWater(a, p, time);
+    if (a.k === 'lift') { const f = (a.t % 1.2) / 1.2, up = f < 0.5 ? f * 2 : 2 - f * 2; drawBarbell(p.x, p.y - 12 - Math.round(up * up * (3 - 2 * up) * 22)); }
   }
   // Alarm: rotes Blinken, Lampen an der Rückwand, Bild des Einsatzes oben, Pfeil zum nächsten Ziel (Spind, Rutschstange, Fahrzeug)
   function drawAlarm(time) {
@@ -605,7 +739,7 @@ const Wache = (() => {
     if (nag > 0 && !gear) { const l = spots.lockers; R(on ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.4)', l.x - 2, l.y - 2, l.w + 4, l.h + 4); }
   }
   function resize() { const l = level; layout(false); level = l; if (room) { const cols = Math.min(gc - 1, 16); room = { x: Math.round((W - cols * G) / 2), y: G, w: cols * G, h: H - G - 12 }; floor = { x: room.x + 4, y: room.y + WH + 2, w: room.w - 8, h: room.h - WH - 6 }; setupLevel(); kid.path = []; kid.x = clamp(kid.x, floor.x + 8, floor.x + floor.w - 8); kid.y = clamp(kid.y, floor.y + 14, floor.y + floor.h); } }
-  return { enter, update, draw, resize, onPointer, _alarm: () => startAlarm(), _dbg: () => ({ alarm, depart: !!depart, level, gear, kid: kid && { x: kid.x, y: kid.y, n: kid.path.length }, spots, stairs, vehicles, gates, room, floor, gym, gymAct, furn: furn.map(o => [o.k, o.x, o.y, o.w, o.h]) }) };
+  return { enter, update, draw, resize, onPointer, _alarm: () => startAlarm(), _dbg: () => ({ alarm, depart: !!depart, level, gear, kid: kid && { x: kid.x, y: kid.y, n: kid.path.length }, spots, stairs, vehicles, gates, room, floor, gym, gymAct, npcs: npcs.map(n => ({ f: n.f, x: Math.round(n.x), y: Math.round(n.y), act: n.act && n.act.k, gear: n.gear, inTruck: n.inTruck, path: n.path.length })), furn: furn.map(o => [o.k, o.x, o.y, o.w, o.h]) }) };
 })();
 startLoop(Wache);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

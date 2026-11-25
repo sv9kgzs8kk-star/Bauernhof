@@ -6,7 +6,7 @@ Object.assign(WORDS, {
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
-  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], ballroof: ['BALL AUF DEM DACH', 'Ball auf dem Dach'], astcar: ['AST AUF AUTO', 'Ast auf Auto'], branch: ['AST', 'Ast'], amb: ['KRANKENWAGEN', 'Krankenwagen'], tow: ['ABSCHLEPPWAGEN', 'Abschleppwagen'], plaster: ['PFLASTER', 'Pflaster'], crane: ['KRAN', 'Kran'], ball: ['BALL', 'Ball'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
+  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], smallfire: ['KLEINES HAUS BRENNT', 'Kleines Haus brennt'], treeroad: ['BAUM AUF DER STRASSE', 'Baum auf der Straße'], crash: ['AUTOUNFALL', 'Autounfall'], ballroof: ['BALL AUF DEM DACH', 'Ball auf dem Dach'], astcar: ['AST AUF AUTO', 'Ast auf Auto'], branch: ['AST', 'Ast'], amb: ['KRANKENWAGEN', 'Krankenwagen'], tow: ['ABSCHLEPPWAGEN', 'Abschleppwagen'], plaster: ['PFLASTER', 'Pflaster'], crane: ['KRAN', 'Kran'], ball: ['BALL', 'Ball'], car: ['AUTO', 'Auto'], tree: ['BAUM', 'Baum'], wood: ['HOLZ', 'Holz'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
@@ -16,6 +16,7 @@ const EINSAETZE = {
   unfall: { word: 'crash', veh: ['lf'], tool: 'cutter', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // Autounfall: Tür klemmt (Rettungsschere ist im Löschfahrzeug)
   baum: { word: 'treeroad', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] }, // umgestürzter Baum (Kettensäge ist im Löschfahrzeug)
   ast: { word: 'astcar', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // Ast auf Auto: erst Kettensäge, dann Rettungsschere (Fahrerin eingeklemmt)
+  klein: { word: 'smallfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Haus brennt: ein Fenster, dauert länger als die Mülltonne
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
 };
 const EINSATZ_KEYS = Object.keys(EINSAETZE);
@@ -155,11 +156,15 @@ function drawEinsatzIcon(F, x, y, key) {
   if (key === 'katze') {
     F('#6b4423', x + 13, y + 14, 4, 10); F('#24561f', x + 4, y + 2, 22, 14); F('#3f8f37', x + 5, y + 3, 20, 12); F('#5cb64f', x + 7, y + 4, 8, 4);
     drawCat(F, x + 10, y - 4, 1);
-  } else if (key === 'haus') {
-    F('#e9dcc0', x + 5, y + 10, 20, 14); F('#b5442e', x + 3, y + 6, 24, 4); F('#b5442e', x + 7, y + 3, 16, 3);   // Haus, Dach
-    F('#ff8a3c', x + 8, y + 13, 5, 4); F('#ff8a3c', x + 17, y + 13, 5, 4); F('#6b4423', x + 13, y + 18, 4, 6);
-    F('#e74c3c', x + 7, y + 8, 7, 5); F('#ffd23f', x + 9, y + 10, 3, 3); F('#e74c3c', x + 16, y + 8, 7, 5); F('#ffd23f', x + 18, y + 10, 3, 3);   // Flammen
-    F('rgba(90,90,90,.8)', x + 14, y - 2, 6, 4);
+  } else if (key === 'haus') {                         // Mehrfamilienhaus: 3 Etagen, graues Dach, Flammen
+    F('#e6d3b0', x + 6, y + 2, 18, 22); F('#6f757d', x + 4, y - 1, 22, 3);
+    for (const [wx, wy] of [[8, 5], [14, 5], [20, 5], [8, 12], [20, 12], [8, 18], [20, 18]]) F('#6cc4f0', x + wx, y + wy, 3, 3);
+    F('#6b4423', x + 14, y + 18, 3, 6); F('#e74c3c', x + 13, y + 9, 6, 7); F('#ffd23f', x + 15, y + 11, 2, 4); F('#e74c3c', x + 19, y + 2, 5, 5); F('#ffd23f', x + 20, y + 4, 2, 2);
+    F('rgba(90,90,90,.8)', x + 16, y - 6, 6, 4);
+  } else if (key === 'klein') {                        // kleines Haus mit einem brennenden Fenster
+    F('#f0e4c8', x + 4, y + 12, 22, 12); F('#b5442e', x + 2, y + 8, 26, 4); F('#b5442e', x + 6, y + 5, 18, 3); F('#8a5a3b', x + 20, y + 2, 3, 5);
+    F('#6cc4f0', x + 19, y + 15, 5, 4); F('#6b4423', x + 13, y + 16, 4, 8);
+    F('#e74c3c', x + 5, y + 11, 7, 8); F('#ff8a3c', x + 6, y + 13, 5, 6); F('#ffd23f', x + 7, y + 15, 3, 4); F('rgba(90,90,90,.8)', x + 6, y + 4, 5, 4);
   } else if (key === 'ball') {
     F('#f2e6c8', x + 4, y + 12, 22, 12); F('#4f79b0', x + 2, y + 8, 26, 4); F('#4f79b0', x + 6, y + 4, 18, 4); F('#8a4a2b', x + 20, y + 1, 4, 6);   // Haus, Dach, Schornstein
     F('#e74c3c', x + 13, y - 1, 6, 3); F('#ffffff', x + 13, y + 2, 6, 2); F('#3fa9f5', x + 14, y + 4, 4, 1);   // Ball

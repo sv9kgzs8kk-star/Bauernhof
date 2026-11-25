@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125k">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125l">
 <title>Einsatz</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="alarm" style="pointer-events:auto"><span class="word">ALARM</span></div>
 </div>
 <script>window.NO_PAD = true;</script>
-<script src="../../../gemeinsam/sterne.js?v=20261125k"></script>
-<script src="../../../gemeinsam/basis.js?v=20261125k"></script>
-<script src="../../../gemeinsam/moebel.js?v=20261125k"></script>
-<script src="../../../gemeinsam/bau.js?v=20261125k"></script>
-<script src="../../../gemeinsam/feuerwehr.js?v=20261125k"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261125l"></script>
+<script src="../../../gemeinsam/basis.js?v=20261125l"></script>
+<script src="../../../gemeinsam/moebel.js?v=20261125l"></script>
+<script src="../../../gemeinsam/bau.js?v=20261125l"></script>
+<script src="../../../gemeinsam/feuerwehr.js?v=20261125l"></script>
 <script>
 /* =====================================================================
    FEUERWEHR-EINSATZ (eine Szene je Einsatz, ?e=katze). Kommt aus der Wache, geht danach zurück (#einsatz).
@@ -67,7 +67,7 @@ window.HOF_URL = '../../index.html';
 document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('einsatz')));
 const KEY = EINSAETZE[new URLSearchParams(location.search).get('e')] ? new URLSearchParams(location.search).get('e') : 'katze';
 const E = EINSAETZE[KEY];
-const BALL = KEY === 'ball', MUELL = KEY === 'muell', HAUS = KEY === 'haus', BAUM = KEY === 'baum', UNFALL = KEY === 'unfall', AST = KEY === 'ast', FIRE = MUELL || HAUS;   // FIRE = Einsatz mit Löschen
+const BALL = KEY === 'ball', MUELL = KEY === 'muell', HAUS = KEY === 'haus', BAUM = KEY === 'baum', UNFALL = KEY === 'unfall', AST = KEY === 'ast', KLEIN = KEY === 'klein', FIRE = KLEIN || MUELL || HAUS;   // FIRE = Einsatz mit Löschen
 
 const Einsatz = (() => {
   const L = 80, WD = 30, GIRL = { h: '#e0a040', r: '#ff6b8a', w: '#ffffff', b: '#6a4c93' };
@@ -77,7 +77,8 @@ const Einsatz = (() => {
   const DRIVER = { h: '#2a1a10', s: '#c68642', r: '#3fa9f5', w: '#ffffff', b: '#34495e' };
   let parked = null, branch = null, bmarks = [], bpieces = [], pile = null, carry = null, mate = null, home = null, amb = null, tow = null, tool = null, plaster = null, crane = null, sani = null;   // Ast auf Auto
   let truck2 = null, victim = null, rescued = false, hoseFrom = null, boardFrom = null, mateAim = 0;   // Hausbrand: Drehleiter, gerettete Person
-  const MATE_PAL = Object.assign({}, GEAR_PAL, { h: '#f2f2f2' });   // Kollege im Anzug
+  const MATE_PAL = Object.assign({}, GEAR_PAL, { h: '#f2f2f2' });
+  const OMA = { h: '#d8d8d8', s: '#f1c27d', r: '#c0396b', w: '#ffffff', b: '#5a4a6a' };   // Oma (kleines Haus)   // Kollege im Anzug
   const SANI_PAL = { h: '#3a2a1a', r: '#e74c3c', w: '#ffffff', b: '#e74c3c', n: '#111' };   // Sanitäter
   const PL_COLS = [['#3fa9f5', '#bfe3ff'], ['#ff6b8a', '#ffd0db'], ['#5cc98a', '#c9f2d9'], ['#ffd23f', '#fff1b3'], ['#9b59b6', '#e2c8ef']];   // bunte Pflaster: Farbe, Punkte
   let trunk = null, marks = [], pieces = [], car = null, sawT = 0, walkTo = null;   // Baum: Stamm, Schnittlinien, Stücke, wartendes Auto
@@ -116,6 +117,16 @@ const Einsatz = (() => {
       truck.park = Math.max(4, bx - L - 56); sprayAt = { x: bx - 58, y: roadY - 4 };
       owner = { x: Math.max(18, Math.round(Math.min(W * 0.16, truck.park - 10))), y: roadY - 4 };
       cat.on = 'none'; girl = owner;
+    }
+    if (KLEIN) {                                       // kleines einstöckiges Haus rechts, linkes Fenster brennt; Oma links auf dem Gehweg
+      const hw = Math.round(clamp(W * 0.3, 92, 136)), hx = Math.round(Math.min(W - hw - 10, W * 0.62 - hw / 2)), fl = Math.round(clamp((roadY - 60) / 2.4, 28, 44));
+      house = { x: hx, w: hw, fl, floors: 1, base: roadY - 6, roof: Math.round(fl * 0.9) };
+      const ww = Math.round(hw * 0.22), wh = Math.round(fl * 0.5);
+      house.wins = [0.22, 0.8].map(cx => ({ fi: 0, x: Math.round(hx + hw * cx - ww / 2), y: Math.round(house.base - fl + fl * 0.25), w: ww, h: wh }));
+      const w = house.wins[0]; w.fire = true;
+      fires = [{ win: w, x: w.x + w.w / 2, y: w.y + w.h, w: w.w + 8, h: Math.round(fl * 1.05), hp: 1, dmg: 0.0016 }];   // Mülltonne 0.006: hier gut doppelt so lange löschen (Michael)
+      truck.park = Math.max(4, hx - L - 26); sprayAt = { x: Math.max(30, hx - 30), y: roadY - 4 };
+      owner = { x: Math.max(16, Math.round(Math.min(W * 0.12, truck.park - 14))), y: roadY - 4 }; girl = owner; cat.on = 'none';
     }
     if (HAUS) {                                        // Mehrfamilienhaus rechts (3 Etagen × 3 Fenster), Familie links, Löschfahrzeug + Drehleiter davor
       const hw = Math.round(clamp(W * 0.38, 110, 180)), hx = Math.round(Math.min(W - hw - 8, W * 0.66 - hw / 2)), fl = Math.round(clamp((roadY - 64) / 4.1, 22, 36));
@@ -226,6 +237,19 @@ const Einsatz = (() => {
         for (let yy = -r; yy <= r; yy += 2) { const hw = Math.round(Math.sqrt(r * r - yy * yy)); B('#24561f', x - hw, y + yy, 2 * hw, 2); if (hw > 3) B('#3f8f37', x - hw + 2, y + yy, 2 * hw - 4, 2); } }
       const t = trunk, hx = Math.round(t.x0 - 18), hy = roadY + Math.round(RH * 0.45);   // Wurzelteller und Erdloch am Straßenrand
       B('#5a4030', hx - 4, roadY - 10, 18, 9); B('#3a2a20', hx - 2, roadY - 8, 14, 5);
+      B('#1f2b33', 0, H - BAR, W, BAR); B('#33444f', 0, H - BAR, W, 2);
+      return;
+    }
+    if (KLEIN) {                                       // kleines Haus von vorne: rotes Satteldach, Schornstein, Tür, 2 Fenster, Gartenzaun
+      const h = house, top = h.base - h.fl;
+      B('rgba(0,0,0,.25)', h.x + 4, top + 4, h.w, h.fl);
+      B('#f0e4c8', h.x, top, h.w, h.fl); B('#cdb27a', h.x, h.base - 3, h.w, 3);
+      for (let i = 0; i < h.roof; i++) { const k = i / h.roof, ww = Math.round(h.w + 14 - (h.w + 14) * k * 0.95); B(i % 4 === 3 ? '#8e2f22' : '#b5442e', Math.round(h.x + h.w / 2 - ww / 2), top - i - 1, ww, 1); }
+      B('#7a2218', h.x - 7, top - 2, h.w + 14, 3); B('#8a5a3b', h.x + Math.round(h.w * 0.68), top - Math.round(h.roof * 0.75), 8, Math.round(h.roof * 0.55));   // Traufe, Schornstein
+      const dw = Math.round(h.w * 0.16), dx = Math.round(h.x + h.w * 0.5 - dw / 2); B('#6b4423', dx, h.base - Math.round(h.fl * 0.72), dw, Math.round(h.fl * 0.72) - 3); B('#ffd23f', dx + dw - 4, h.base - Math.round(h.fl * 0.38), 2, 2);
+      for (const w of h.wins) { B('#f2f2f2', w.x - 2, w.y - 2, w.w + 4, w.h + 4); if (!w.fire) { B('#6cc4f0', w.x, w.y, w.w, w.h); B('#9fe3ff', w.x, w.y, w.w, Math.round(w.h / 3)); B('#f2f2f2', w.x + Math.round(w.w / 2) - 1, w.y, 2, w.h); } B('#3f8f37', w.x - 2, w.y + w.h + 2, w.w + 4, 3); }   // Blumenkästen
+      for (let fx = h.x + h.w + 6; fx < Math.min(W - 4, h.x + h.w + 40); fx += 5) B('#f2f2f2', fx, h.base - 9, 2, 8); B('#f2f2f2', h.x + h.w + 6, h.base - 7, Math.min(W - 6, h.x + h.w + 40) - h.x - h.w - 6, 1);   // Gartenzaun
+      B('#24561f', h.x - 6, h.base - 10, 10, 8);
       B('#1f2b33', 0, H - BAR, W, BAR); B('#33444f', 0, H - BAR, W, 2);
       return;
     }
@@ -602,7 +626,7 @@ const Einsatz = (() => {
           tone(1200, .15, 'sine', .05); setTimeout(() => say('Hilfe! Hilfe! Da oben ist noch jemand! Welches Werkzeug brauchen wir?'), 300); break; }
         if (fires.every(f => f.hp <= 0)) { go('out'); spraying = 0; for (const f of fires) for (let k = 0; k < 6; k++) steam.push({ x: f.x + rnd(-12, 12), y: f.y - rnd(0, 20), t: -k * 0.08 }); say('Feuer aus!'); sfx.win(); confetti(); }
         break; }
-      case 'out': if (t > 1.6) { go('thanks'); say(HAUS ? 'Danke, liebe Feuerwehr!' : 'Danke!');   // der Nachbar bedankt sich
+      case 'out': if (t > 1.6) { go('thanks'); say(HAUS || KLEIN ? 'Danke, liebe Feuerwehr!' : 'Danke!');   // der Nachbar bedankt sich
           for (let k = 0; k < 6; k++) hearts.push({ x: owner.x + rnd(-12, 12), y: owner.y - 30 - rnd(0, 10), t: -k * 0.15 });
           if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
       case 'thanks': if (t > (AST ? 1 : 3.2)) { go('back'); truck.deployed = false; if (mate) mate.spray = false; backFrom = { x: kid.x, y: kid.y }; if (mate) mate.from = { x: mate.x, y: mate.y }; } break;
@@ -831,7 +855,7 @@ const Einsatz = (() => {
     if (MUELL) drawBins(time);
     if (HAUS) { drawHouseFire(time); for (const p of family) drawKidPal(R, p.x, p.y, p.pal, 2, false, false);
       R('#8a5a2b', family[1].x + 14, roadY - 12, 10, 6); R('#5a3b1c', family[1].x + 22, roadY - 15, 5, 5); R('#222', family[1].x + 25, roadY - 14, 1, 1); R('#8a5a2b', family[1].x + 14, roadY - 7, 2, 3); R('#8a5a2b', family[1].x + 21, roadY - 7, 2, 3);   // Hund
-    } else if (!BAUM && !UNFALL && !AST) drawKidPal(R, girl.x, girl.y, BALL ? BOY : MUELL ? OWNER : GIRL, 2, false, false);   // beim Baum sitzt der Fahrer im Auto
+    } else if (!BAUM && !UNFALL && !AST) { if (KLEIN) drawHouseFire(time); drawKidPal(R, girl.x, girl.y, BALL ? BOY : KLEIN ? OMA : MUELL ? OWNER : GIRL, 2, false, false); }   // beim Baum sitzt der Fahrer im Auto
     if (cat.on === 'girl') drawPet(Math.round(girl.x - 34), Math.round(girl.y - 18), cat.s);   // Katze sitzt wieder neben dem Mädchen
     const on = Math.floor(time / 150) % 2 === 1;
     if (truck2) drawFireTruckSide(R, truck2.x, truck2.by, L, E.veh[1], !on, truck2.deployed);

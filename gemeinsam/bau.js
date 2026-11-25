@@ -671,8 +671,9 @@ Object.assign(WORDS, { firestation: ['FEUERWACHE', 'Feuerwache'], garage: ['FAHR
 // Grundriss auf der Bodenplatte x,y,w,h (schräg von oben wie drawHouseTop: oben die Dachfläche d, vorne die Wand fh)
 function fireGeo(x, y, w, h) {
   const gw = Math.max(12, Math.round(w * 0.56)), d = Math.round(h * 0.55);
-  const fh = h - d, mh = Math.round(fh * 1.5);          // Hauptgebäude: 2 Stockwerke, ragt nach oben über die Halle
-  return { garage: { x, y, w: gw, d, fh }, main: { x: x + gw + 3, w: w - gw - 3, top: y + h - d - mh, d, fh: mh, bot: y + h } };
+  const f0 = h - d, mh = Math.round(f0 * 1.5), fh = Math.round(mh * 3 / MAIN_ROWS);   // Hauptgebäude 2 Stockwerke (5 Steinreihen), Halle 3 Reihen hoch
+  // Michael: Obergeschoss liegt über der ganzen Halle (og = die 2 oberen Steinreihen über der Halle), oben drauf der Landeplatz
+  return { garage: { x, y: y + h - d - fh, w: gw, d, fh }, main: { x: x + gw + 3, w: w - gw - 3, top: y + h - d - mh, d, fh: mh, bot: y + h, og: { x, w: gw + 3, h: mh - fh } } };
 }
 // Rolltore in der Vorderwand der Halle: [x, y, w, h]
 function garageGates(gg) {
@@ -743,6 +744,13 @@ function mainCells(m) {
     const x = Math.round(m.x + c * cw), y = Math.round(m.bot - (r + 1) * rh);
     out.push({ r, c, x, y, w: Math.round(m.x + (c + 1) * cw) - x, h: Math.round(m.bot - r * rh) - y, open: MAIN_HOLES.includes(c + ',' + r) });
   }
+  if (m.og) {                                          // Obergeschoss über der Halle: die oberen 2 Reihen, Fenster in der unteren davon (jede 2. Spalte)
+    const n = Math.max(3, Math.round(m.og.w / cw)), ow = m.og.w / n, r0 = MAIN_ROWS - Math.round(m.og.h / rh);
+    for (let r = r0; r < MAIN_ROWS; r++) for (let c = 0; c < n; c++) {
+      const x = Math.round(m.og.x + c * ow), y = Math.round(m.bot - (r + 1) * rh);
+      out.push({ r, c, og: true, x, y, w: Math.round(m.og.x + (c + 1) * ow) - x, h: Math.round(m.bot - r * rh) - y, open: r === r0 && c % 2 === 1 });
+    }
+  }
   return out;
 }
 function drawFireBrick(F, x, y, w, h) {
@@ -752,14 +760,16 @@ function drawFireBrick(F, x, y, w, h) {
 // Hauptgebäude zeichnen; o: { built: fertige Reihen 0..5 (Steine + Mauerkrone in dieser Höhe), done (Dach, Fenster, Tür, Wappen), roofK 0..1 (Dach senkt sich), time }
 function drawMain(F, m, o = {}) {
   const built = o.done ? MAIN_ROWS : (o.built || 0), cells = mainCells(m), rh = m.fh / MAIN_ROWS;
-  if (o.done) F(FIRE_BRICK[1], m.x, Math.round(m.bot - m.fh), m.w, Math.round(m.fh));   // fertig: Fassade ganz rot hinterlegt (keine Lücken zwischen den Steinen)
+  if (o.done) { F(FIRE_BRICK[1], m.x, Math.round(m.bot - m.fh), m.w, Math.round(m.fh)); if (m.og) F(FIRE_BRICK[1], m.og.x, Math.round(m.bot - m.fh), m.og.w, Math.round(m.og.h)); }   // fertig: Fassade ganz rot hinterlegt (keine Lücken zwischen den Steinen)
   for (const k of cells) if (k.r < built) {
     if (!k.open) drawFireBrick(F, k.x, k.y, k.w, k.h);
     else if (!o.done) F('#2e1f10', k.x, k.y, k.w, k.h);
   }
   if (o.done) {                                        // Fenster und Tür einsetzen
-    const hole = (c, r0, r1) => { const a = cells.find(k => k.c === c && k.r === r1), b = cells.find(k => k.c === c && k.r === r0); return [a.x, a.y, a.w, b.y + b.h - a.y]; };
+    const hole = (c, r0, r1) => { const a = cells.find(k => !k.og && k.c === c && k.r === r1), b = cells.find(k => !k.og && k.c === c && k.r === r0); return [a.x, a.y, a.w, b.y + b.h - a.y]; };
     for (const [c, r] of [[0, 1], [4, 1], [0, 3], [2, 3], [4, 3]]) { const [x, y, w, h] = hole(c, r, r);
+      F('#f2f2f2', x + 1, y + 1, w - 2, h - 2); F('#6cc4f0', x + 2, y + 2, w - 4, h - 4); F('#9fe3ff', x + 2, y + 2, w - 4, Math.max(1, (h >> 1) - 2)); F('#f2f2f2', x + (w >> 1), y + 2, 1, h - 4); }
+    for (const k of cells) if (k.og && k.open) { const { x, y, w, h } = k;   // Fenster im Obergeschoss über der Halle
       F('#f2f2f2', x + 1, y + 1, w - 2, h - 2); F('#6cc4f0', x + 2, y + 2, w - 4, h - 4); F('#9fe3ff', x + 2, y + 2, w - 4, Math.max(1, (h >> 1) - 2)); F('#f2f2f2', x + (w >> 1), y + 2, 1, h - 4); }
     const [dx, dy, dw, dh] = hole(2, 0, 1);
     F('#5a5a5a', dx + 1, dy + 1, dw - 2, dh - 1); F('#9fe3ff', dx + 2, dy + 2, dw - 4, dh - 3); F('#5a5a5a', dx + (dw >> 1), dy + 2, 1, dh - 3); F('#ffd23f', dx + (dw >> 1) + 2, dy + Math.round(dh * 0.55), 1, 2);
@@ -768,11 +778,12 @@ function drawMain(F, m, o = {}) {
   }
   // Mauerkrone in Höhe der fertigen Reihen (die Wände wachsen nach oben)
   const cy = Math.round(m.bot - built * rh - m.d), th = 3;
-  if (built > 0 && !o.done) { F(FIRE_BRICK[0], m.x, cy, m.w, th); F(FIRE_BRICK[0], m.x, cy, th, m.d); F(FIRE_BRICK[0], m.x + m.w - th, cy, th, m.d); F(FIRE_BRICK[2], m.x, cy, m.w, 1); }
+  if (built > 0 && !o.done) { F(FIRE_BRICK[0], m.x, cy, m.w, th); F(FIRE_BRICK[0], m.x, cy, th, m.d); F(FIRE_BRICK[0], m.x + m.w - th, cy, th, m.d); F(FIRE_BRICK[2], m.x, cy, m.w, 1);
+    if (m.og && built > MAIN_ROWS - Math.round(m.og.h / rh)) { F(FIRE_BRICK[0], m.og.x, cy, m.og.w, th); F(FIRE_BRICK[0], m.og.x, cy, th, m.d); F(FIRE_BRICK[2], m.og.x, cy, m.og.w, 1); } }   // Mauerkrone auch über der Halle
   if (o.done) {                                        // Flachdach (senkt sich zum Schluss von oben ab), Blaulicht
     const k = o.roofK == null ? 1 : clamp(o.roofK, 0, 1), up = Math.round((1 - k) * 30), top = m.top - up;
     if (k < 1) F('rgba(0,0,0,.18)', m.x, m.top, m.w, m.d);
-    drawFlatRoof(F, m.x + m.w / 2, top + m.d / 2, m.w + 4, m.d + 4);
+    const rx = m.og ? m.og.x : m.x, rw = m.x + m.w - rx; drawFlatRoof(F, rx + rw / 2, top + m.d / 2, rw + 4, m.d + 4);   // ein Dach über Hauptgebäude und Halle
     if (k >= 1) { const on = Math.floor((o.time || 0) / 300) % 2; F(on ? '#3fa9f5' : '#1c5e9e', m.x + m.w - 8, m.top + 3, 3, 3); F(on ? '#1c5e9e' : '#3fa9f5', m.x + m.w - 4, m.top + 3, 3, 3); }
   }
 }
@@ -781,7 +792,7 @@ function drawFireStation(F, x, y, w, h, o = {}) {
   const fg = fireGeo(x, y, w, h), st = o.step || 0;
   if (st >= 3) drawGarage(F, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], time: o.time });
   if (st >= 4) drawMain(F, fg.main, { done: true, time: o.time });
-  if (st >= 5) { drawGaragePad(F, fg.garage, o.time); drawHoseTower(F, fg.main, { blocks: HOSE_BLOCKS, cap: true, time: o.time }); }
+  if (st >= 5) { drawStationPad(F, fg, o.time); drawHoseTower(F, fg.main, { blocks: HOSE_BLOCKS, cap: true, time: o.time }); }
   return fg;
 }
 
@@ -819,4 +830,7 @@ function drawPadSlab(F, cx, gy, w, d, e, time) {
   F('#2e3134', x, y, w, d + 2); F('#3a3d40', x + 1, y + 1, w - 2, d - 2);
   drawHelipad(F, x, y, w, d, time);
 }
+// Landeplatz auf dem Dach des Obergeschosses über der Halle (Michael)
+function stationPadSlot(fg) { const g = fg.garage, m = fg.main; return { gx: g.x + g.w / 2, gy: m.top + m.d / 2 + m.fh, e: m.fh, w: g.w - 2, d: m.d - 2 }; }
+function drawStationPad(F, fg, time) { const s = stationPadSlot(fg); drawPadSlab(F, s.gx, s.gy, s.w, s.d, s.e, time); }
 function drawGaragePad(F, gg, time) { drawPadSlab(F, gg.x + gg.w / 2, gg.y + gg.d / 2 + gg.fh, gg.w - 2, gg.d - 2, gg.fh, time); }

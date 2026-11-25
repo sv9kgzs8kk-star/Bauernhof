@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125l">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125m">
 <title>Schlauchturm</title>
 </head>
 <body>
@@ -45,9 +45,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261125l"></script>
-<script src="../../../gemeinsam/basis.js?v=20261125l"></script>
-<script src="../../../gemeinsam/bau.js?v=20261125l"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261125m"></script>
+<script src="../../../gemeinsam/basis.js?v=20261125m"></script>
+<script src="../../../gemeinsam/bau.js?v=20261125m"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -115,7 +115,7 @@ const Hose = (() => {
   // Maße eines Teils: Breite, Tiefe, Höhe
   const dims = p => p === 'pad' ? { w: gg.w - 2, d: gg.d - 2, h: 2 } : p === 'cap' ? { w: hg.w, d: hg.d, h: hg.ch } : { w: hg.w, d: hg.d, h: hg.bh };
   function slot(p) {
-    if (p === 'pad') return { gx: gg.x + gg.w / 2, gy: gg.y + gg.d / 2 + gg.fh, e: gg.fh };
+    if (p === 'pad') { const q = stationPadSlot(fg); return { gx: q.gx, gy: q.gy, e: q.e }; }   // Landeplatz aufs Dach über der Halle
     const k = p === 'cap' ? HOSE_BLOCKS : +p[1];
     return { gx: hg.x + hg.w / 2, gy: hg.gy, e: hg.base + k * hg.bh };
   }
@@ -214,8 +214,8 @@ const Hose = (() => {
     if (!hg) return;
     ctx.drawImage(bg, 0, 0);
     drawGarage(Q, gg, { parts: GARAGE_PARTS, gates: [1, 1], time });
-    if (placed.pad) drawGaragePad(Q, gg, time);
     drawMain(R, m, { done: true, time });
+    if (placed.pad) drawStationPad(Q, fg, time);
     drawHoseTower(Q, m, { blocks: ['b0', 'b1', 'b2'].filter(p => placed[p]).length, cap: !!placed.cap, time });
     const a = Math.abs(Math.sin(time / 260)) > .5, bob = Math.abs(Math.sin(time / 220)) * 4;
     if (!done) {                                        // leuchtende Zielstelle des nächsten Teils

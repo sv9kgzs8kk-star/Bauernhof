@@ -6,11 +6,12 @@ Object.assign(WORDS, {
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
-  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
+  binfire: ['MÜLLTONNE BRENNT', 'Mülltonne brennt'], housefire: ['HAUS BRENNT', 'Haus brennt'], fire: ['FEUER', 'Feuer'], bin: ['MÜLLTONNE', 'Mülltonne']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
   katze: { word: 'cattree', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },
+  haus: { word: 'housefire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // Einfamilienhaus: 3 Fenster brennen (Löschfahrzeug)
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
 };
 const EINSATZ_KEYS = Object.keys(EINSAETZE);
@@ -108,6 +109,11 @@ function drawEinsatzIcon(F, x, y, key) {
   if (key === 'katze') {
     F('#6b4423', x + 13, y + 14, 4, 10); F('#24561f', x + 4, y + 2, 22, 14); F('#3f8f37', x + 5, y + 3, 20, 12); F('#5cb64f', x + 7, y + 4, 8, 4);
     drawCat(F, x + 10, y - 4, 1);
+  } else if (key === 'haus') {
+    F('#e9dcc0', x + 5, y + 10, 20, 14); F('#b5442e', x + 3, y + 6, 24, 4); F('#b5442e', x + 7, y + 3, 16, 3);   // Haus, Dach
+    F('#ff8a3c', x + 8, y + 13, 5, 4); F('#ff8a3c', x + 17, y + 13, 5, 4); F('#6b4423', x + 13, y + 18, 4, 6);
+    F('#e74c3c', x + 7, y + 8, 7, 5); F('#ffd23f', x + 9, y + 10, 3, 3); F('#e74c3c', x + 16, y + 8, 7, 5); F('#ffd23f', x + 18, y + 10, 3, 3);   // Flammen
+    F('rgba(90,90,90,.8)', x + 14, y - 2, 6, 4);
   } else if (key === 'muell') {
     F('#4a4d50', x + 9, y + 10, 13, 14); F('#6a6e72', x + 10, y + 11, 11, 12); F('#333', x + 8, y + 9, 15, 2);   // Tonne
     F('#e74c3c', x + 10, y + 1, 11, 8); F('#ff8a3c', x + 12, y + 3, 7, 6); F('#ffd23f', x + 14, y + 5, 3, 4); F('#e74c3c', x + 13, y - 2, 4, 3);   // Flammen

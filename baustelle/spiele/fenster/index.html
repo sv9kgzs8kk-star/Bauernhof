@@ -55,7 +55,7 @@ const house = () => { if (!save.house || typeof save.house !== 'object') save.ho
 let winTimer = null;
 // Bauschritt fertig: Fortschritt speichern, Sterne, Jubel, zurück zum Bauhof
 function finishStep(step, key, back) {
-  Hof.load(); house().step = Math.max(house().step, step); if (houseType().key === 'tower') house().towerDone = true;   // Hochhaus einmal fertig: Feuerwache wird frei save.stars += BAU_STARS_STEP; Hof.persist();
+  Hof.load(); house().step = Math.max(house().step, step); if (houseType().key === 'tower') house().towerDone = true; save.stars += BAU_STARS_STEP; Hof.persist();   // Hochhaus einmal fertig: Feuerwache wird frei
   setTimeout(() => {
     document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
     $('wingain').textContent = BAU_STARS_STEP;

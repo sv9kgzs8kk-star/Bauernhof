@@ -42,7 +42,7 @@ feuerwache/index.html       ← Feuerwache innen (HOF_URL = '../baustelle/index.
                               Schläuche hinten links antippen = wackeln; Landematte der Rutschstange), rechts hinten Umkleide (vor den Spinden 0,5 s stehen = Feuerwehranzug an/aus, `gear`),
                               rechts vorne Leitstelle (Funkgerät antippen), Haustür, Treppe unten rechts. OG: Schlafraum (Betten = schlafen), Loch der Rutschstange (0,35 s drauf = runterrutschen),
                               Küche, Aufenthaltsraum. Kind und Wegesuche wie im Wohnhaus. Test: `?wache=5&sterne=20`.
-                              **Alarm** (nur in der Wache, erster nach 10–16 s, nach einem Einsatz 25–40 s): rotes Blinken, Gong, Bild des Einsatzes oben, Pfeil.
+                              **Alarm** (nur in der Wache, erster nach 10–16 s, nach einem Einsatz 25–40 s): Blinken rot/blau im Wechsel, Gong, Bild des Einsatzes auf dem großen Monitor der Leitstelle (`spots.mon`), Pfeil.
                               Michael: **erst den Feuerwehranzug anziehen** (Spind), dann zum leuchtenden Fahrzeug (antippen oder danebenstellen) → einsteigen,
                               Tor auf, alle Fahrzeuge des Einsatzes (`EINSAETZE[key].veh`) fahren raus → `spiele/einsatz/index.html?e=<key>`. Zurück mit `#einsatz` (im Anzug neben dem Fahrzeug).
 feuerwache/spiele/einsatz/  ← Einsatz-Szene (HOF_URL = '../../index.html'): Auto kommt mit Blaulicht, unten Werkzeugleiste (`E.tools`), richtiges Werkzeug (`E.tool`) löst den Einsatz;

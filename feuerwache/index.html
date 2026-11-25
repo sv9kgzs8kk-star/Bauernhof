@@ -43,7 +43,7 @@ window.addEventListener('error', function (e) {
    Obergeschoss: links der Schlafraum mit Betten und dem Loch der Rutschstange, rechts Küche und Aufenthaltsraum.
    Antippen: Kind läuft hin. Fahrzeug antippen = Blaulicht und Martinshorn. Rolltor antippen = auf/zu.
    Vor dem Spind stehen bleiben = Feuerwehrkleidung an/aus. Oben aufs Loch stellen = runterrutschen. Bett = schlafen.
-   ALARM (nur hier drinnen, nach einer Weile): rotes Licht, Gong, Bild des Einsatzes. Erst den Feuerwehranzug anziehen, dann zum
+   ALARM (nur hier drinnen, nach einer Weile): Licht rot/blau im Wechsel, Gong, Bild des Einsatzes auf dem Monitor der Leitstelle. Erst den Feuerwehranzug anziehen, dann zum
    leuchtenden Fahrzeug laufen (oder es antippen): einsteigen, Tor geht auf, die Fahrzeuge des Einsatzes rücken aus → spiele/einsatz/.
    ===================================================================== */
 window.HOF_URL = '../baustelle/index.html';
@@ -100,7 +100,10 @@ const Wache = (() => {
       spots.gates = vehicles.map(v => ({ x: v.x - 8, w: v.w + 16 }));
       spots.lockers = { x: vx + T4 + 8, y: fy, w: Math.min(rw - 16, 4 * 16), h: 12 };
       spots.bench = { x: spots.lockers.x + 4, y: Math.round(fy + (hy - fy) * 0.55), w: Math.min(rw - 50, 40), h: 8 };
-      const dw = Math.max(24, Math.min(rw - 60, 46)); spots.desk = { x: fr - 34 - dw, y: hy + T4 + 10, w: dw, h: 16 };   // Leitstelle hinten rechts, neben der Treppe
+      const dw = Math.max(24, Math.min(rw - 60, 72)), lh = fb - hy - T4, mk = Math.max(1, Math.min(Math.floor((dw - 6) / 32), Math.floor((lh - 36) / 28)));
+      const mw = 32 * mk + 6, mh = 28 * mk + 6;   // Monitor der Leitstelle: zeigt beim Alarm das Bild des Einsatzes (so groß wie Platz ist)
+      spots.desk = { x: fr - 34 - dw, y: hy + T4 + 4 + mh, w: dw, h: 16 };   // Leitstelle hinten rechts, neben der Treppe
+      spots.mon = { x: spots.desk.x + Math.round((dw - mw) / 2), y: spots.desk.y - mh + 2, w: mw, h: mh, k: mk };
       spots.hoses = { x: fx + 4, y: room.y + 2, w: Math.min(44, Math.round(hw * 0.22)), h: WH + 6 };
       spots.door = { x: Math.round(vx + T4 + Math.max(4, (rw - 2 * G - 34) * 0.4)), w: 2 * G };
       walls.push(...vehicles, spots.lockers, spots.bench, spots.desk);
@@ -213,7 +216,11 @@ const Wache = (() => {
   function drawDesk(time) {
     const d = spots.desk, on = radioT > 0 && Math.floor(time / 120) % 2;
     R('#5a3b1c', d.x, d.y, d.w, d.h); R('#a0673a', d.x + 1, d.y + 1, d.w - 2, d.h - 3);
-    R('#222', d.x + 4, d.y - 6, 16, 10); R('#3fa9f5', d.x + 5, d.y - 5, 14, 7); R('#7ed957', d.x + 6, d.y - 4, 6, 1); R('#7ed957', d.x + 6, d.y - 2, 9, 1);   // Bildschirm
+    const m = spots.mon, k = m.k, blink = Math.floor(time / 250) % 2;   // großer Monitor: normal blau mit grünen Zeilen, beim Alarm das Einsatz-Bild
+    R('#555', m.x + Math.round(m.w / 2) - 3, m.y + m.h - 2, 6, 4);
+    R(alarm ? (blink ? '#ff3b2f' : '#3fa9f5') : '#222', m.x - 2, m.y - 2, m.w + 4, m.h + 2); R('#222', m.x, m.y, m.w, m.h - 2);
+    if (alarm) { R('#ffffff', m.x + 2, m.y + 2, m.w - 4, m.h - 6); drawEinsatzIcon((c, a, b, w, h) => R(c, m.x + 3 + a * k, m.y + 3 + 4 * k + b * k, w * k, h * k), 0, 0, alarm.key); }
+    else { R('#1c5e9e', m.x + 2, m.y + 2, m.w - 4, m.h - 6); for (let i = 0; i < 4; i++) R('#7ed957', m.x + 4, m.y + 5 + i * 4 * k, Math.round((m.w - 8) * [0.6, 0.85, 0.4, 0.7][i]), k); }
     R('#333', d.x + d.w - 16, d.y + 2, 12, 8); R(on ? '#ff5a3c' : '#7a2218', d.x + d.w - 14, d.y + 4, 3, 3); R('#555', d.x + d.w - 6, d.y - 6, 1, 8);   // Funkgerät mit Antenne
     if (radioT > 0) for (let k = 0; k < 3; k++) { const r = 4 + ((time / 90 + k * 4) % 12); R('rgba(255,255,255,.7)', d.x + d.w - 6 - r, d.y - 8 - r / 2, 2, 1); R('rgba(255,255,255,.7)', d.x + d.w - 6 + r, d.y - 8 - r / 2, 2, 1); }
   }
@@ -333,11 +340,10 @@ const Wache = (() => {
   }
   // Alarm: rotes Blinken, Lampen an der Rückwand, Bild des Einsatzes oben, Pfeil zum nächsten Ziel (Spind, Rutschstange, Fahrzeug)
   function drawAlarm(time) {
-    const on = Math.floor(time / 250) % 2, a = 0.08 + 0.08 * Math.abs(Math.sin(time / 250));
-    R(`rgba(255,40,30,${a.toFixed(3)})`, 0, 0, W, H);
-    for (let lx = room.x + 30; lx < room.x + room.w - 10; lx += 70) { R('#333', lx - 1, room.y + 1, 8, 6); R(on ? '#ff3b2f' : '#7a1a14', lx, room.y + 2, 6, 4); }
-    const cw = 40, ch = 32, cx = Math.round(W / 2 - cw / 2), cy = room.y + WH + 6;   // Bild des Einsatzes
-    if (!depart) { R(on ? '#ff3b2f' : '#c0392b', cx - 2, cy - 2, cw + 4, ch + 4); R('#ffffff', cx, cy, cw, ch); drawEinsatzIcon(R, cx + 5, cy + 6, alarm.key); }
+    const on = Math.floor(time / 250) % 2, a = 0.08 + 0.08 * Math.abs(Math.sin(time / 250));   // rot und blau im Wechsel
+    R(on ? `rgba(255,40,30,${a.toFixed(3)})` : `rgba(40,110,255,${a.toFixed(3)})`, 0, 0, W, H);
+    for (let lx = room.x + 30, i = 0; lx < room.x + room.w - 10; lx += 70, i++) { R('#333', lx - 2, room.y, 10, 8); R((on + i) % 2 ? '#ff3b2f' : '#3fa9f5', lx - 1, room.y + 1, 8, 6); }
+    if (level === 0 && !depart) { const m = spots.mon; R(on ? 'rgba(255,59,47,.5)' : 'rgba(63,169,245,.5)', m.x - 5, m.y - 5, m.w + 10, 3); }   // Monitor leuchtet mit
     if (depart) return;
     let tg = null;
     if (!gear) tg = level ? spots.pole : spots.lockers;

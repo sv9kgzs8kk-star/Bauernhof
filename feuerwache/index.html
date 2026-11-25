@@ -86,46 +86,62 @@ const Wache = (() => {
 
   // ---------- Grundriss je Etage ----------
   function setupLevel() {
+    // Grundriss nach Michaels Zeichnung (25.11.): drei Streifen von links nach rechts.
+    //   links: EG Fahrzeughalle | OG hinten Schlafraum, vorne Fitnessraum
+    //   Mitte: Flur über beide Etagen mit Rutschstange (hinten), Treppe an der rechten Flurwand, unten die Haustür
+    //   rechts: EG hinten Einsatzzentrale (Leitstelle), vorne Bad | OG hinten Küche, vorne Aufenthaltsraum
     const fx = floor.x, fy = floor.y, fw = floor.w, fh = floor.h, fb = fy + fh, fr = fx + fw;
-    const vx = Math.round(fx + fw * 0.6), hy = Math.round(fy + fh * 0.45), rw = fr - vx - T4;
-    const d1 = Math.round(fy + fh * 0.62 - GAP / 2), hx = vx + T4 + 6;   // Durchgang Umkleide ↔ Leitstelle links
-    walls = [
-      { x: vx, y: room.y + WH - 2, w: T4, h: d1 - room.y - WH + 2 }, { x: vx, y: d1 + GAP, w: T4, h: fb - d1 - GAP },   // Halle | rechts (Durchgang)
-      { x: vx + T4, y: hy, w: hx - vx - T4, h: T4 }, { x: hx + GAP, y: hy, w: fr - hx - GAP, h: T4 },                     // Umkleide | Leitstelle (Durchgang)
-    ];
-    stairs = { x: fr - 30, y: fb - 48, w: 28, h: 42 };   // Treppe unten rechts
-    spots = { vx, hy, pole: { x: vx - 22, y: fy + 18, w: 12, h: 12 } };
+    const cw = Math.max(64, Math.round(fw * 0.2)), hw = Math.round((fw - cw - 2 * T4) * 0.58);
+    const vx = fx + hw, cx0 = vx + T4, cx1 = cx0 + cw, ux = cx1, rx = ux + T4, rw = fr - rx, hy = Math.round(fy + fh * 0.42);
+    const top = room.y + WH - 2;
+    const vwall = (x, gaps) => { let y0 = top; for (const [a, b] of gaps.concat([[fb + 9, fb + 9]])) { if (a > y0) walls.push({ x, y: y0, w: T4, h: Math.min(a, fb) - y0 }); y0 = b; } };
+    const hwall = (y, x0, x1, gaps) => { let a0 = x0; for (const [a, b] of gaps.concat([[x1, x1]])) { if (a > a0) walls.push({ x: a0, y, w: a - a0, h: T4 }); a0 = b; } };
+    walls = [];
+    const upDoor = fy + 40, rDoorLow = hy + T4 + 14;              // Durchgänge: oben unter der Stange, rechts unten über der Treppe
+    stairs = { x: cx1 - 30, y: Math.min(fb - 76, Math.max(rDoorLow + GAP + 6, fb - 90)), w: 28, h: 42 };   // Treppe an der rechten Flurwand, über der Haustür
+    spots = { vx, hy, cx0, cx1, rx, pole: { x: cx0 + Math.round(cw / 2) - 6, y: fy + 12, w: 12, h: 12 } };
+    const dw = Math.min(2 * G, cw - 8);
+    spots.door = { x: cx0 + Math.round((cw - dw) / 2), w: dw };    // Haustür unten im Flur
     furn = []; vehicles = []; gym = null; gymAct = null;
     if (level === 0) {
-      const hw = vx - fx, vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));   // 2 Stellplätze (passt zu den 2 Toren außen)
-      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'dlk', cx: fx + Math.round(hw * 0.68) }]
+      vwall(vx, [[upDoor, upDoor + GAP], [fb - GAP - 4, fb + 9]]);   // Halle | Flur: oben (zu den Spinden) und unten (vor den Fahrzeugen)
+      const lDoor = Math.round(fy + (hy - fy) * 0.5 - GAP / 2);
+      vwall(ux, [[lDoor, lDoor + GAP], [rDoorLow, rDoorLow + GAP]]);  // Flur | Einsatzzentrale und Bad
+      hwall(hy, rx, fr + 4, []);                                      // Einsatzzentrale | Bad
+      const vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));   // 2 Stellplätze (passt zu den 2 Toren außen)
+      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'dlk', cx: fx + Math.round(hw * 0.7) }]
         .map((v, i) => Object.assign(v, { i, x: v.cx - (vw >> 1), y: fb - vl - 14, w: vw, h: vl, blink: 0 }));
       spots.gates = vehicles.map(v => ({ x: v.x - 8, w: v.w + 16 }));
-      spots.lockers = { x: vx - 28 - 3 * 16, y: fy, w: 3 * 16, h: 12 };   // Spinde in der Halle, gleich links neben der Rutschstange
-      spots.bench = { x: fr - 10, y: fb - 60, w: 6, h: 8 };            // (Bank fällt weg; kleine Garderobe im Flur, nur Deko)
-      const dw = Math.max(24, Math.min(rw - 40, 48)), mk = 1, mw = 32 * mk + 6, mh = 28 * mk + 6;   // Monitor: zeigt beim Alarm das Bild des Einsatzes
-      spots.desk = { x: vx + T4 + Math.max(14, Math.round((rw - dw) / 2)), y: Math.min(fy + mh + 2, hy - 18), w: dw, h: 16 };   // Leitstelle hat jetzt den Raum hinten rechts für sich
-      spots.mon = { x: spots.desk.x + Math.round((dw - mw) / 2), y: spots.desk.y - mh + 2, w: mw, h: mh, k: mk };
       spots.hoses = { x: fx + 4, y: room.y + 2, w: Math.min(44, Math.round(hw * 0.22)), h: WH + 6 };
-      spots.door = { x: Math.round(vx + T4 + Math.max(4, (rw - 2 * G - 34) * 0.4)), w: 2 * G };
-      walls.push(...vehicles, spots.lockers, spots.desk);
+      spots.lockers = { x: vx - 6 - 3 * 16, y: fy, w: 3 * 16, h: 12 };   // Spinde hinten rechts in der Halle, gleich am Durchgang zur Rutschstange
+      const ddw = Math.max(24, Math.min(rw - 16, 48)), mk = 1, mw = 32 * mk + 6, mh = 28 * mk + 6;   // Monitor: zeigt beim Alarm das Bild des Einsatzes
+      spots.desk = { x: rx + Math.max(4, Math.round((rw - ddw) / 2)), y: Math.min(fy + mh + 2, hy - 18), w: ddw, h: 16 };
+      spots.mon = { x: spots.desk.x + Math.round((ddw - mw) / 2), y: spots.desk.y - mh + 2, w: mw, h: mh, k: mk };
+      furn.push({ k: 'tub', x: fr - 44, y: fb - 26 }, { k: 'toilet', x: fr - 18, y: hy + T4 + 6 });   // Bad
+      furn = furn.filter(o => BY[o.k]).map(o => Object.assign(o, { f: BY[o.k], w: BY[o.k].w, h: BY[o.k].h }));
+      walls.push(...vehicles, spots.lockers, spots.desk, ...furn.filter(o => o.k === 'tub'));
     } else {
-      spots.door = { x: Math.round(vx + T4 + Math.max(4, (rw - 2 * G - 34) * 0.4)), w: 2 * G };
-      const hw = vx - fx, n = Math.max(2, Math.min(4, Math.floor((hw - 40) / 36)));
-      // Michael: Schlafraum unterteilt, vorne der Fitnessraum. Wand auf Höhe hy mit Durchgang; in den Fitnessraum kommt man von rechts (Durchgang in der Mittelwand)
-      const gx = fx + Math.round(hw * 0.5) - (GAP >> 1);
-      walls.push({ x: room.x, y: hy, w: gx - room.x, h: T4 }, { x: gx + GAP, y: hy, w: vx - gx - GAP, h: T4 });
+      const dormDoor = fy + 44, fitDoor = Math.round(hy + T4 + (fb - hy) * 0.3);
+      vwall(vx, [[dormDoor, dormDoor + GAP], [fitDoor, fitDoor + GAP]]);   // Flur | Schlafraum und Fitnessraum
+      vwall(ux, [[rDoorLow, rDoorLow + GAP]]);                              // Flur | Aufenthaltsraum
+      hwall(hy, room.x, vx, []);                                            // Schlafraum | Fitnessraum
+      const kd = rx + Math.max(4, Math.round(rw * 0.12));
+      hwall(hy, rx, fr + 4, [[kd, kd + GAP]]);                              // Küche | Aufenthaltsraum (Durchgang links)
+      const n = Math.max(2, Math.min(4, Math.floor((hw - 16) / 36)));
+      for (let i = 0; i < n; i++) furn.push({ k: 'bed', x: fx + 8 + i * 36, y: fy + 4 });
       const gy0 = hy + T4 + 6, gh = fb - gy0;
       gym = {
         tread: { x: fx + 8, y: gy0 + Math.max(0, Math.round((gh - 50) * 0.3)), w: 26, h: 50 },
-        bar: { x: fx + Math.round(hw * 0.32), y: gy0 + Math.max(4, Math.round((gh - 34) * 0.55)), w: 44, h: 30 },
-        bag: { x: fx + Math.round(hw * 0.78) - 8, y: gy0 + 6, w: 16, h: 26 },
+        bar: { x: fx + 42, y: gy0 + Math.max(4, Math.round((gh - 34) * 0.55)), w: 44, h: 30 },
+        bag: { x: fx + Math.round(hw * 0.8) - 8, y: gy0 + 6, w: 16, h: 26 },
       };
-      if (gym.bar.x < gym.tread.x + gym.tread.w + 8) gym.bar.x = gym.tread.x + gym.tread.w + 8;
-      if (gym.bag.x < gym.bar.x + gym.bar.w + 6) { gym.bag.x = gym.bar.x + gym.bar.w + 6; }
-      for (let i = 0; i < n; i++) furn.push({ k: 'bed', x: fx + 8 + i * 36, y: fy + 4 });
-      furn.push({ k: 'table', x: vx + T4 + Math.round(rw * 0.3), y: fy + Math.round((hy - fy) * 0.3) }, { k: 'chair', x: vx + T4 + Math.round(rw * 0.3) - 16, y: fy + Math.round((hy - fy) * 0.3) },
-        { k: 'stove', x: fr - 22, y: fy + 2 }, { k: 'fridge', x: fr - 42, y: fy }, ...(rw >= 120 ? [{ k: 'tv', x: vx + T4 + Math.round(rw * 0.32) + 10, y: hy + T4 + 4 }, { k: 'sofa', x: vx + T4 + Math.round(rw * 0.32), y: fb - 26 }] : []));   // weg vom Durchgang zur Halle; schmal: kein Sofa
+      if (gym.bag.x < gym.bar.x + gym.bar.w + 8) {                // schmal: Boxsack unter die Hantel statt daneben
+        gym.bag.x = gym.bar.x + gym.bar.w - 16; gym.bar.y = gy0 + 4; gym.bag.y = gym.bar.y + gym.bar.h + 26;
+        if (gym.bag.y + gym.bag.h + 10 > fb) gym.bag.y = fb - gym.bag.h - 10;
+      }
+      const ky = fy + Math.round((hy - fy) * 0.35);
+      furn.push({ k: 'table', x: rx + Math.round(rw * 0.12), y: ky + 6 }, { k: 'stove', x: fr - 22, y: fy + 2 }, { k: 'fridge', x: fr - 42, y: fy },
+        { k: 'tv', x: fr - 30, y: rDoorLow }, { k: 'sofa', x: Math.max(rx + 4, fr - 50), y: fb - 26 });
       furn = furn.filter(o => BY[o.k]).map(o => Object.assign(o, { f: BY[o.k], w: BY[o.k].w, h: BY[o.k].h }));
       walls.push(...furn.filter(o => o.k !== 'bed' && o.k !== 'tv'));
     }
@@ -151,7 +167,8 @@ const Wache = (() => {
     while (q.length) { const [r, c] = q.shift(); if (r === er && c === ec) break;
       for (const [dr, dc] of [[1,0],[-1,0],[0,1],[0,-1]]) { const nr = r + dr, nc = c + dc; if (nr < 0 || nc < 0 || nr >= grid.rows || nc >= grid.cols) continue;
         const k = idx(nr, nc); if (!grid.ok[k] || prev.has(k)) continue; prev.set(k, idx(r, c)); q.push([nr, nc]); } }
-    if (!prev.has(idx(er, ec))) return [];
+    if (!prev.has(idx(er, ec))) {                       // Ziel nicht erreichbar (z. B. hinter dem Tisch): nächste erreichbare Stelle nehmen
+      let bd = 1e9; for (const k of prev.keys()) { const r = Math.floor(k / grid.cols), c = k % grid.cols, d = (r - er) ** 2 + (c - ec) ** 2; if (d < bd) { bd = d; er = r; ec = c; } } }
     const path = []; let k = idx(er, ec);
     while (k !== -1) { const r = Math.floor(k / grid.cols), c = k % grid.cols; path.unshift({ x: floor.x + c * grid.c + grid.c / 2, y: floor.y + r * grid.c + grid.c / 2 }); k = prev.get(k); }
     return path;
@@ -165,19 +182,21 @@ const Wache = (() => {
     const { x, y, w, h } = room, { vx, hy } = spots, fb = floor.y + floor.h;
     B('rgba(0,0,0,.25)', x + 4, y + 6, w, h);
     const tileF = (x1, y1, x2, y2, c1, c2, n) => { for (let yy = y1, k = 0; yy < y2; yy += n, k++) for (let xx = x1, j = 0; xx < x2; xx += n, j++) B((k + j) % 2 ? c1 : c2, xx, yy, Math.min(n, x2 - xx), Math.min(n, y2 - yy)); };
+    const { cx0, rx } = spots, Y0 = y + WH, Y1 = y + h;
+    tileF(vx, Y0, rx, Y1, '#e6dcc8', '#d4c8ae', 10);                   // Flur (beide Etagen): helle Fliesen
     if (level === 0) {
-      B('#8d9196', x, y + WH, vx - x, h - WH); for (let xx = x; xx < vx; xx += 16) B('#7f8388', xx, y + WH, 1, h - WH); for (let yy = y + WH; yy < y + h; yy += 16) B('#7f8388', x, yy, vx - x, 1);   // Hallenboden Beton
+      B('#8d9196', x, Y0, vx - x, h - WH); for (let xx = x; xx < vx; xx += 16) B('#7f8388', xx, Y0, 1, h - WH); for (let yy = Y0; yy < Y1; yy += 16) B('#7f8388', x, yy, vx - x, 1);   // Hallenboden Beton
       for (const v of vehicles) { B('#ffd23f', v.x - 6, v.y - 6, 2, v.h + 12); B('#ffd23f', v.x + v.w + 4, v.y - 6, 2, v.h + 12); }   // gelbe Stellplatz-Linien
-      tileF(vx, y + WH, x + w, hy, '#dfe6ea', '#cfd8de', 8);           // Umkleide: Fliesen
-      tileF(vx, hy, x + w, y + h, '#e6dcc8', '#d4c8ae', 10);           // Leitstelle/Flur
+      B('#33475b', rx, Y0, x + w - rx, hy - Y0); for (let i = 0; i < 40; i++) B('#3e556b', rx + 2 + ((i * 37) % Math.max(1, x + w - rx - 4)), Y0 + 2 + ((i * 23) % Math.max(1, hy - Y0 - 4)), 2, 2);   // Einsatzzentrale: dunkler Teppich
+      tileF(rx, hy, x + w, Y1, '#ffffff', '#cfe8f5', 8);               // Bad: weiß-blaue Fliesen
       const p = spots.pole; B('#2c2c2c', p.x - 2, p.y - 2, p.w + 4, p.h + 4); B('#e03b3b', p.x, p.y, p.w, p.h); B('#ffd23f', p.x + 2, p.y + 2, p.w - 4, p.h - 4);   // Landematte unter der Stange
     } else {
       const carpet = (x1, y1, x2, y2, c1, c2) => { B(c1, x1, y1, x2 - x1, y2 - y1); for (let i = 0; i < 50; i++) B(c2, x1 + ((i * 37) % Math.max(1, x2 - x1 - 2)), y1 + ((i * 23) % Math.max(1, y2 - y1 - 2)), 2, 2); };
-      carpet(x, y + WH, vx, hy, '#a9c8e8', '#bcd6f0');                  // Schlafraum (hinten)
-      B('#3c4650', x, hy, vx - x, y + h - hy); for (let i = 0; i < 70; i++) B(i % 3 ? '#46525e' : '#56636f', x + 2 + ((i * 41) % Math.max(1, vx - x - 4)), hy + 2 + ((i * 29) % Math.max(1, y + h - hy - 4)), 2, 2);   // Fitnessraum: Gummiboden
-      for (let yy = hy + 20; yy < y + h - 4; yy += 22) B('#2f3840', x + 2, yy, vx - x - 4, 1);
-      tileF(vx, y + WH, x + w, hy, '#fff8e8', '#d9534f', 8);           // Küche
-      for (let yy = hy, k = 0; yy < y + h; yy += 6, k++) { B(k % 2 ? '#c58a4f' : '#b97f45', vx, yy, x + w - vx, 6); B('#8e5a2e', vx, yy + 5, x + w - vx, 1); }   // Aufenthaltsraum Holz
+      carpet(x, Y0, vx, hy, '#a9c8e8', '#bcd6f0');                      // Schlafraum (hinten links)
+      B('#3c4650', x, hy, vx - x, Y1 - hy); for (let i = 0; i < 70; i++) B(i % 3 ? '#46525e' : '#56636f', x + 2 + ((i * 41) % Math.max(1, vx - x - 4)), hy + 2 + ((i * 29) % Math.max(1, Y1 - hy - 4)), 2, 2);   // Fitnessraum: Gummiboden
+      for (let yy = hy + 20; yy < Y1 - 4; yy += 22) B('#2f3840', x + 2, yy, vx - x - 4, 1);
+      tileF(rx, Y0, x + w, hy, '#fff8e8', '#d9534f', 8);               // Küche (hinten rechts)
+      for (let yy = hy, k = 0; yy < Y1; yy += 6, k++) { B(k % 2 ? '#c58a4f' : '#b97f45', rx, yy, x + w - rx, 6); B('#8e5a2e', rx, yy + 5, x + w - rx, 1); }   // Aufenthaltsraum Holz
       const p = spots.pole; B('#5a5a5a', p.x - 3, p.y - 3, p.w + 6, p.h + 6); B('#111', p.x, p.y, p.w, p.h); B('#ffd23f', p.x - 3, p.y - 3, p.w + 6, 1); B('#ffd23f', p.x - 3, p.y + p.h + 2, p.w + 6, 1);   // Loch mit gelbem Rand
     }
     // Treppe
@@ -191,7 +210,7 @@ const Wache = (() => {
     for (let yy = y, k = 0; yy < y + WH; yy += 5, k++) for (let xx = x + (k % 2) * 6; xx < x + w; xx += 12) B('#7a2218', xx, yy, 1, 5);
     B('#cdb27a', x, y + WH, w, 2); B('#5a2a1c', x, y + WH + 1, w, 2);
     const win = wx => { B('#f2f2f2', wx, y + 4, 22, 14); B('#6cc4f0', wx + 2, y + 6, 18, 10); B('#9fe3ff', wx + 2, y + 6, 18, 4); B('#f2f2f2', wx + 10, y + 6, 2, 10); };
-    if (level === 0) { win(vx + Math.round((x + w - vx) * 0.6)); } else { win(x + Math.round((vx - x) * 0.55)); win(vx + Math.round((x + w - vx) * 0.25)); }
+    if (level === 0) { win(spots.rx + Math.round((x + w - spots.rx) * 0.15)); } else { win(x + Math.round((vx - x) * 0.55)); win(spots.rx + Math.round((x + w - spots.rx) * 0.1)); }
     // Außenmauern, vorne: unten Rolltore (Halle) und Haustür, oben Fenster
     const WC = '#e9dcc0', WD = '#b8a888', OC = '#c0392b', OD = '#7a1a12';   // Innenwände beige, Außenmauer rot wie die Wache in der Stadt
     B(OD, x - 4, y - 4, w + 8, 4); B(OC, x - 4, y - 4, w + 8, 2);
@@ -366,6 +385,9 @@ const Wache = (() => {
       if (gear && alarm) { const k = need()[0]; setTimeout(() => sayWord(k), 900); }
       sayWord(gear ? 'gear' : 'locker');
       for (let k = 0; k < 10; k++) spawn(kid.x + rnd(-10, 10), kid.y - rnd(4, 24), rnd(-20, 20), rnd(-30, -5), .4, gear ? '#ffd23f' : '#ffffff', 30); return; }
+    if (level === 0 && kid.still > 0.5) {               // Bad: aufs Klo stellen = Spülung
+      const t = furn.find(o => o.k === 'toilet' && inR({ x: o.x - 6, y: o.y, w: o.w + 12, h: o.h + 14 }, kid.x, kid.y));
+      if (t) { kid.used = true; setWord('toilet'); sayWord('toilet'); for (let k = 0; k < 14; k++) tone(250 + Math.random() * 500, .06, 'sine', .025, .3 + k * .05); return; } }
     if (level === 1 && gym && kid.still > 0.4) {      // Fitnessraum: aufs Laufband / an die Hantel stellen, neben den Boxsack = boxen
       const t = gym.tread, b = gym.bar, a = gym.bag;
       if (inR(t, kid.x, kid.y - 4)) { kid.used = true; kid.x = t.x + t.w / 2; kid.y = t.y + t.h - 6; kid.flip = false; gymAct = { k: 'run', t: 0, s: 0, n: 0 }; setWord('treadmill'); sayWord('treadmill'); return; }
@@ -378,7 +400,8 @@ const Wache = (() => {
   function draw(time) {
     if (!room) return;
     ctx.drawImage(bg, 0, 0);
-    if (level === 0) { drawHoses(time); drawLockers(); drawDesk(time); drawGates(time); for (const v of vehicles) drawVehicle(v, time); drawPole(time); }
+    if (level === 0) { drawHoses(time); drawLockers(); drawDesk(time); drawGates(time); for (const v of vehicles) drawVehicle(v, time); drawPole(time);
+      for (const o of furn) o.f.draw(R, o.x, o.y, true, time); }
     else { if (gym) drawGym(time); for (const o of furn.slice().sort((a, b) => (a.y + a.h) - (b.y + b.h))) o.f.draw(R, o.x, o.y, true, time); }
     if (night) {
       const t = night.t, a = t < 1.4 ? t / 1.4 : t < 3.8 ? 1 : Math.max(0, 1 - (t - 3.8) / 1.4), b = night.bed;

@@ -118,12 +118,13 @@ const Einsatz = (() => {
       cat.on = 'none'; owner = { x: car.x, y: car.y - 16 }; girl = owner;
     }
     if (UNFALL) {                                      // Auto steht schräg auf dem Bordstein, vorne an der Laterne; Feuerwehr hält links davon
-      const cl = Math.round(clamp(W * 0.3, 70, 124)), chh = Math.round(cl * 0.42), cx = Math.round(W * 0.62), by = roadY + 3;
-      crash = { x: cx - Math.round(cl / 2), w: cl, h: chh, by, post: cx + Math.round(cl / 2) + 3, door: null, doorOff: 0, doorK: 0 };
-      const dx = Math.round(cx - cl * 0.16), dw = Math.round(cl * 0.3), top = by - chh + Math.round(chh * 0.3), bot = by - 7;
-      crash.door = { x: dx, w: dw, top, bot };
-      cuts = [{ x: dx + dw - 3, y: top + 4, p: 0 }, { x: dx + dw - 3, y: bot - 3, p: 0 }, { x: dx + 3, y: Math.round((top + bot) / 2), p: 0 }];   // Scharnier oben/unten (vorne), Schloss (hinten)
-      driver = { x: dx + Math.round(dw / 2), y: top + 2, out: false };
+      // Auto als Pixelbild im Raster 64 × 26 Einheiten (u Pixel je Einheit), Front rechts an der Laterne; Fahrertür = Einheiten x 30–44, y 6–23
+      const u = W >= 380 ? 2 : 1, cl = 64 * u, cx = Math.round(W * 0.62), by = roadY + 3, cx0 = cx - Math.round(cl / 2);
+      crash = { x: cx0, w: cl, h: 26 * u, u, by, post: cx0 + cl + 2, doorK: 0 };
+      const P = (ux, uy) => ({ x: cx0 + Math.round(ux * u), y: by - Math.round(uy * u) });
+      crash.P = P; crash.door = { x: P(30, 0).x, w: 14 * u, top: P(0, 23).y, bot: P(0, 6).y };
+      cuts = [{ ...P(43.5, 20), p: 0 }, { ...P(43.5, 9), p: 0 }, { ...P(30.5, 13), p: 0 }];   // Scharnier oben/unten (vorne), Schloss (hinten)
+      driver = { x: P(37, 0).x, y: P(0, 16).y, out: false };
       truck.park = Math.max(4, crash.x - L - 26);
       cat.on = 'none'; owner = { x: driver.x, y: by }; girl = owner;
     }
@@ -260,7 +261,7 @@ const Einsatz = (() => {
       if (d.g && d.y > roadY + 2) d.t = 9; }
     drops = drops.filter(d => d.t < 1);
     for (const p of sparks) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 200 * dt; } sparks = sparks.filter(p => p.t < 0.5);
-    if (UNFALL && !crash.doorDown && Math.random() < dt * 3) steam.push({ x: crash.x + crash.w - 8 + rnd(-3, 3), y: crash.by - crash.h * 0.55, t: 0 });   // etwas Dampf aus der Motorhaube
+    if (UNFALL && !crash.doorDown && Math.random() < dt * 3) steam.push({ x: crash.x + 55 * crash.u + rnd(-3, 3), y: crash.by - 17 * crash.u, t: 0 });   // etwas Dampf aus der Motorhaube
     for (const p of steam) { p.t += dt; p.y -= 22 * dt; p.x += Math.sin(p.t * 5) * 6 * dt; } steam = steam.filter(p => p.t < 1.4);
     if (cat.on === 'tree' && !cat.anim && (meow -= dt) < 0) { meow = 4 + Math.random() * 2; miau(); }
     if (cat.anim) { const a = cat.anim; a.t += dt; const k = clamp(a.t / a.d, 0, 1), p = lerp(a.from, a.to(), k);
@@ -305,7 +306,7 @@ const Einsatz = (() => {
         break; }
       case 'door': crash.doorK = clamp(t / 0.8, 0, 1); if (t > 0.85 && !crash.doorDown) { crash.doorDown = true; sfx.clod(); }   // Tür kippt weg und liegt am Boden
         if (t > 1.1) go('outcar'); break;
-      case 'outcar': { const k = clamp(t / 1.2, 0, 1); driver.out = true; driver.x = crash.door.x + crash.door.w / 2 - k * 36; driver.y = crash.by + 2 + k * 6;   // Fahrer steigt aus
+      case 'outcar': { const k = clamp(t / 1.2, 0, 1); driver.out = true; driver.x = crash.door.x + crash.door.w / 2 - k * 40; driver.y = crash.by + 2 + k * 8;   // Fahrer steigt aus
         if (t > 1.3 && !starGiven) { starGiven = true; say('Danke, liebe Feuerwehr!'); sfx.win(); confetti(); owner.x = driver.x; owner.y = driver.y;
           for (let k2 = 0; k2 < 6; k2++) hearts.push({ x: driver.x + rnd(-12, 12), y: driver.y - 30 - rnd(0, 10), t: -k2 * 0.15 });
           Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1700); }
@@ -371,23 +372,38 @@ const Einsatz = (() => {
       for (let yy = 0; yy < hh; yy += 3) R(blink ? '#fff08a' : '#ffd23f', m.x - 1, yt + yy, 2, 2);
       if (m.p > 0) R('#2a1a10', m.x - 1, yt + 3, 2, Math.round((hh - 6) * m.p)); }
   }
-  function drawCrash(time) {                           // Unfallauto von der Seite (Front rechts an der Laterne), Tür mit Schnittpunkten, Fahrer
-    const c = crash, x = c.x, by = c.by, w = c.w, h = c.h, d = c.door, blink = Math.floor(time / 350) % 2;
-    R('rgba(0,0,0,.25)', x + 2, by - 2, w, 4);
-    R('#a93226', x, by - Math.round(h * 0.55), w, Math.round(h * 0.55) - 4); R('#d9534f', x + 1, by - Math.round(h * 0.55) + 1, w - 2, 4);   // Unterteil
-    R('#a93226', x + Math.round(w * 0.18), by - h, Math.round(w * 0.6), Math.round(h * 0.47)); R('#d9534f', x + Math.round(w * 0.18) + 1, by - h + 1, Math.round(w * 0.6) - 2, 2);   // Kabine
-    R('#9fe3ff', x + Math.round(w * 0.22), by - h + 3, Math.round(w * 0.2), Math.round(h * 0.3)); R('#9fe3ff', x + Math.round(w * 0.46), by - h + 3, Math.round(w * 0.24), Math.round(h * 0.3));   // Fenster
-    for (let i = 0; i < 4; i++) R('#5a1a12', x + w - 6 + (i % 2) * 2, by - Math.round(h * 0.55) + 2 + i * 3, 3, 2);   // eingedrückte Front
-    R(blink ? '#ff9f1a' : '#7a4a10', x + w - 3, by - Math.round(h * 0.5), 3, 3); R(blink ? '#ff9f1a' : '#7a4a10', x, by - Math.round(h * 0.5), 3, 3);   // Warnblinker
-    for (const wx of [x + Math.round(w * 0.2), x + Math.round(w * 0.8)]) { R('#1b1b1b', wx - 6, by - 9, 12, 10); R('#9aa0a6', wx - 2, by - 5, 4, 3); }
-    // Tür: klemmt (Spalt, Delle); nach dem Schneiden kippt sie weg und liegt auf dem Boden
-    const k = c.doorK || 0;
-    if (k < 1) { const ox = Math.round(-k * 20), oy = Math.round(k * (by - 2 - d.bot + (d.bot - d.top))); 
-      R('#8e2a20', d.x + ox - 1, d.top + oy - 1, d.w + 2, d.bot - d.top + 2); R('#c0453a', d.x + ox, d.top + oy, d.w, d.bot - d.top); R('#7a1a12', d.x + ox + 2, d.top + oy + Math.round((d.bot - d.top) * 0.55), d.w - 4, 1);
-      R('#9fe3ff', d.x + ox + 2, d.top + oy + 2, d.w - 4, Math.round((d.bot - d.top) * 0.35)); R('#333', d.x + ox + 3, d.top + oy + Math.round((d.bot - d.top) * 0.6), 4, 2); }
-    else { R('#8e2a20', d.x - 24, by - 4, d.w + 4, 4); R('#c0453a', d.x - 23, by - 4, d.w + 2, 2); R('#2a2a2a', d.x, d.top, d.w, d.bot - d.top); }   // Tür liegt am Boden, Öffnung
-    if (!driver.out) { const hx = d.x + Math.round(d.w / 2) - 4, hy = d.top + 3; R(DRIVER.s || '#c68642', hx, hy + 2, 8, 7); R(DRIVER.h, hx, hy + 1, 8, 3); R('#222', hx + 2, hy + 5, 1, 1); R('#222', hx + 5, hy + 5, 1, 1);   // Fahrer winkt im Fenster
-      if (Math.floor(time / 400) % 2) R('#c68642', hx + 9, hy - 1, 3, 4); }
+  function drawCrash(time) {                           // Unfallauto von der Seite als Pixelbild (Einheiten 64 × 26), Front rechts eingedrückt an der Laterne
+    const c = crash, u = c.u, blink = Math.floor(time / 350) % 2, ox0 = c.x, by = c.by;
+    const RU = (col, x0, y0, x1, y1) => R(col, ox0 + Math.round(x0 * u), by - Math.round(y1 * u), Math.max(1, Math.round((x1 - x0) * u)), Math.max(1, Math.round((y1 - y0) * u)));   // Rechteck in Einheiten (y nach oben)
+    const k = c.doorK || 0, off = k > 0 && k < 1 ? { x: -k * 14, y: -k * 4 } : null;
+    R('rgba(0,0,0,.25)', ox0 + 2 * u, by - u, 60 * u, 2 * u);
+    // Unterteil (vorne eingedrückt) und Motorhaube
+    for (let y = 5; y < 14; y++) { const l = 2 + (y < 7 || y > 12 ? 1 : 0), r = 62 - (y > 12 ? 2 : 0) - (y >= 8 && y <= 11 ? 3 : 0) - (y === 7 || y === 12 ? 1 : 0);
+      RU(y === 13 ? '#ef7a6e' : y < 7 ? '#a93226' : '#d9534f', l, y, r, y + 1); }
+    RU('#d9534f', 44, 14, 58, 15); RU('#b8433a', 52, 15, 57, 16);                     // Haube, hochgebogene Kante
+    for (let y = 14; y < 24; y++) { const l = 12 + (y - 14) * 0.8, r = 46 - (y - 14) * 0.9; RU(y === 23 ? '#a93226' : '#d9534f', l, y, r, y + 1); }   // Kabine mit schrägen Scheiben
+    for (let y = 16; y < 22; y++) { const l = 14 + (y - 14) * 0.8, r = 44 - (y - 14) * 0.9; RU('#9fe3ff', l, y, 28, y + 1); RU('#9fe3ff', 31, y, r, y + 1); }   // hinteres und vorderes Fenster
+    RU('#cfefff', 16, 20, 20, 21);
+    for (const wx of [14, 50]) { RU('#3a1a14', wx - 6, 5, wx + 6, 10); }                // Radkästen
+    for (const wx of [14, 50]) { RU('#1b1b1b', wx - 5, 0, wx + 5, 9); RU('#1b1b1b', wx - 4, -1, wx + 4, 10); RU('#9aa0a6', wx - 2, 3, wx + 2, 6); }   // Räder
+    RU('#9aa0a6', 0, 6, 3, 8);                                                          // Stoßstange hinten
+    for (let i = 0; i < 4; i++) RU('#9aa0a6', 59 + i, 6 - i, 61 + i, 7 - i);            // Stoßstange vorne hängt schräg herunter
+    RU('#ffe9a8', 58, 10, 60, 12); RU('#333', 59, 10, 60, 11);                          // Scheinwerfer mit Sprung
+    RU('#7a1a12', 56, 8, 57, 12); RU('#7a1a12', 57, 12, 59, 13);                        // Knautschfalten
+    RU('#e03b3b', 2, 10, 4, 12); RU(blink ? '#ff9f1a' : '#7a4a10', 60, 12, 62, 13); RU(blink ? '#ff9f1a' : '#7a4a10', 1, 12, 3, 13);   // Rücklicht, Warnblinker
+    // Fahrertür: Fugen, Griff; wird abgeschnitten → kippt weg und liegt am Boden, dahinter die Öffnung mit Sitz
+    if (off || k >= 1) { RU('#2a2a2a', 30, 6, 44, 23); RU('#5a4a3a', 33, 7, 41, 15); RU('#4a3a2a', 39, 12, 42, 21); }
+    if (!driver.out) { const hx = Math.round(ox0 + 35 * u), hy = by - 21 * u, sz = 4 * u;   // Fahrer winkt im Fenster
+      R(DRIVER.s, hx, hy + u, sz, sz); R(DRIVER.h, hx, hy, sz, u + 1); R('#222', hx + u, hy + 2 * u, 1, 1); R('#222', hx + 3 * u - 1, hy + 2 * u, 1, 1);
+      if (Math.floor(time / 400) % 2) R(DRIVER.s, hx + sz + u, hy - u, 2 * u, 3 * u); }
+    const drawDoor = (dx, dy) => { const X = v => v + dx, Y = v => v + dy;
+      RU('#d9534f', X(30), Y(6), X(44), Y(14)); RU('#ef7a6e', X(30), Y(13), X(44), Y(14));
+      for (let y = 14; y < 23; y++) { const r = 46 - (y - 14) * 0.9; RU('#d9534f', X(30), Y(y), X(Math.min(44, r)), Y(y + 1)); }
+      if (driver.out || dx || dy) for (let y = 16; y < 22; y++) { const r = 44 - (y - 14) * 0.9; RU('#9fe3ff', X(31), Y(y), X(r), Y(y + 1)); }
+      RU('#7a1a12', X(30), Y(6), X(30.5), Y(23)); RU('#7a1a12', X(43.5), Y(6), X(44), Y(21)); RU('#333', X(32), Y(11), X(35), Y(12)); };
+    if (k <= 0) { if (driver.out) drawDoor(0, 0); else { RU('#7a1a12', 30, 6, 30.5, 23); RU('#7a1a12', 43.5, 6, 44, 21); RU('#333', 32, 11, 35, 12); } }   // Tür zu: nur Fugen und Griff (Fenster bleibt fürs Gesicht)
+    else if (k < 1) drawDoor(off.x, off.y);
+    else { R('#8e2a20', ox0 + 12 * u, by - 2 * u, 16 * u, 2 * u); R('#d9534f', ox0 + 12 * u, by - 2 * u, 16 * u, u); }   // Tür liegt flach am Boden
     if (phase === 'cut') for (const q of cuts) if (!q.done) {   // leuchtende Schnittpunkte erst mit der Schere
       const pul = Math.abs(Math.sin(time / 220)); R(`rgba(255,210,63,${(0.4 + pul * 0.5).toFixed(2)})`, q.x - 5, q.y - 5, 10, 10); R('#ffd23f', q.x - 3, q.y - 3, 6, 6);
       if (q.p > 0) R('#2a1a10', q.x - 3, q.y - 3, Math.round(6 * q.p), 6); }
@@ -447,7 +463,7 @@ const Einsatz = (() => {
     if (MUELL) drawBins(time);
     if (HAUS) { drawHouseFire(time); for (const p of family) drawKidPal(R, p.x, p.y, p.pal, 2, false, false);
       R('#8a5a2b', family[1].x + 14, roadY - 12, 10, 6); R('#5a3b1c', family[1].x + 22, roadY - 15, 5, 5); R('#222', family[1].x + 25, roadY - 14, 1, 1); R('#8a5a2b', family[1].x + 14, roadY - 7, 2, 3); R('#8a5a2b', family[1].x + 21, roadY - 7, 2, 3);   // Hund
-    } else if (!BAUM) drawKidPal(R, girl.x, girl.y, MUELL ? OWNER : GIRL, 2, false, false);   // beim Baum sitzt der Fahrer im Auto
+    } else if (!BAUM && !UNFALL) drawKidPal(R, girl.x, girl.y, MUELL ? OWNER : GIRL, 2, false, false);   // beim Baum sitzt der Fahrer im Auto
     if (cat.on === 'girl') drawCat(R, Math.round(girl.x - 34), Math.round(girl.y - 18), cat.s);   // Katze sitzt wieder neben dem Mädchen
     const on = Math.floor(time / 150) % 2 === 1;
     drawFireTruck(R, truck.x, truck.y, L, WD, E.veh[0], 'right', on, false, truck.deployed);

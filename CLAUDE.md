@@ -39,8 +39,8 @@ baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): b
 feuerwache/index.html       ← Feuerwache innen (HOF_URL = '../baustelle/index.html', zurück nach `#wache`): fertige Wache (fire.step 5) in der Stadt betreten,
                               einmal für `FIRE_PRICE` Sterne freischalten (`Hof.unlockFire`, `save.fire.unlocked`). Zum Entdecken, Alarme kommen später (nur hier drinnen).
                               EG: links Fahrzeughalle mit 2 Stellplätzen (Löschfahrzeug `lf`, Drehleiter `dlk`; Rüstwagen `rw` ist gezeichnet, aber noch nicht in der Halle (Michael): antippen = Blaulicht + Martinshorn; 2 Rolltore in der Vorderwand antippen = auf/zu;
-                              Schläuche hinten links antippen = wackeln; Landematte der Rutschstange), rechts hinten Umkleide (vor den Spinden 0,5 s stehen = Feuerwehranzug an/aus, `gear`),
-                              rechts vorne Leitstelle (Funkgerät antippen), Haustür, Treppe unten rechts. OG: Schlafraum (Betten = schlafen), Loch der Rutschstange (0,35 s drauf = runterrutschen),
+                              Schläuche hinten links antippen = wackeln; Landematte der Rutschstange; Spinde direkt links neben der Rutschstange in der Halle: 0,5 s davor stehen = Feuerwehranzug an/aus, `gear`),
+                              rechts hinten Leitstelle im eigenen Raum (Monitor `spots.mon`, Funkgerät antippen), rechts vorne Flur mit Haustür und Treppe unten rechts. OG: Schlafraum (Betten = schlafen), Loch der Rutschstange (0,35 s drauf = runterrutschen),
                               Küche, Aufenthaltsraum. Kind und Wegesuche wie im Wohnhaus. Test: `?wache=5&sterne=20`.
                               **Alarm** (nur in der Wache, erster nach 10–16 s, nach einem Einsatz 25–40 s): Blinken rot/blau im Wechsel, Gong, Bild des Einsatzes auf dem großen Monitor der Leitstelle (`spots.mon`), Pfeil.
                               Michael: **erst den Feuerwehranzug anziehen** (Spind), dann zum leuchtenden Fahrzeug (antippen oder danebenstellen) → einsteigen,

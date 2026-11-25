@@ -484,6 +484,7 @@ const Einsatz = (() => {
         break; }
       case 'amb': {                                   // Krankenwagen kommt von rechts (untere Spur), Fahrerin steigt hinten ein, fährt nach links weg
         amb.siren += dt; if (Math.floor(amb.siren * 2) !== Math.floor((amb.siren - dt) * 2) && (!amb.arrived || amb.leave)) tone(Math.floor(amb.siren * 2) % 2 ? 784 : 587, .4, 'square', .03);
+        if (amb.plastered) { walkP(kid, { x: home.x, y: roadY - 4 }, 85 * dt); walkP(mate, { x: home.x - 16, y: roadY - 4 }, 85 * dt); }   // Feuerwehrleute gehen auf die Wiese, damit der Krankenwagen vorbeifahren kann (Michael)
         if (!amb.arrived) { amb.x = approach(amb.x, amb.stop, 120 * dt); if (amb.x === amb.stop) { amb.arrived = t; } }
         else if (!amb.plastered) { amb.open = clamp(amb.open + dt * 3, 0, 1);
           if (amb.open >= 1 && !sani) { sani = { x: amb.x + amb.w + 4, y: amb.base - 2, step: false, show: true }; tone(500, .08, 'square', .03); }   // Sanitäter steigt hinten aus

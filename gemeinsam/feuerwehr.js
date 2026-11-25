@@ -3,13 +3,13 @@
    Fahrzeuge von oben, Werkzeuge, Katze, Feuerwehranzug, Liste der Einsätze
    ===================================================================== */
 Object.assign(WORDS, {
-  lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
+  lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke']
 });
 // Einsätze: welche Fahrzeuge ausrücken, welches Werkzeug hilft
 const EINSAETZE = {
-  katze: { word: 'cattree', veh: ['lf'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },
+  katze: { word: 'cattree', veh: ['dlk'], tool: 'ladder', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },
 };
 const EINSATZ_KEYS = Object.keys(EINSAETZE);
 // Feuerwehranzug fürs Kind (KID aus moebel.js): gelber Helm, dunkelblaue Jacke mit gelbem Streifen
@@ -17,7 +17,8 @@ const GEAR_PAL = { h: '#ffd23f', r: '#24346b', w: '#ffd23f', b: '#24346b', n: '#
 
 // Feuerwehrauto von oben. x0,y0 = linke obere Ecke, L = Länge, Wd = Breite.
 // dir 'down': Fahrerhaus unten (steht in der Halle vor dem Tor), 'right': fährt nach rechts. on = Blaulicht an, glow = Schein drumherum
-function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = false) {
+// deployed (nur Drehleiter): Leiter ist vom Dach weg (ausgefahren), Stützen stehen seitlich heraus
+function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = false, deployed = false) {
   const P = dir === 'right' ? (c, u, v, du, dv) => F(c, Math.round(x0 + u), Math.round(y0 + v), du, dv) : (c, u, v, du, dv) => F(c, Math.round(x0 + v), Math.round(y0 + u), dv, du);
   const h = L, w = Wd, cab = Math.round(h * 0.26);
   P('rgba(0,0,0,.25)', 4, 3, h, w);
@@ -30,7 +31,16 @@ function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = f
   P('#333', h - cab + 2, l0, 4, lb); P(on ? '#3fa9f5' : '#1c5e9e', h - cab + 3, l0 + 1, 2, (lb >> 1) - 1); P(on ? '#1c5e9e' : '#3fa9f5', h - cab + 3, Math.round(w / 2), 2, (lb >> 1) - 1);
   if (glow) P(on ? 'rgba(63,169,245,.35)' : 'rgba(63,169,245,.15)', h - cab - 6, -8, 16, w + 16);
   const top = 3, bh = h - cab - 9;
-  if (key === 'lf') {                                  // Löschfahrzeug: Leiter und Schlauchhaspel
+  if (key === 'dlk') {                                 // Drehleiter: Drehkranz hinten, Leiterpaket nach vorne übers Fahrerhaus, Korb vorne
+    if (deployed) for (const u of [8, h - cab - 8]) { P('#555', u, -9, 4, 9); P('#555', u, w, 4, 9); P('#333', u - 1, -11, 6, 3); P('#333', u - 1, w + 8, 6, 3); }   // Stützen
+    const tu = top + Math.round(bh * 0.28), tr = Math.round(w * 0.32), c = Math.round(w / 2);
+    P('#555', tu - tr, c - tr, 2 * tr, 2 * tr); P('#8a8f94', tu - tr + 2, c - tr + 2, 2 * tr - 4, 2 * tr - 4); P('#c0392b', tu - 3, c - 3, 6, 6);   // Drehkranz
+    if (!deployed) {
+      P('#7f8388', tu, c - 6, h - tu + 2, 12); P('#c8ccd0', tu, c - 5, h - tu + 2, 2); P('#c8ccd0', tu, c + 3, h - tu + 2, 2);
+      for (let u = tu + 4; u < h; u += 5) P('#c8ccd0', u, c - 3, 1, 6);
+      P('#e8e8e8', h - 2, c - 8, 6, 16); P('#9aa0a6', h - 2, c - 8, 6, 2); P('#9aa0a6', h - 2, c + 6, 6, 2);   // Korb ragt vorne heraus
+    }
+  } else if (key === 'lf') {                           // Löschfahrzeug: Leiter und Schlauchhaspel
     P('#9aa0a6', top, 4, bh, w - 8); P('#c8ccd0', top + 2, 6, bh - 4, 3); P('#c8ccd0', top + 2, w - 9, bh - 4, 3);
     for (let u = top + 5; u < top + bh - 3; u += 6) P('#c8ccd0', u, 9, 2, w - 18);
     const r = Math.round(w * 0.18), c = Math.round(w / 2);

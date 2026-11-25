@@ -38,7 +38,7 @@ baustelle/spiele/<name>/    ← Bau-Minispiele (HOF_URL = '../../index.html'): b
                               Leerer Bauplatz: zu Fuß drauf → Hauswahl-Karten (`HOUSE_TYPES` in bau.js, `Hof.pickHouse`). Möbel bleiben gespeichert.)
 feuerwache/index.html       ← Feuerwache innen (HOF_URL = '../baustelle/index.html', zurück nach `#wache`): fertige Wache (fire.step 5) in der Stadt betreten,
                               einmal für `FIRE_PRICE` Sterne freischalten (`Hof.unlockFire`, `save.fire.unlocked`). Zum Entdecken, Alarme kommen später (nur hier drinnen).
-                              EG: links Fahrzeughalle (Löschfahrzeug `lf`, Rüstwagen `rw`: antippen = Blaulicht + Martinshorn; 2 Rolltore in der Vorderwand antippen = auf/zu;
+                              EG: links Fahrzeughalle mit 3 Stellplätzen (Löschfahrzeug `lf`, Drehleiter `dlk`, Rüstwagen `rw`: antippen = Blaulicht + Martinshorn; 3 Rolltore in der Vorderwand antippen = auf/zu;
                               Schläuche hinten links antippen = wackeln; Landematte der Rutschstange), rechts hinten Umkleide (vor den Spinden 0,5 s stehen = Feuerwehranzug an/aus, `gear`),
                               rechts vorne Leitstelle (Funkgerät antippen), Haustür, Treppe unten rechts. OG: Schlafraum (Betten = schlafen), Loch der Rutschstange (0,35 s drauf = runterrutschen),
                               Küche, Aufenthaltsraum. Kind und Wegesuche wie im Wohnhaus. Test: `?wache=5&sterne=20`.
@@ -47,7 +47,10 @@ feuerwache/index.html       ← Feuerwache innen (HOF_URL = '../baustelle/index.
                               Tor auf, alle Fahrzeuge des Einsatzes (`EINSAETZE[key].veh`) fahren raus → `spiele/einsatz/index.html?e=<key>`. Zurück mit `#einsatz` (im Anzug neben dem Fahrzeug).
 feuerwache/spiele/einsatz/  ← Einsatz-Szene (HOF_URL = '../../index.html'): Auto kommt mit Blaulicht, unten Werkzeugleiste (`E.tools`), richtiges Werkzeug (`E.tool`) löst den Einsatz;
                               falsches = lustige Reaktion („Das passt nicht“), nach 2 Fehlversuchen oder 8 s leuchtet das richtige. Geschafft: 1 Stern, `Hof.fireMission()` (fire.missions + 1).
-                              Einsatz 1 KATZE IM BAUM (`katze`, Löschfahrzeug, Leiter): Leiter fährt aus, Kind im Anzug klettert hoch, bringt die Katze dem Mädchen.
+                              Ablauf: Auto fährt rein und hält, Tür auf, Kind steigt aus, dann erst Werkzeugleiste. Hinweise spät (Michael: kamen zu früh): Pfeil auf die Leiste nach 6 s,
+                              richtiges Werkzeug leuchtet erst nach 2 Fehlversuchen oder 15 s.
+                              Einsatz 1 KATZE IM BAUM (`katze`, Drehleiter, Werkzeug Leiter): Stützen raus, Kind steigt in den Korb, Korb mit dem Finger steuern (ziehen/tippen, `Lmax` um den Drehkranz).
+                              Katze sitzt erst unten im Baum und klettert höher, wenn der Korb nahe kommt (3 Stellen `spots`); ganz oben springt sie in den Korb. Korb zurück, Kind bringt die Katze dem Mädchen.
 gemeinsam/feuerwehr.js      ← Feuerwehr gemeinsam: `EINSAETZE` (neue Einsätze hier eintragen), `drawFireTruck()` (von oben, 'down'/'right'), `drawToolIcon()`, `drawCat()`, `drawKidPal()`, `GEAR_PAL`, `drawEinsatzIcon()`.
 wohnhaus/index.html         ← Wohnhaus innen (HOF_URL = '../baustelle/index.html'): fertiges Haus (step 5) in der Stadt 0,8 s betreten,
                               einmal für `HOME_PRICE` Sterne freischalten (`save.home.unlocked`), dann Möbel aus der Leiste ins Zimmer ziehen.

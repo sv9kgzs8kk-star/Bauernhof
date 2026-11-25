@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261124f">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125a">
 <title>Einsatz</title>
 </head>
 <body>
@@ -30,17 +30,20 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="alarm" style="pointer-events:auto"><span class="word">ALARM</span></div>
 </div>
 <script>window.NO_PAD = true;</script>
-<script src="../../../gemeinsam/sterne.js?v=20261124f"></script>
-<script src="../../../gemeinsam/basis.js?v=20261124f"></script>
-<script src="../../../gemeinsam/moebel.js?v=20261124f"></script>
-<script src="../../../gemeinsam/bau.js?v=20261124f"></script>
-<script src="../../../gemeinsam/feuerwehr.js?v=20261124f"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261125a"></script>
+<script src="../../../gemeinsam/basis.js?v=20261125a"></script>
+<script src="../../../gemeinsam/moebel.js?v=20261125a"></script>
+<script src="../../../gemeinsam/bau.js?v=20261125a"></script>
+<script src="../../../gemeinsam/feuerwehr.js?v=20261125a"></script>
 <script>
 /* =====================================================================
    FEUERWEHR-EINSATZ (eine Szene je Einsatz, ?e=katze). Kommt aus der Wache, geht danach zurück (#einsatz).
    Das Feuerwehrauto kommt mit Blaulicht angefahren. Unten die Werkzeugleiste: das richtige Werkzeug antippen.
    Falsches Werkzeug = lustige Reaktion („Das passt nicht“), nach zwei Versuchen leuchtet das richtige. Kein Scheitern.
-   KATZE IM BAUM: Leiter → Leiter fährt aus, das Kind im Feuerwehranzug klettert hoch, holt die Katze, bringt sie dem Mädchen.
+   Das Auto hält, die Tür geht auf, das Kind im Feuerwehranzug steigt aus. Erst dann die Werkzeugleiste (Hinweis spät).
+   KATZE IM BAUM (Drehleiter): Leiter wählen → Stützen raus, Kind steigt in den Korb. Korb mit dem Finger steuern (ziehen/tippen).
+   Die Katze sitzt erst unten im Baum und klettert höher, sobald der Korb nahe kommt (3 Stellen); ganz oben springt sie in den Korb.
+   Korb fährt zurück, das Kind bringt die Katze dem Mädchen.
    Geschafft: 1 Stern (Hof.addStars), fire.missions + 1. Danach fährt das Auto weg, zurück in die Wache.
    ===================================================================== */
 window.HOF_URL = '../../index.html';
@@ -49,29 +52,37 @@ const KEY = EINSAETZE[new URLSearchParams(location.search).get('e')] ? new URLSe
 const E = EINSAETZE[KEY];
 
 const Einsatz = (() => {
-  const L = 74, WD = 30, BAR = 54, GIRL = { h: '#e0a040', r: '#ff6b8a', w: '#ffffff', b: '#6a4c93' };
-  let roadY, tree, cat, truck, girl, bar, phase, t = 0, wrong = 0, react = null, idle = 0, meow = 3, hearts = [], drops = [], starGiven = false;
+  const L = 80, WD = 30, GIRL = { h: '#e0a040', r: '#ff6b8a', w: '#ffffff', b: '#6a4c93' };
+  let roadY, tree, cat, spots, truck, girl, bar, phase, t = 0, wrong = 0, react = null, idle = 0, meow = 3, hearts = [], drops = [], starGiven = false;
+  let BAR = 54, RH = 48, basket = null, target = null, pivot, Lmax, kid = { x: 0, y: 0, show: false, step: false };
   function setWord(key) { const el = $('iword'); el.dataset.say = key; el.querySelector('.word').textContent = WORDS[key][0]; }
   function enter() {
     Hof.load(); layout(true);
-    roadY = H - BAR - 2 * G - 2;
-    const r = Math.round(clamp((roadY - 40) * 0.34, 18, 58));
+    const short = H < 260; BAR = short ? 46 : 54; RH = short ? G + 10 : 2 * G;   // niedriger Bildschirm: Leiste und Straße schmaler
+    roadY = H - BAR - RH - 2;
+    const r = Math.round(clamp(Math.min((roadY - 40) * 0.34, (roadY - 76) / 2), 14, 58));   // Katze oben muss ins Bild passen
     tree = { x: Math.round(W * (W > 300 ? 0.72 : 0.62)), y: roadY - r - 30, r };   // breit: Baum rechts, weg von der Anzeige oben in der Mitte
-    cat = { x: tree.x + Math.round(r * 0.15), y: tree.y - Math.round(r * 0.8) - 14, s: 2, on: 'tree' };
+    spots = [                                          // Katze klettert höher, sobald der Korb näher kommt: unten links, Mitte rechts, ganz oben
+      { x: Math.round(tree.x - r * 0.55 - 10), y: Math.round(tree.y + r * 0.3 - 18) },
+      { x: Math.round(tree.x + r * 0.35 - 10), y: Math.round(tree.y - r * 0.2 - 18) },
+      { x: Math.round(tree.x - 10), y: Math.round(tree.y - r - 12) }];
+    cat = { x: spots[0].x, y: spots[0].y, i: 0, s: 2, on: 'tree', anim: null };
     girl = { x: tree.x - r - 18, y: roadY - 4 };
-    truck = { x: -L - 30, y: roadY + G - Math.round(WD / 2), park: Math.round(tree.x - L * 0.6), on: true };
+    truck = { x: -L - 30, y: roadY + Math.round(RH / 2 - WD / 2), park: Math.round(tree.x - L * 0.55), deployed: false };
+    pivot = { x: truck.park + Math.round(L * 0.32), y: truck.y + WD / 2 };
+    Lmax = Math.max(...spots.map(p => Math.hypot(p.x + 10 - pivot.x, p.y + 9 - pivot.y))) + 30;
     const n = E.tools.length, gap = W < 240 ? 6 : 10, sw = Math.min(46, Math.floor((W - 12 - (n - 1) * gap) / n)), x0 = Math.round(W / 2 - (n * sw + (n - 1) * gap) / 2);   // schmal: Kästchen kleiner
     bar = E.tools.map((k, i) => ({ k, x: x0 + i * (sw + gap), y: H - BAR + Math.round((BAR - sw) / 2), w: sw, h: sw }));
     paint();
-    phase = 'arrive'; t = 0; wrong = 0; react = null; idle = 0; starGiven = false;
+    phase = 'arrive'; t = 0; wrong = 0; react = null; idle = 0; starGiven = false; basket = null; target = null; kid.show = false;
     show('ihud'); setWord(E.word); tatuta();
     setTimeout(() => sayWord(E.word), 500);
   }
   function paint() {
     for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(tiles.grass), c*G+i*T, r*G+j*T);
     const B = (col,x,y,w,h)=>{bctx.fillStyle=col;bctx.fillRect(x,y,w,h);};
-    for (let y = roadY; y < roadY + 2 * G; y += T) for (let x = 0; x < W; x += T) bctx.drawImage(pick(tiles.road), x, y);
-    B('#cfc8b8', 0, roadY - 3, W, 3); B('#cfc8b8', 0, roadY + 2 * G, W, 3);   // Bordstein
+    for (let y = roadY; y < roadY + RH; y += T) for (let x = 0; x < W; x += T) bctx.drawImage(pick(tiles.road), x, y);
+    B('#cfc8b8', 0, roadY - 3, W, 3); B('#cfc8b8', 0, roadY + RH, W, 3);   // Bordstein
     { const hw = Math.min(90, Math.round(W * 0.22)), hx = Math.round(Math.min(W * 0.12, tree.x - tree.r - 50 - hw)), hy = roadY - 74, rz = 34, fz = 30;   // Haus des Mädchens
       if (hx > 2) {
         B('rgba(0,0,0,.25)', hx + 3, hy + 5, hw, rz + fz);
@@ -91,15 +102,21 @@ const Einsatz = (() => {
   }
   function tatuta() { for (let k = 0; k < 3; k++) { tone(466, .32, 'square', .05, k * .7); tone(622, .32, 'square', .05, k * .7 + .35); } }
   const miau = () => { tone(950, .35, 'sine', .06, 0, 600); };
-  const ladderBase = () => ({ x: truck.x + L * 0.45, y: truck.y + WD / 2 });
-  const ladderTip = () => ({ x: cat.x + 10, y: cat.y + 20 });
+  const go = p => { phase = p; t = 0; };
+  const door = () => ({ x: truck.x + L - 16, y: truck.y + WD / 2 });            // Fahrertür
+  const stand = () => ({ x: truck.x + L - 16, y: truck.y - 4 });                  // neben dem Fahrerhaus auf dem Gehweg
+  const lerp = (p, q, k) => ({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k });
+  const catC = () => ({ x: cat.x + 10, y: cat.y + 9 });
   function onPointer(type, x, y) {
-    if (type !== 'down' || phase !== 'choose' || react) return true;
     idle = 0;
+    if (phase === 'steer') {                          // Korb steuern: Finger ziehen oder hintippen
+      if ((type === 'down' || type === 'move') && y < H - BAR) target = { x, y };
+      return true; }
+    if (type !== 'down' || phase !== 'choose' || react) return true;
     const s = bar.find(b => x > b.x - 4 && x < b.x + b.w + 4 && y > b.y - 6 && y < b.y + b.h + 6);
-    if (!s) { if (Math.hypot(x - cat.x - 10, y - cat.y - 9) < 24) { miau(); sayWord('cat'); } return true; }
+    if (!s) { const c = catC(); if (Math.hypot(x - c.x, y - c.y) < 24) { miau(); sayWord('cat'); } return true; }
     sfx.click(); setWord(s.k);
-    if (s.k === E.tool) { phase = 'act'; t = 0; sayWord(s.k); sfx.unlock(); return true; }
+    if (s.k === E.tool) { go('board'); sayWord(s.k); sfx.unlock(); truck.deployed = true; tone(220, .5, 'square', .03); return true; }
     wrong++; react = { k: s.k, t: 0 }; say(WORDS[s.k][1] + '? Das passt nicht.');
     return true;
   }
@@ -108,64 +125,92 @@ const Einsatz = (() => {
     t += dt; idle += dt;
     for (const h of hearts) { h.t += dt; h.y -= 18 * dt; } hearts = hearts.filter(h => h.t < 1.6);
     for (const d of drops) { d.t += dt; d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 140 * dt; } drops = drops.filter(d => d.t < 1);
-    if (cat.on === 'tree' && (meow -= dt) < 0) { meow = 4 + Math.random() * 2; miau(); }
-    if (phase === 'arrive') { truck.x = approach(truck.x, truck.park, 130 * dt); if (truck.x === truck.park) { phase = 'choose'; t = 0; sfx.honk(); setTimeout(() => say('Welches Werkzeug brauchen wir?'), 600); } }
+    if (cat.on === 'tree' && !cat.anim && (meow -= dt) < 0) { meow = 4 + Math.random() * 2; miau(); }
+    if (cat.anim) { const a = cat.anim; a.t += dt; const k = clamp(a.t / a.d, 0, 1), p = lerp(a.from, a.to(), k);
+      cat.x = p.x; cat.y = p.y - Math.sin(k * Math.PI) * 10; if (k >= 1) { cat.anim = null; if (a.done) a.done(); } }
     if (react) { react.t += dt;
-      if (react.k === 'hose' && react.t < 1.2) for (let k = 0; k < 3; k++) { const b = ladderBase(); drops.push({ x: b.x, y: b.y - 6, vx: (tree.x - b.x) * 1.1 + rnd(-20, 20), vy: -(b.y - tree.y) * 1.2 + rnd(-30, 10), t: 0 }); }
+      if (react.k === 'hose' && react.t < 1.2) for (let k = 0; k < 3; k++) drops.push({ x: stand().x, y: stand().y - 16, vx: (tree.x - stand().x) * 1.1 + rnd(-20, 20), vy: -(stand().y - tree.y) * 1.3 + rnd(-30, 10), t: 0 });
       if (react.t > 1.6) react = null; }
-    if (phase === 'act') {
-      if (t > 2.3 && cat.on === 'tree') { cat.on = 'kid'; miau(); }
-      if (t > 4.6 && cat.on === 'kid') { cat.on = 'girl'; phase = 'thanks'; t = 0; say('Danke!'); confetti(); sfx.win && sfx.win();
-        for (let k = 0; k < 6; k++) hearts.push({ x: girl.x + rnd(-12, 12), y: girl.y - 30 - rnd(0, 10), t: -k * 0.15 });
-        if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } }
+    switch (phase) {
+      case 'arrive': truck.x = approach(truck.x, truck.park, 130 * dt); if (truck.x === truck.park) { go('exit'); sfx.honk(); } break;
+      case 'exit': kid.show = true; kid.step = true; { const p = lerp(door(), stand(), clamp(t / 0.8, 0, 1)); kid.x = p.x; kid.y = p.y; }   // Tür auf, Kind steigt aus
+        if (t > 0.9) { go('choose'); kid.step = false; sfx.clod(); setTimeout(() => say('Welches Werkzeug brauchen wir?'), 300); } break;
+      case 'board': { const p = lerp(stand(), pivot, clamp(t / 0.9, 0, 1)); kid.x = p.x; kid.y = p.y; kid.step = true; }   // zum Drehkranz, in den Korb
+        if (t > 1) { kid.show = false; basket = { x: pivot.x, y: pivot.y - 12 }; target = null; go('steer'); setWord('basket'); say('Fahr den Korb zur Katze!'); } break;
+      case 'steer': {
+        if (target) { const d = Math.hypot(target.x - basket.x, target.y - basket.y), sp = 110 * dt;
+          if (d > sp) { basket.x += (target.x - basket.x) / d * sp; basket.y += (target.y - basket.y) / d * sp; } else { basket.x = target.x; basket.y = target.y; }
+          const dx = basket.x - pivot.x, dy = basket.y - pivot.y, l = Math.hypot(dx, dy);
+          if (l > Lmax) { basket.x = pivot.x + dx / l * Lmax; basket.y = pivot.y + dy / l * Lmax; }
+          if (Math.floor(t * 6) !== Math.floor((t - dt) * 6)) tone(140, .06, 'square', .015); }   // Hydraulik brummt
+        const c = catC(), d = Math.hypot(basket.x - c.x, basket.y - c.y);
+        if (cat.on === 'tree' && !cat.anim) {
+          if (cat.i < 2 && d < 38) { const to = spots[cat.i + 1]; cat.i++; miau(); cat.anim = { from: { x: cat.x, y: cat.y }, to: () => to, t: 0, d: 0.8 }; }   // klettert höher
+          else if (cat.i === 2 && d < 28) { cat.anim = { from: { x: cat.x, y: cat.y }, to: () => ({ x: basket.x - 10, y: basket.y - 20 }), t: 0, d: 0.45, jump: true,
+              done: () => { cat.on = 'basket'; miau(); say('Hab dich!'); go('down'); } }; }   // springt in den Korb
+        }
+        break; }
+      case 'down': { const d = Math.hypot(pivot.x - basket.x, pivot.y + -12 - basket.y), sp = 90 * dt;
+        if (d > sp) { basket.x += (pivot.x - basket.x) / d * sp; basket.y += (pivot.y - 12 - basket.y) / d * sp; }
+        else { basket = null; kid.show = true; kid.x = pivot.x; kid.y = pivot.y; cat.on = 'kid'; go('deliver'); } break; }
+      case 'deliver': { const g = { x: girl.x + 26, y: girl.y }; const p = lerp(pivot, g, clamp(t / 1.3, 0, 1)); kid.x = p.x; kid.y = p.y; kid.step = t < 1.3; }
+        if (t > 1.4) { cat.on = 'girl'; go('thanks'); say('Danke!'); confetti(); sfx.win();
+          for (let k = 0; k < 6; k++) hearts.push({ x: girl.x + rnd(-12, 12), y: girl.y - 30 - rnd(0, 10), t: -k * 0.15 });
+          if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
+      case 'thanks': if (t > 3.2) { go('back'); truck.deployed = false; } break;
+      case 'back': { const p = lerp({ x: girl.x + 26, y: girl.y }, door(), clamp(t / 1.2, 0, 1)); kid.x = p.x; kid.y = p.y; kid.step = true; }
+        if (t > 1.3) { kid.show = false; go('leave'); tatuta(); } break;
+      case 'leave': truck.x += 130 * dt; if (truck.x > W + 20 && !truck.gone) { truck.gone = true; goHof('einsatz'); } break;
     }
-    if (phase === 'thanks' && t > 3.6) { phase = 'leave'; t = 0; tatuta(); }
-    if (phase === 'leave') { truck.x += 130 * dt; if (truck.x > W + 20 && !truck.gone) { truck.gone = true; goHof('einsatz'); } }
   }
-  // Wo ist das Kind (Feuerwehrmann) gerade? Neben dem Auto, auf der Leiter oder beim Mädchen
-  function kidPos() {
-    const a = ladderBase(), b = ladderTip(), stand = { x: truck.x + 14, y: truck.y - 2 };
-    if (phase !== 'act') return phase === 'thanks' ? { x: girl.x + 24, y: girl.y } : stand;
-    const lerp = (p, q, k) => ({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k });
-    if (t < 1) return stand;
-    if (t < 2.2) return lerp(a, b, (t - 1) / 1.2);
-    if (t < 2.5) return b;
-    if (t < 3.7) return lerp(b, a, (t - 2.5) / 1.2);
-    return lerp(a, { x: girl.x + 24, y: girl.y }, clamp((t - 3.7) / 0.9, 0, 1));
+  function drawLadder(a, b) {                           // Drehleiter vom Drehkranz zum Korb
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, nx = -dy / d * 4, ny = dx / d * 4;
+    pixLine(R, a.x + nx + 3, a.y + ny + 4, b.x + nx + 3, b.y + ny + 4, 2, 'rgba(0,0,0,.18)');
+    pixLine(R, a.x + nx, a.y + ny, b.x + nx, b.y + ny, 2, '#c8ccd0'); pixLine(R, a.x - nx, a.y - ny, b.x - nx, b.y - ny, 2, '#c8ccd0');
+    for (let s = 6; s < d; s += 7) { const px = a.x + dx * s / d, py = a.y + dy * s / d; pixLine(R, px - nx, py - ny, px + nx, py + ny, 1, '#9aa0a6'); }
   }
-  function ladderK() { if (phase === 'act') return t < 1 ? t : t < 3.9 ? 1 : Math.max(0, 1 - (t - 3.9) / 0.7); return 0; }
+  function drawBasket(time) {                          // Korb mit dem Kind darin (und der Katze, wenn sie drin ist)
+    const x = Math.round(basket.x), y = Math.round(basket.y);
+    R('rgba(0,0,0,.2)', x - 8, y + 8, 18, 4);
+    R('#9aa0a6', x - 10, y - 6, 20, 14); R('#e8e8e8', x - 9, y - 5, 18, 12);
+    drawKidPal(R, x - 2, y + 4, GEAR_PAL, 2, false, false, true);
+    if (cat.on === 'basket') drawCat(R, x - 2, y - 16, cat.s);
+    R('#e8e8e8', x - 10, y - 2, 20, 10); R('#9aa0a6', x - 10, y - 2, 20, 2); R('#c0392b', x - 10, y + 4, 20, 2); R('#9aa0a6', x - 10, y + 8, 20, 1);   // Brüstung vorne
+  }
   function draw(time) {
     if (!truck) return;
     ctx.drawImage(bg, 0, 0);
-    if (cat.on === 'tree') { const sh = react && react.k === 'hose' && react.t < 1.4 ? Math.round(Math.sin(time / 40) * 2) : 0; drawCat(R, Math.round(cat.x + sh), Math.round(cat.y), cat.s); }
+    if (cat.on === 'tree' && !(cat.anim && cat.anim.jump)) { const sh = react && react.k === 'hose' && react.t < 1.4 ? Math.round(Math.sin(time / 40) * 2) : 0; drawCat(R, Math.round(cat.x + sh), Math.round(cat.y), cat.s); }
     drawKidPal(R, girl.x, girl.y, GIRL, 2, false, false);
     if (cat.on === 'girl') drawCat(R, Math.round(girl.x - 34), Math.round(girl.y - 18), cat.s);   // Katze sitzt wieder neben dem Mädchen
     const on = Math.floor(time / 150) % 2 === 1;
-    drawFireTruck(R, truck.x, truck.y, L, WD, 'lf', 'right', on, true);
-    const k = ladderK();
-    if (k > 0) {                                       // Leiter fährt aus: zwei Holme und Sprossen
-      const a = ladderBase(), b0 = ladderTip(), b = { x: a.x + (b0.x - a.x) * k, y: a.y + (b0.y - a.y) * k }, dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, nx = -dy / d * 4, ny = dx / d * 4;
-      pixLine(R, a.x + nx, a.y + ny, b.x + nx, b.y + ny, 2, '#c8ccd0'); pixLine(R, a.x - nx, a.y - ny, b.x - nx, b.y - ny, 2, '#c8ccd0');
-      for (let s = 6; s < d; s += 7) { const px = a.x + dx * s / d, py = a.y + dy * s / d; pixLine(R, px - nx, py - ny, px + nx, py + ny, 1, '#9aa0a6'); }
+    drawFireTruck(R, truck.x, truck.y, L, WD, 'dlk', 'right', on, false, truck.deployed);
+    if (phase === 'exit' || phase === 'back') R('#f2f2f2', Math.round(truck.x + L - 22), Math.round(truck.y - 4), 10, 4);   // offene Fahrertür
+    if (basket) { drawLadder({ x: pivot.x, y: pivot.y }, basket); drawBasket(time); }
+    if (kid.show) {
+      const shake = react && react.k !== 'hose' && react.t < 1.2 ? Math.floor(react.t * 8) % 2 === 1 : false;
+      drawKidPal(R, kid.x, kid.y, GEAR_PAL, 2, shake, kid.step && Math.floor(time / 120) % 2 === 1, true);
+      if (cat.on === 'kid') drawCat(R, Math.round(kid.x - 10), Math.round(kid.y - 30), cat.s);
+      if (react && react.k !== 'hose' && react.t < 1.4) { R('#ffffff', Math.round(kid.x + 10), Math.round(kid.y - 44), 12, 14); R('#333', Math.round(kid.x + 14), Math.round(kid.y - 41), 4, 2); R('#333', Math.round(kid.x + 16), Math.round(kid.y - 39), 2, 4); R('#333', Math.round(kid.x + 15), Math.round(kid.y - 34), 2, 2); }   // Fragezeichen
     }
-    const kp = kidPos(), shake = react && react.k !== 'hose' && react.t < 1.2 ? Math.floor(react.t * 8) % 2 === 1 : false;
-    drawKidPal(R, kp.x, kp.y, GEAR_PAL, 2, shake, phase === 'act' && Math.floor(t * 6) % 2 === 1, true);
-    if (cat.on === 'kid') drawCat(R, Math.round(kp.x - 10), Math.round(kp.y - 30), cat.s);
-    if (react && react.k !== 'hose' && react.t < 1.4) { R('#ffffff', Math.round(kp.x + 10), Math.round(kp.y - 44), 12, 14); R('#333', Math.round(kp.x + 14), Math.round(kp.y - 41), 4, 2); R('#333', Math.round(kp.x + 16), Math.round(kp.y - 39), 2, 4); R('#333', Math.round(kp.x + 15), Math.round(kp.y - 34), 2, 2); }   // Fragezeichen
+    if (cat.anim && cat.anim.jump) drawCat(R, Math.round(cat.x), Math.round(cat.y), cat.s);
     for (const d of drops) R(d.t < 0.6 ? '#6cc4f0' : 'rgba(108,196,240,.5)', Math.round(d.x), Math.round(d.y), 3, 3);
     for (const h of hearts) if (h.t > 0) { const x = Math.round(h.x), y = Math.round(h.y); R('#ff4d6d', x, y, 3, 3); R('#ff4d6d', x + 4, y, 3, 3); R('#ff4d6d', x, y + 2, 7, 3); R('#ff4d6d', x + 2, y + 5, 3, 2); }
-    // Werkzeugleiste
-    const hint = phase === 'choose' && (wrong >= 2 || idle > 8), pulse = Math.abs(Math.sin(time / 220));
+    // Werkzeugleiste (nur in der Auswahl hell)
+    const choose = phase === 'choose', hint = choose && (wrong >= 2 || idle > 15), pulse = Math.abs(Math.sin(time / 220));
     for (const s of bar) {
-      const right = s.k === E.tool, glow = hint && right;
+      const glow = hint && s.k === E.tool, dim = !choose || (react && react.k === s.k);
       R(glow ? `rgba(255,210,63,${(0.5 + pulse * 0.5).toFixed(2)})` : '#0f171c', s.x - 3, s.y - 3, s.w + 6, s.h + 6);
-      R(react && react.k === s.k ? '#5a6b75' : '#e9eef2', s.x, s.y, s.w, s.h); R(react && react.k === s.k ? '#4a5a64' : '#c8d0d6', s.x, s.y + s.h - 3, s.w, 3);
+      R(dim ? '#5a6b75' : '#e9eef2', s.x, s.y, s.w, s.h); R(dim ? '#4a5a64' : '#c8d0d6', s.x, s.y + s.h - 3, s.w, 3);
       { const is = s.w >= 38 ? 2 : 1, o = Math.round((s.w - 16 * is) / 2); drawToolIcon(R, s.x + o, s.y + Math.round((s.h - 16 * is) / 2) - 1, is, s.k); }
     }
-    if (phase === 'choose' && !react && (idle > 3 || wrong >= 2)) { const s = hint ? bar.find(b => b.k === E.tool) : bar[Math.floor(time / 900) % bar.length]; drawArrow(Math.round(s.x + s.w / 2 - 3), Math.round(s.y - 18 - pulse * 4)); }
+    if (choose && !react && (hint || idle > 6)) {      // Hinweis erst spät: erst nur „hier unten“, das richtige Werkzeug erst nach 2 Fehlversuchen oder 15 s
+      const s = hint ? bar.find(b => b.k === E.tool) : null, ax = s ? s.x + s.w / 2 : W / 2, ay = bar[0].y;
+      drawArrow(Math.round(ax - 3), Math.round(ay - 18 - pulse * 4)); }
+    if (phase === 'steer' && idle > 4 && cat.on === 'tree' && !cat.anim) { const c = catC(); drawArrow(Math.round(c.x - 3), Math.round(c.y - 26 - pulse * 4)); }
   }
   function resize() { layout(false); }
-  return { enter, update, draw, resize, onPointer, _dbg: () => ({ phase, t, wrong, cat: cat.on, bar, stars: Hof.save.stars }) };
+  return { enter, update, draw, resize, onPointer, _dbg: () => ({ phase, t, wrong, cat: { on: cat.on, i: cat.i, x: cat.x, y: cat.y }, basket, bar, stars: Hof.save.stars }) };
 })();
 startLoop(Einsatz);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

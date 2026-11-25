@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261124f">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261125a">
 <title>Feuerwache</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261124f"></script>
-<script src="../gemeinsam/basis.js?v=20261124f"></script>
-<script src="../gemeinsam/moebel.js?v=20261124f"></script>
-<script src="../gemeinsam/bau.js?v=20261124f"></script>
-<script src="../gemeinsam/feuerwehr.js?v=20261124f"></script>
+<script src="../gemeinsam/sterne.js?v=20261125a"></script>
+<script src="../gemeinsam/basis.js?v=20261125a"></script>
+<script src="../gemeinsam/moebel.js?v=20261125a"></script>
+<script src="../gemeinsam/bau.js?v=20261125a"></script>
+<script src="../gemeinsam/feuerwehr.js?v=20261125a"></script>
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
@@ -56,7 +56,7 @@ Object.assign(WORDS, { locker: ['SPIND', 'Spind'],
 const Wache = (() => {
   const S = 1, WH = 24, T4 = 4, GAP = 28;
   let room, floor, level = 0, walls = [], spots = {}, stairs, kid, grid, idle = 0, swap = null, slide = null, night = null, atDoor = 0;
-  let gear = false, gearT = 0, vehicles = [], gates = [0, 0], gateGoal = [0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
+  let gear = false, gearT = 0, vehicles = [], gates = [0, 0, 0], gateGoal = [0, 0, 0], hoseWob = 0, radioT = 0, siren = null, furn = [];
   let alarm = null, nextAlarm = 12, depart = null, nag = 0;   // Alarm: { key, t, g }; depart: Fahrzeuge rücken aus
   const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   const inR = (r, x, y, p = 0) => x > r.x - p && x < r.x + r.w + p && y > r.y - p && y < r.y + r.h + p;
@@ -75,7 +75,7 @@ const Wache = (() => {
     show('ihud'); setWord('firestation');
     if (location.hash === '#einsatz') {               // zurück vom Einsatz: im Anzug neben dem Fahrzeug, nächster Alarm später
       history.replaceState(null, '', location.pathname + location.search);
-      const v = vehicles[0]; gear = true; kid.x = v.x - 14; kid.y = v.y + v.h - 10; kid.used = true; nextAlarm = rnd(25, 40);
+      const v = vehicles.find(v => v.key === 'dlk') || vehicles[0]; gear = true; kid.x = v.x + v.w / 2; kid.y = v.y + v.h + 10; kid.used = true; nextAlarm = rnd(25, 40);
       setTimeout(() => say('Gut gemacht!'), 400);
     } else setTimeout(() => sayWord('firestation'), 400);
   }
@@ -94,8 +94,8 @@ const Wache = (() => {
     spots = { vx, hy, pole: { x: vx - 22, y: fy + 18, w: 12, h: 12 } };
     furn = []; vehicles = [];
     if (level === 0) {
-      const hw = vx - fx, vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));
-      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'rw', cx: fx + Math.round(hw * 0.68) }]
+      const hw = vx - fx, vw = Math.max(22, Math.min(50, Math.round(hw * 0.22))), vl = Math.max(50, Math.min(104, fh - 46));   // 3 Stellplätze
+      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.17) }, { key: 'dlk', cx: fx + Math.round(hw * 0.47) }, { key: 'rw', cx: fx + Math.round(hw * 0.77) }]
         .map((v, i) => Object.assign(v, { i, x: v.cx - (vw >> 1), y: fb - vl - 14, w: vw, h: vl, blink: 0 }));
       spots.gates = vehicles.map(v => ({ x: v.x - 8, w: v.w + 16 }));
       spots.lockers = { x: vx + T4 + 8, y: fy, w: Math.min(rw - 16, 4 * 16), h: 12 };
@@ -236,7 +236,7 @@ const Wache = (() => {
     if (level === 0) {
       const v = vehicles.find(v => inR(v, x, y, 4));
       if (v && alarm && need().includes(v.key)) {      // Alarm: mit Anzug hinlaufen und einsteigen, ohne Anzug erst umziehen
-        if (gear) walkTo(v.x - 12, v.y + v.h - 12); else { nag = 2.5; setWord('gear'); sayWord('gear'); sfx.bonk(); }
+        if (gear) walkTo(v.x + v.w / 2, v.y + v.h + 10);   // vor das Fahrzeug (zwischen den Fahrzeugen ist kein Platz) else { nag = 2.5; setWord('gear'); sayWord('gear'); sfx.bonk(); }
         return true; }
       if (v) { v.blink = 3; sayWord(v.key); setWord(v.key); tatuta(); return true; }
       const gi = spots.gates.findIndex(g => x > g.x - 4 && x < g.x + g.w + 4 && y > room.y + room.h - 14 && y < room.y + room.h + 12);
@@ -267,7 +267,7 @@ const Wache = (() => {
   function update(dt) {
     idle += dt; hoseWob = Math.max(0, hoseWob - dt); radioT = Math.max(0, radioT - dt); gearT = Math.max(0, gearT - dt);
     for (const v of vehicles) v.blink = Math.max(0, v.blink - dt);
-    for (let i = 0; i < 2; i++) gates[i] = approach(gates[i], gateGoal[i], dt / 1.2);
+    for (let i = 0; i < gates.length; i++) gates[i] = approach(gates[i], gateGoal[i], dt / 1.2);
     if (!kid) return;
     nag = Math.max(0, nag - dt);
     if (depart) {                                      // Tor auf, dann fahren die Fahrzeuge hinaus, danach zum Einsatz
@@ -342,7 +342,7 @@ const Wache = (() => {
     let tg = null;
     if (!gear) tg = level ? spots.pole : spots.lockers;
     else if (level) tg = spots.pole;
-    else { const v = vehicles.find(v => need().includes(v.key)); tg = { x: v.x - 18, y: v.y + v.h - 30, w: 8, h: 8 }; }
+    else { const v = vehicles.find(v => need().includes(v.key)); tg = { x: v.x, y: v.y + v.h - 12, w: v.w, h: 8 }; }
     if (tg) drawArrow(Math.round(tg.x + tg.w / 2 - 3), Math.round(tg.y - 16 - Math.abs(Math.sin(time / 220)) * 4));
     if (nag > 0 && !gear) { const l = spots.lockers; R(on ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.4)', l.x - 2, l.y - 2, l.w + 4, l.h + 4); }
   }

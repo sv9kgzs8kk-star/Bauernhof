@@ -3,7 +3,7 @@
    Fahrzeuge von oben, Werkzeuge, Katze, Feuerwehranzug, Liste der Einsätze
    ===================================================================== */
 Object.assign(WORDS, {
-  annex: ['ANBAU', 'Anbau'], winch: ['SEILWINDE', 'Seilwinde'], ditch: ['AUTO IM GRABEN', 'Auto im Graben'], hook: ['HAKEN', 'Haken'],
+  annex: ['ANBAU', 'Anbau'], winch: ['SEILWINDE', 'Seilwinde'], oilspill: ['ÖLSPUR', 'Ölspur'], binder: ['BINDEMITTEL', 'Bindemittel'], broom: ['BESEN', 'Besen'], oil: ['ÖL', 'Öl'], ditch: ['AUTO IM GRABEN', 'Auto im Graben'], hook: ['HAKEN', 'Haken'],
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
@@ -20,6 +20,7 @@ const EINSAETZE = {
   klein: { word: 'smallfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Haus brennt: ein Fenster, dauert länger als die Mülltonne
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
   // Runde 2 (wave 2, Michael 26.11.): erst nach dem Anbau (Rüstwagen in der Halle); 6 Einsätze, danach Treppe und Landeplatz
+  oel: { word: 'oilspill', veh: ['rw'], tool: 'binder', tools: ['binder', 'winch', 'chainsaw', 'hose'], wave: 2 },   // Ölspur: Bindemittel streuen, dann fegen (kurzer Einsatz)
   graben: { word: 'ditch', veh: ['rw'], tool: 'winch', tools: ['winch', 'cutter', 'chainsaw', 'hose'], wave: 2 },   // Auto im Graben: Seil einhaken, Winde drehen
 };
 const EINSATZ_KEYS = Object.keys(EINSAETZE);
@@ -137,7 +138,10 @@ function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = f
 // Werkzeug-Bild (16×16 Raster, Pixelgröße s) für die Werkzeugleiste
 function drawToolIcon(F, x, y, s, key) {
   const P = (c, a, b, w, h) => F(c, x + a * s, y + b * s, w * s, h * s);
-  if (key === 'winch') {                               // Seilwinde: Trommel mit Seil und Haken
+  if (key === 'binder') {                              // Bindemittel: Sack mit Körnern
+    P('#8a6a3c', 3, 3, 10, 12); P('#c9a867', 4, 4, 8, 10); P('#8a6a3c', 5, 1, 6, 3); P('#e8dcb0', 6, 7, 4, 4); P('#8a6a3c', 7, 8, 2, 2);
+    P('#e8dcb0', 13, 12, 1, 1); P('#e8dcb0', 14, 14, 1, 1); P('#e8dcb0', 12, 15, 1, 1);
+  } else if (key === 'winch') {                               // Seilwinde: Trommel mit Seil und Haken
     P('#555', 1, 3, 9, 10); P('#9aa0a6', 2, 4, 7, 8); for (let b = 5; b < 12; b += 2) P('#6a6e72', 2, b, 7, 1); P('#333', 4, 1, 3, 2); P('#333', 4, 13, 3, 2);
     P('#333', 10, 7, 4, 1); P('#7f8388', 13, 7, 1, 6); P('#7f8388', 11, 12, 3, 1); P('#7f8388', 11, 10, 1, 2);
   } else if (key === 'ladder') { P('#7f8388', 3, 0, 2, 16); P('#7f8388', 11, 0, 2, 16); P('#c8ccd0', 3, 0, 1, 16); P('#c8ccd0', 11, 0, 1, 16); for (let b = 2; b < 16; b += 4) P('#c8ccd0', 5, b, 6, 2); }
@@ -195,6 +199,10 @@ function drawEinsatzIcon(F, x, y, key) {
     F('#2e9e5b', x + 2, y + 13, 24, 7); F('#2e9e5b', x + 7, y + 8, 13, 6); F('#9fe3ff', x + 9, y + 9, 9, 3); F('#222', x + 5, y + 19, 4, 4); F('#222', x + 19, y + 19, 4, 4);   // Auto
     F('#6b4423', x + 20, y + 2, 10, 3); F('#6b4423', x + 12, y + 5, 10, 3); F('#4a2e14', x + 12, y + 7, 10, 1);   // Ast quer übers Dach
     F('#24561f', x + 3, y + 2, 11, 8); F('#3f8f37', x + 5, y + 3, 7, 5);   // Blätter
+  } else if (key === 'oel') {                          // Straße mit Ölflecken und Sack
+    F('#555', x, y + 12, 30, 12); F('#ffffff', x + 3, y + 17, 5, 1); F('#ffffff', x + 22, y + 17, 5, 1);
+    F('#1c1c1c', x + 4, y + 18, 9, 4); F('#1c1c1c', x + 14, y + 15, 8, 3); F('#3a2a4a', x + 6, y + 19, 3, 1); F('#2e3a5a', x + 16, y + 16, 3, 1);
+    F('#8a6a3c', x + 20, y + 2, 9, 11); F('#c9a867', x + 21, y + 3, 7, 9); F('#e8dcb0', x + 23, y + 6, 3, 3);
   } else if (key === 'graben') {                       // Auto schräg im Graben
     F('#3f8f37', x, y + 14, 30, 10); F('#4a3a2a', x + 8, y + 16, 18, 8); F('#3a6f9a', x + 10, y + 21, 14, 2);   // Wiese, Graben mit Wasser
     F('#2a7fd0', x + 6, y + 9, 20, 7); F('#2a7fd0', x + 10, y + 5, 10, 5); F('#9fe3ff', x + 12, y + 6, 6, 3); F('#2a7fd0', x + 22, y + 14, 6, 4); F('#222', x + 7, y + 15, 4, 4);   // Auto, Nase unten

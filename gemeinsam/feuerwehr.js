@@ -3,7 +3,7 @@
    Fahrzeuge von oben, Werkzeuge, Katze, Feuerwehranzug, Liste der Einsätze
    ===================================================================== */
 Object.assign(WORDS, {
-  annex: ['ANBAU', 'Anbau'], winch: ['SEILWINDE', 'Seilwinde'], oilspill: ['ÖLSPUR', 'Ölspur'], binder: ['BINDEMITTEL', 'Bindemittel'], broom: ['BESEN', 'Besen'], oil: ['ÖL', 'Öl'], ditch: ['AUTO IM GRABEN', 'Auto im Graben'], hook: ['HAKEN', 'Haken'],
+  annex: ['ANBAU', 'Anbau'], winch: ['SEILWINDE', 'Seilwinde'], oilspill: ['ÖLSPUR', 'Ölspur'], bigfire: ['GROSSBRAND', 'Großbrand'], jumpsheet: ['SPRUNGTUCH', 'Sprungtuch'], binder: ['BINDEMITTEL', 'Bindemittel'], broom: ['BESEN', 'Besen'], oil: ['ÖL', 'Öl'], ditch: ['AUTO IM GRABEN', 'Auto im Graben'], hook: ['HAKEN', 'Haken'],
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
@@ -20,6 +20,7 @@ const EINSAETZE = {
   klein: { word: 'smallfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Haus brennt: ein Fenster, dauert länger als die Mülltonne
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
   // Runde 2 (wave 2, Michael 26.11.): erst nach dem Anbau (Rüstwagen in der Halle); 6 Einsätze, danach Treppe und Landeplatz
+  gross: { word: 'bigfire', veh: ['lf', 'rw'], tool: 'jumpsheet', tools: ['jumpsheet', 'ladder', 'hose', 'winch'], wave: 2 },   // Großbrand: erst Sprungtuch (Person springt), dann löschen
   oel: { word: 'oilspill', veh: ['rw'], tool: 'binder', tools: ['binder', 'winch', 'chainsaw', 'hose'], wave: 2 },   // Ölspur: Bindemittel streuen, dann fegen (kurzer Einsatz)
   graben: { word: 'ditch', veh: ['rw'], tool: 'winch', tools: ['winch', 'cutter', 'chainsaw', 'hose'], wave: 2 },   // Auto im Graben: Seil einhaken, Winde drehen
 };
@@ -138,7 +139,10 @@ function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = f
 // Werkzeug-Bild (16×16 Raster, Pixelgröße s) für die Werkzeugleiste
 function drawToolIcon(F, x, y, s, key) {
   const P = (c, a, b, w, h) => F(c, x + a * s, y + b * s, w * s, h * s);
-  if (key === 'binder') {                              // Bindemittel: Sack mit Körnern
+  if (key === 'jumpsheet') {                           // Sprungtuch: roter Ring, gelbe Mitte mit Kreis
+    P('#7a1a12', 2, 4, 12, 8); P('#c0392b', 1, 5, 14, 6); P('#ffd23f', 3, 6, 10, 4); P('#c0392b', 6, 7, 4, 2); P('#ffffff', 7, 7, 2, 1);
+    P('#555', 1, 11, 1, 3); P('#555', 14, 11, 1, 3);
+  } else if (key === 'binder') {                              // Bindemittel: Sack mit Körnern
     P('#8a6a3c', 3, 3, 10, 12); P('#c9a867', 4, 4, 8, 10); P('#8a6a3c', 5, 1, 6, 3); P('#e8dcb0', 6, 7, 4, 4); P('#8a6a3c', 7, 8, 2, 2);
     P('#e8dcb0', 13, 12, 1, 1); P('#e8dcb0', 14, 14, 1, 1); P('#e8dcb0', 12, 15, 1, 1);
   } else if (key === 'winch') {                               // Seilwinde: Trommel mit Seil und Haken
@@ -199,6 +203,11 @@ function drawEinsatzIcon(F, x, y, key) {
     F('#2e9e5b', x + 2, y + 13, 24, 7); F('#2e9e5b', x + 7, y + 8, 13, 6); F('#9fe3ff', x + 9, y + 9, 9, 3); F('#222', x + 5, y + 19, 4, 4); F('#222', x + 19, y + 19, 4, 4);   // Auto
     F('#6b4423', x + 20, y + 2, 10, 3); F('#6b4423', x + 12, y + 5, 10, 3); F('#4a2e14', x + 12, y + 7, 10, 1);   // Ast quer übers Dach
     F('#24561f', x + 3, y + 2, 11, 8); F('#3f8f37', x + 5, y + 3, 7, 5);   // Blätter
+  } else if (key === 'gross') {                       // hohes Haus, viele Fenster brennen, oben eine Person
+    F('#e6d3b0', x + 6, y + 1, 18, 23); F('#6f757d', x + 5, y - 1, 20, 2);
+    for (const [wx, wy, f] of [[8, 4, 0], [17, 4, 0], [8, 10, 1], [17, 10, 1], [8, 16, 1], [17, 16, 0]]) F(f ? '#ff8a3c' : '#6cc4f0', x + wx, y + wy, 5, 4);
+    F('#f1c27d', x + 18, y + 4, 3, 3); F('#e74c3c', x + 10, y + 8, 3, 3); F('#e74c3c', x + 1, y + 20, 6, 3); F('#ffd23f', x + 2, y + 21, 4, 1);   // Person, Flammen
+    F('#c0392b', x + 22, y + 21, 8, 2); F('#ffd23f', x + 24, y + 21, 4, 1);   // Sprungtuch
   } else if (key === 'oel') {                          // Straße mit Ölflecken und Sack
     F('#555', x, y + 12, 30, 12); F('#ffffff', x + 3, y + 17, 5, 1); F('#ffffff', x + 22, y + 17, 5, 1);
     F('#1c1c1c', x + 4, y + 18, 9, 4); F('#1c1c1c', x + 14, y + 15, 8, 3); F('#3a2a4a', x + 6, y + 19, 3, 1); F('#2e3a5a', x + 16, y + 16, 3, 1);

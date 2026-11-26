@@ -20,7 +20,7 @@ const EINSAETZE = {
   klein: { word: 'smallfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Haus brennt: ein Fenster, dauert länger als die Mülltonne
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
   // Runde 2 (wave 2, Michael 26.11.): erst nach dem Anbau (Rüstwagen in der Halle); 6 Einsätze, danach Treppe und Landeplatz
-  gross: { word: 'bigfire', veh: ['lf', 'rw'], tool: 'jumpsheet', tools: ['jumpsheet', 'ladder', 'hose', 'winch'], wave: 2 },   // Großbrand: erst Sprungtuch (Person springt), dann löschen
+  gross: { word: 'bigfire', veh: ['lf', 'rw'], tool: 'hose', tools: ['hose', 'jumpsheet', 'ladder', 'winch'], wave: 2 },   // Großbrand: erst Sprungtuch (Person springt), dann löschen
   oel: { word: 'oilspill', veh: ['rw'], tool: 'binder', tools: ['binder', 'winch', 'chainsaw', 'hose'], wave: 2 },   // Ölspur: Bindemittel streuen, dann fegen (kurzer Einsatz)
   graben: { word: 'ditch', veh: ['rw'], tool: 'winch', tools: ['winch', 'cutter', 'chainsaw', 'hose'], wave: 2 },   // Auto im Graben: Seil einhaken, Winde drehen
 };

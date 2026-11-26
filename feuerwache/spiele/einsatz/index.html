@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261126g">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261126h">
 <title>Einsatz</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="alarm" style="pointer-events:auto"><span class="word">ALARM</span></div>
 </div>
 <script>window.NO_PAD = true;</script>
-<script src="../../../gemeinsam/sterne.js?v=20261126g"></script>
-<script src="../../../gemeinsam/basis.js?v=20261126g"></script>
-<script src="../../../gemeinsam/moebel.js?v=20261126g"></script>
-<script src="../../../gemeinsam/bau.js?v=20261126g"></script>
-<script src="../../../gemeinsam/feuerwehr.js?v=20261126g"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261126h"></script>
+<script src="../../../gemeinsam/basis.js?v=20261126h"></script>
+<script src="../../../gemeinsam/moebel.js?v=20261126h"></script>
+<script src="../../../gemeinsam/bau.js?v=20261126h"></script>
+<script src="../../../gemeinsam/feuerwehr.js?v=20261126h"></script>
 <script>
 /* =====================================================================
    FEUERWEHR-EINSATZ (eine Szene je Einsatz, ?e=katze). Kommt aus der Wache, geht danach zurück (#einsatz).
@@ -77,13 +77,13 @@ const Einsatz = (() => {
   const DRIVER = { h: '#2a1a10', s: '#c68642', r: '#3fa9f5', w: '#ffffff', b: '#34495e' };
   let parked = null, branch = null, bmarks = [], bpieces = [], pile = null, carry = null, mate = null, home = null, amb = null, tow = null, tool = null, plaster = null, crane = null, sani = null;   // Ast auf Auto
   let truck2 = null, victim = null, rescued = false, hoseFrom = null, boardFrom = null, mateAim = 0;   // Hausbrand: Drehleiter, gerettete Person
-  const MATE_PAL = Object.assign({}, GEAR_PAL, { h: '#f2f2f2' });
+  const MATE_PAL = Object.assign({}, GEAR_PAL, { h: '#f2f2f2' }), HELP_PAL = Object.assign({}, GEAR_PAL, { h: '#c0392b' });   // 3. Feuerwehrmann: roter Helm
   const OMA = { h: '#d8d8d8', s: '#f1c27d', r: '#c0396b', w: '#ffffff', b: '#5a4a6a' };   // Oma (kleines Haus)   // Kollege im Anzug
   const SANI_PAL = { h: '#3a2a1a', r: '#e74c3c', w: '#ffffff', b: '#e74c3c', n: '#111' };   // Sanitäter
   const PL_COLS = [['#3fa9f5', '#bfe3ff'], ['#ff6b8a', '#ffd0db'], ['#5cc98a', '#c9f2d9'], ['#ffd23f', '#fff1b3'], ['#9b59b6', '#e2c8ef']];   // bunte Pflaster: Farbe, Punkte
   let ditch = null, gcar = null, rope = null;
   let blobs = [], oilAt = null, oilT = 0;
-  let sheet = null, jumper = null;   // Großbrand: Sprungtuch { x, tx, target, locked } (Kind links, Kollege rechts), springende Person { t, from, to, bounce }   // Ölspur: Flecken { x, y, rx, ry, cells [{ x, y, cov, sw }], covered, swept }, Fingerstelle, Streu-/Fegezeit   // Auto im Graben: Graben, Auto (k 0..1 = herausgezogen), Seil { hooked, p }
+  let sheet = null, jumper = null, hyd = null, helper = null;   // Großbrand: Hydrant { x, y, conn, p (aufdrehen), open }, 3. Feuerwehrmann (aus dem Rüstwagen, trägt das Tuch)   // Großbrand: Sprungtuch { x, tx, target, locked } (Kind links, Kollege rechts), springende Person { t, from, to, bounce }   // Ölspur: Flecken { x, y, rx, ry, cells [{ x, y, cov, sw }], covered, swept }, Fingerstelle, Streu-/Fegezeit   // Auto im Graben: Graben, Auto (k 0..1 = herausgezogen), Seil { hooked, p }
   let trunk = null, marks = [], pieces = [], car = null, sawT = 0, walkTo = null;   // Baum: Stamm, Schnittlinien, Stücke, wartendes Auto
   let bins = null, fires = [], house = null, family = [], sprayAt = null, aim = null, spraying = 0, steam = [], backFrom = null, owner = null;   // Mülltonne: Tonnen, Feuer { hp }, Spritzstelle, Zielpunkt
   const BOY = { h: '#5a3b1c', r: '#3fa9f5', w: '#ffffff', b: '#2c3e50' };
@@ -156,13 +156,15 @@ const Einsatz = (() => {
       for (let fi = 0; fi < 4; fi++) for (const cx of [0.2, 0.5, 0.8]) wins.push({ fi, x: Math.round(hx + hw * cx - ww / 2), y: Math.round(house.base - (fi + 1) * fl + fl * 0.22), w: ww, h: wh });
       house.wins = wins;
       const top = wins[10];
-      fires = [0, 2, 3, 5, 7, 9].map(i => { const w = wins[i]; w.fire = true; return { win: w, x: w.x + w.w / 2, y: w.y + w.h, w: w.w + 6, h: Math.round(fl * 0.85), hp: 1, dmg: 0, later: true }; });   // löschbar erst nach der Rettung
+      fires = [7, 0, 2, 3, 5, 9].map((i, n) => { const w = wins[i]; w.fire = true; return { win: w, x: w.x + w.w / 2, y: w.y + w.h, w: w.w + 6, h: Math.round(fl * 0.85), hp: 1, dmg: n === 0 ? 0.006 : 0, later: n > 0 }; });   // zuerst nur das Feuer unter der Person, der Rest nach der Rettung
       const sp = { x: top.x + Math.round(top.w / 2) - 10, y: top.y + top.h - 17 }; spots = [sp, sp, sp]; cat.x = sp.x; cat.y = sp.y; cat.i = 2; cat.on = 'tree'; house.top = top;
       truck2 = { x: 0, by: truck.by, park: Math.round(Math.min(W - L - 4, hx + hw * 0.55 - L * 0.5)), deployed: false };   // Rüstwagen vor dem Haus
       truck.park = Math.max(4, truck2.park - L - 10); truck2.x = truck.x + L + 14;
       sprayAt = { x: Math.max(30, Math.min(hx - 26, truck.park + L - 6)), y: roadY - 4 };
       mate = { x: 0, y: 0, show: false, step: false, spot: { x: Math.max(14, truck.park - 2), y: roadY - 4 }, spray: false };
       sheet = { x: Math.max(30, hx - 24), tx: null, target: top.x + Math.round(top.w / 2), locked: false, sag: 0, show: false };
+      hyd = { x: Math.round(Math.max(24, truck.park + 18)), y: roadY - 4, conn: false, p: 0, ang: null, hold: false, open: false, end: null, click: 0 };   // Überflurhydrant am Gehweg hinter dem Löschfahrzeug
+      helper = { x: 0, y: 0, show: false, step: false };
       family = [{ x: 0, y: roadY - 4, pal: MOM }, { x: 0, y: roadY - 4, pal: CHILD }];
       const fx = Math.max(14, Math.round(Math.min(W * 0.06, mate.spot.x - 46))); family[0].x = fx; family[1].x = fx + 20;
       owner = { x: fx + 10, y: roadY - 4 }; girl = owner;
@@ -391,6 +393,7 @@ const Einsatz = (() => {
     o.x += (tg.x - o.x) / d * sp; o.y += (tg.y - o.y) / d * sp; o.step = true; return false;
   }
   const CC = () => UNFALL ? crash : parked;
+  const valveC = () => ({ x: hyd.x, y: hyd.y - 44 });   // großes Handrad über dem Hydranten
   const winchP = () => rwWinch(truck.x, truck.by, L);                               // Seilwinde vorne am Rüstwagen
   const crankC = () => { const w = winchP(); return { x: w.x + 2, y: w.y - 34 }; };    // Kurbel zum Drehen (groß über der Winde)
   function carPose(k) { const g = gcar; g.k = k; const A = k < 0.5 ? g.a : g.b, B2 = k < 0.5 ? g.b : g.c, q = k < 0.5 ? k / 0.5 : (k - 0.5) / 0.5, e = q * q * (3 - 2 * q);
@@ -410,6 +413,16 @@ const Einsatz = (() => {
   const nozzle = () => ({ x: kid.x + 12, y: kid.y - 14 });                          // Strahlrohr in der Hand des Kindes
   function onPointer(type, x, y) {
     idle = 0;
+    if (phase === 'hyd') { if ((type === 'down' || type === 'move') && y < H - BAR) hyd.end = x; return true; }   // Schlauch zum Hydranten ziehen
+    if (phase === 'valve') {                          // Hydrant aufdrehen: im Kreis um das Rad drehen oder halten
+      if (y >= H - BAR) return true;
+      const c = valveC();
+      if (type === 'down') hyd.hold = true;
+      if (type === 'down' || type === 'move') { const a = Math.atan2(y - c.y, x - c.x);
+        if (hyd.ang != null && Math.hypot(x - c.x, y - c.y) < 70) { let d = a - hyd.ang; d = Math.atan2(Math.sin(d), Math.cos(d)); hyd.p = Math.min(1, hyd.p + Math.abs(d) / (2 * Math.PI) * 0.3); }
+        hyd.ang = a; }
+      if (type === 'up') { hyd.hold = false; hyd.ang = null; }
+      return true; }
     if (phase === 'sheet') {                          // Sprungtuch: dorthin tragen, wo man hintippt oder den Finger hinzieht
       if ((type === 'down' || type === 'move') && y < H - BAR) sheet.tx = x;
       return true; }
@@ -497,11 +510,12 @@ const Einsatz = (() => {
     if (s.k === tool && AST && tool === 'cutter') { go('cut'); sayWord(s.k); sfx.unlock(); setTimeout(() => say('Schneide die Tür auf!'), 900); return true; }
     if (s.k === E.tool && UNFALL) { go('cut'); sayWord(s.k); sfx.unlock(); setTimeout(() => say('Schneide die Tür auf!'), 900); return true; }
     if (s.k === tool && AST) { go('asaw'); sayWord(s.k); sfx.unlock(); setTimeout(() => say('Säg den Ast ab!'), 900); return true; }
-    if (s.k === E.tool && GROSS && tool === 'jumpsheet') { go('sheetget'); sayWord(s.k); sfx.unlock(); mate.spray = false; mate.from = { x: mate.x, y: mate.y }; sheet.from = { x: kid.x, y: kid.y }; return true; }
+    if (s.k === tool && GROSS && tool === 'jumpsheet') { go('sheetget'); sayWord(s.k); sfx.unlock(); sheet.from = { x: kid.x, y: kid.y }; helper.show = true; helper.from = { x: truck2.x + L - 18, y: truck2.by - 4 }; Object.assign(helper, helper.from); return true; }   // der Kollege löscht weiter, der 3. Feuerwehrmann kommt aus dem Rüstwagen
     if (s.k === E.tool && OEL) { go('spread'); sayWord(s.k); sfx.unlock(); setTimeout(() => say('Streu das Bindemittel auf das Öl!'), 900); return true; }
     if (s.k === E.tool && GRABEN) { go('rope'); rope.end = hookP().x - 10; sayWord(s.k); sfx.unlock(); setTimeout(() => say('Bring den Haken zum Auto!'), 900); return true; }
     if (s.k === E.tool && BAUM) { go('saw'); sayWord(s.k); sfx.unlock(); setTimeout(() => say('Säg den Baum durch!'), 900); return true; }
     if (s.k === tool && HAUS && tool === 'ladder') { boardFrom = { x: kid.x, y: kid.y }; go('board'); sayWord(s.k); sfx.unlock(); truck2.deployed = true; tone(220, .5, 'square', .03); return true; }
+    if (s.k === tool && GROSS && !hyd.open) { go('hyd'); hyd.end = hyd.x; sayWord(s.k); sfx.unlock(); setTimeout(() => say('Zieh den Schlauch zum Hydranten!'), 900); return true; }
     if (s.k === tool && FIRE && !(GROSS && tool === 'jumpsheet')) { hoseFrom = { x: kid.x, y: kid.y }; go('hoseup'); sayWord(s.k); sfx.unlock(); return true; }
     if (s.k === E.tool) { go('board'); sayWord(s.k); sfx.unlock(); truck.deployed = true; tone(220, .5, 'square', .03); return true; }
     wrong++; react = { k: s.k, t: 0 }; say(WORDS[s.k][1] + '? Das passt nicht.');
@@ -530,12 +544,14 @@ const Einsatz = (() => {
     if (react) { react.t += dt;
       if (react.k === 'hose' && react.t < 1.2) for (let k = 0; k < 3; k++) drops.push({ x: stand().x, y: stand().y - 16, vx: ((UNFALL ? crash.x + crash.w / 2 : AST ? parked.x + parked.w / 2 : BAUM ? (trunk.x0 + trunk.ce) / 2 : tree.x) - stand().x) * 1.1 + rnd(-20, 20), vy: -(stand().y - (UNFALL ? crash.by - 50 : AST ? parked.by - 40 : BAUM ? trunk.y - 40 : tree.y)) * 1.3 + rnd(-30, 10), t: 0 });
       if (react.t > 1.6) react = null; }
+    if (helper && helper.show && helper.back) { const d = { x: truck2.x + L - 18, y: truck2.by - 4 };   // 3. Feuerwehrmann steigt wieder in den Rüstwagen
+      if (walkP(helper, d, 60 * dt)) { helper.show = false; helper.back = false; sfx.clod(); } else helper.step = Math.floor(t * 8) % 2 === 0; }
     switch (phase) {
       case 'arrive': truck.x = approach(truck.x, truck.park, 130 * dt); if (truck2) truck2.x = approach(truck2.x, truck2.park, 130 * dt);
         if (truck.x === truck.park && (!truck2 || truck2.x === truck2.park)) { go('exit'); sfx.honk(); } break;
       case 'exit': kid.show = true; kid.step = true; { const p = lerp(door(), stand(), clamp(t / 0.8, 0, 1)); kid.x = p.x; kid.y = p.y; }   // Tür auf, Kind steigt aus
-        if (HOUSEY) { mate.show = true; const q = lerp(door(), mate.spot, clamp(t / 0.9, 0, 1)); mate.x = q.x; mate.y = q.y; mate.step = t < 0.9; if (t > 0.9) mate.spray = true; }   // Kollege nimmt den Schlauch
-        if (t > (HOUSEY ? 1 : 0.9)) { go('choose'); kid.step = false; sfx.clod(); setTimeout(() => say(UNFALL ? 'Die Tür klemmt! Welches Werkzeug brauchen wir?' : GROSS ? 'Hilfe! Da oben ist jemand! Welches Werkzeug brauchen wir?' : 'Welches Werkzeug brauchen wir?'), 300); } break;
+        if (HOUSEY) { mate.show = true; const q = lerp(door(), mate.spot, clamp(t / 0.9, 0, 1)); mate.x = q.x; mate.y = q.y; mate.step = t < 0.9; if (t > 0.9 && !GROSS) mate.spray = true; }   // Kollege nimmt den Schlauch (Großbrand: erst wenn der Hydrant auf ist)
+        if (t > (HOUSEY ? 1 : 0.9)) { go('choose'); kid.step = false; sfx.clod(); setTimeout(() => say(UNFALL ? 'Die Tür klemmt! Welches Werkzeug brauchen wir?' : GROSS ? 'Hilfe! Da oben ist jemand! Zuerst brauchen wir Wasser. Welches Werkzeug brauchen wir?' : 'Welches Werkzeug brauchen wir?'), 300); } break;
       case 'board': { const p = t < 0.6 ? lerp(boardFrom || stand(), foot(), t / 0.6) : lerp(foot(), pivot, clamp((t - 0.6) / 0.35, 0, 1));   // hinlaufen, hochklettern
         kid.x = p.x; kid.y = p.y; kid.step = true; }   // zum Drehkranz, in den Korb
         if (t > 1) { kid.show = false; basket = { x: pivot.x, y: pivot.y - 12 }; target = null; go('steer'); setWord('basket'); say(HAUS ? 'Fahr den Korb zum Fenster!' : 'Fahr den Korb zur Katze!'); } break;
@@ -560,34 +576,42 @@ const Einsatz = (() => {
         if (t > 1.4) { cat.on = 'girl'; go('thanks'); say('Danke!'); confetti(); sfx.win();
           for (let k = 0; k < 6; k++) hearts.push({ x: girl.x + rnd(-12, 12), y: girl.y - 30 - rnd(0, 10), t: -k * 0.15 });
           if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(KEY); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
-      case 'sheetget': {                              // Kind und Kollege holen das Sprungtuch vom Rüstwagen und stellen sich links vom Haus auf
+      case 'hyd': {                                   // Kind zieht den Schlauch vom Löschfahrzeug zum Hydranten; dort wird angeschlossen
+        const tx = clamp(hyd.end == null ? kid.x : hyd.end, 10, W - 10), ty = roadY - 4;
+        kid.x = approach(kid.x, tx - 8, 80 * dt); kid.y = approach(kid.y, ty, 80 * dt); kid.step = Math.abs(kid.x - (tx - 8)) > 1 || Math.abs(kid.y - ty) > 1;
+        if (Math.abs(kid.x + 8 - hyd.x) < 8 && Math.abs(kid.y - ty) < 3) { hyd.conn = true; kid.step = false; kid.x = hyd.x - 12; tone(500, .06, 'square', .06); tone(800, .08, 'square', .05, .08); sfx.clod(); say('Angeschlossen! Jetzt aufdrehen!'); go('valve'); }
+        break; }
+      case 'valve': {
+        if (hyd.hold) hyd.p = Math.min(1, hyd.p + dt * 0.12);
+        if (Math.floor(hyd.p * 24) !== hyd.click) { hyd.click = Math.floor(hyd.p * 24); tone(900, .03, 'square', .03); }
+        if (hyd.p >= 1) { hyd.open = true; mate.spray = true; noise(400, 1500, .5, 4); say('Wasser marsch!'); hoseFrom = { x: kid.x, y: kid.y }; go('hoseup'); }
+        break; }
+      case 'sheetget': {                              // Kind und 3. Feuerwehrmann holen das Sprungtuch vom Rüstwagen (der Kollege löscht weiter)
         const rd = { x: truck2.x + Math.round(L * 0.45), y: roadY - 4 };
-        if (t < 0.8) { Object.assign(kid, lerp(sheet.from, rd, t / 0.8)); Object.assign(mate, lerp(mate.from, { x: rd.x + 12, y: rd.y }, t / 0.8)); kid.step = mate.step = true; }
-        else { sheet.show = true; const k = clamp((t - 0.8) / 0.8, 0, 1), sx = rd.x + (sheet.x - rd.x) * k; sheet.cx = sx; kid.x = sx - 18; kid.y = roadY - 4; mate.x = sx + 18; mate.y = roadY - 4; }
-        if (t > 1.7) { sheet.cx = sheet.x; kid.step = mate.step = false; go('sheet'); setWord('jumpsheet'); say('Halte das Sprungtuch unter das Fenster!'); }
+        if (t < 0.8) { Object.assign(kid, lerp(sheet.from, rd, t / 0.8)); Object.assign(helper, lerp(helper.from, { x: rd.x + 12, y: rd.y }, t / 0.8)); kid.step = helper.step = true; }
+        else { sheet.show = true; const k = clamp((t - 0.8) / 0.8, 0, 1), sx = rd.x + (sheet.x - rd.x) * k; sheet.cx = sx; kid.x = sx - 18; kid.y = roadY - 4; helper.x = sx + 18; helper.y = roadY - 4; }
+        if (t > 1.7) { sheet.cx = sheet.x; kid.step = helper.step = false; go('sheet'); setWord('jumpsheet'); say('Halte das Sprungtuch unter das Fenster!'); }
         break; }
       case 'sheet': {                                 // tragen; genau unter dem Fenster rastet es ein, dann springt die Person
-        if (sheet.tx != null) { const tx = clamp(sheet.tx, 26, W - 26); sheet.cx = approach(sheet.cx, tx, 70 * dt); kid.step = mate.step = Math.abs(sheet.cx - tx) > 0.5; }
-        kid.x = sheet.cx - 18; mate.x = sheet.cx + 18;
-        if (Math.abs(sheet.cx - sheet.target) < 6) { sheet.cx = sheet.target; kid.x = sheet.cx - 18; mate.x = sheet.cx + 18; kid.step = mate.step = false; sheet.locked = true; sfx.clod(); say('Spring!'); go('jump'); }
+        if (sheet.tx != null) { const tx = clamp(sheet.tx, 26, W - 26); sheet.cx = approach(sheet.cx, tx, 70 * dt); kid.step = helper.step = Math.abs(sheet.cx - tx) > 0.5; }
+        kid.x = sheet.cx - 18; helper.x = sheet.cx + 18;
+        if (Math.abs(sheet.cx - sheet.target) < 6) { sheet.cx = sheet.target; kid.x = sheet.cx - 18; helper.x = sheet.cx + 18; kid.step = helper.step = false; sheet.locked = true; sfx.clod(); say('Spring!'); go('jump'); }
         break; }
-      case 'jump': {                                  // Person springt aus dem Fenster ins Tuch, federt zweimal, steigt aus
+      case 'jump': {                                  // Person springt ins Tuch, federt zweimal; dann holt sie der Krankenwagen ab
         if (t > 0.9 && !jumper) { cat.on = 'none'; jumper = { t: 0, from: { x: cat.x, y: cat.y }, to: { x: sheet.cx - 10, y: roadY - 30 } }; tone(700, .5, 'sine', .05, 0, 300); }
         if (jumper && !jumper.landed) { jumper.t += dt; const k = clamp(jumper.t / 0.9, 0, 1);
           jumper.x = jumper.from.x + (jumper.to.x - jumper.from.x) * k; jumper.y = jumper.from.y + (jumper.to.y - jumper.from.y) * k * k - Math.sin(k * Math.PI) * 12;
           if (k >= 1) { jumper.landed = true; jumper.bt = 0; tone(260, .18, 'sine', .08, 0, 120); tone(420, .15, 'sine', .06, .2, 300); } }
-        if (jumper && jumper.landed) { jumper.bt += dt; const b = jumper.bt;   // federt: Tuch biegt sich, Person hüpft
+        if (jumper && jumper.landed) { jumper.bt += dt; const b = jumper.bt;
           sheet.sag = Math.max(0, Math.round(6 * Math.exp(-b * 3) * Math.abs(Math.cos(b * 9))));
           jumper.y = jumper.to.y + sheet.sag - Math.round(10 * Math.exp(-b * 3) * Math.abs(Math.sin(b * 9)));
-          if (b > 1.4) { jumper = null; victim = { x: sheet.cx, y: roadY - 4, show: true, step: false }; go('safe'); } }
+          if (b > 1.4) { jumper = null; sheet.show = false; victim = { x: sheet.cx, y: roadY - 4, show: true, step: false }; say('Danke, liebe Feuerwehr!'); sfx.win();
+            for (let k = 0; k < 6; k++) hearts.push({ x: victim.x + rnd(-12, 12), y: victim.y - 30 - rnd(0, 10), t: -k * 0.15 });
+            helper.back = true; kid.x = sheet.cx - 22;
+            const aw = Math.round(72 * 0.8); amb = { x: W + 10, w: aw, base: roadY + RH - 2, stop: Math.round(clamp(sheet.cx - aw / 2, 4, W - aw - 4)), open: 0, siren: 0 };
+            go('wait'); } }
         break; }
-      case 'safe': {                                  // Person geht zur Familie, Danke; Kollege nimmt wieder den Schlauch; jetzt löschen
-        const fam = { x: family[1].x + 24, y: roadY - 4 };
-        if (walkP(victim, fam, 55 * dt)) { victim.step = false; if (!victim.thanked) { victim.thanked = true; say('Danke, liebe Feuerwehr!'); sfx.win(); for (let k = 0; k < 6; k++) hearts.push({ x: victim.x + rnd(-12, 12), y: victim.y - 30 - rnd(0, 10), t: -k * 0.15 }); victim.t = t; } }
-        else victim.step = Math.floor(t * 8) % 2 === 0;
-        if (t > 0.5) { sheet.show = false; const a = walkP(mate, mate.spot, 70 * dt); mate.step = !a; if (a) mate.spray = true; }
-        if (victim.thanked && t - victim.t > 1.4) { rescued = true; for (const f of fires) f.dmg = 0.004; tool = 'hose'; wrong = 0; idle = 0; go('choose'); setWord('fire'); say('Jetzt das Feuer löschen! Welches Werkzeug brauchen wir?'); }
-        break; }
+      case 'wait': if (t > 1.2) { go('hamb'); setWord('amb'); sayWord('amb'); } break;
       case 'spread': case 'sweep': {                  // Kind läuft hin; Streuen: Körner fallen auf das Öl; Fegen: das vollgesogene Bindemittel kommt an den Rand
         const sweep = phase === 'sweep';
         oilT = Math.max(0, oilT - dt);
@@ -780,6 +804,10 @@ const Einsatz = (() => {
         if (spraying > 0 && aim) { const nz = nozzle(), T = 0.45, g = 300;   // Wasser im Bogen genau zum Finger
           for (let k = 0; k < 2; k++) drops.push({ x: nz.x, y: nz.y, vx: (aim.x - nz.x) / T + rnd(-12, 12), vy: (aim.y - nz.y) / T - 0.5 * g * T + rnd(-12, 12), t: 0, g, T });   // T: trifft erst am Ende des Bogens (sonst bleibt es an tieferen Fenstern hängen)
           if (Math.floor(t * 8) !== Math.floor((t - dt) * 8)) tone(900 + Math.random() * 300, .06, 'sine', .01); }
+        if (GROSS && !rescued && tool === 'hose' && fires[0].hp <= 0) {   // Feuer unter der Person ist aus: jetzt kann sie springen
+          spraying = 0; aim = null; tool = 'jumpsheet'; wrong = 0; idle = 0; go('choose'); setWord('jumpsheet');
+          for (let k = 0; k < 6; k++) steam.push({ x: fires[0].x + rnd(-10, 10), y: fires[0].y - rnd(0, 16), t: -k * 0.08 });
+          tone(1200, .15, 'sine', .05); setTimeout(() => say('Hilfe! Ich will raus! Welches Werkzeug brauchen wir?'), 300); break; }
         if (HAUS && !rescued && cat.on === 'none' && fires[0].hp <= 0) {   // Feuer unter dem Fenster ist aus: oben erscheint eine Person
           cat.on = 'tree'; spraying = 0; aim = null; tool = 'ladder'; wrong = 0; idle = 0; go('choose'); setWord('ladder');
           for (let k = 0; k < 6; k++) steam.push({ x: fires[0].x + rnd(-10, 10), y: fires[0].y - rnd(0, 16), t: -k * 0.08 });
@@ -1063,7 +1091,7 @@ const Einsatz = (() => {
     const on = Math.floor(time / 150) % 2 === 1;
     if (truck2) drawFireTruckSide(R, truck2.x, truck2.by, L, E.veh[1], !on, truck2.deployed);
     drawFireTruckSide(R, truck.x, truck.by, L, E.veh[0], on, truck.deployed);
-    if (HAUS && amb) drawAmb(time);
+    if (HOUSEY && amb) drawAmb(time);
     if (BAUM) { drawTree(time); drawCar(); }
     if (UNFALL) drawCrash(time);
     if (GRABEN) drawDitch(time);
@@ -1075,6 +1103,23 @@ const Einsatz = (() => {
     if (basket) { drawLadder({ x: pivot.x, y: pivot.y }, basket); drawBasket(time); }
     if (HOUSEY && mate && mate.show && mate.spray) { const a = { x: truck.x + Math.round(L * 0.3), y: truck.by - 12 }, nz = { x: mate.x + 12, y: mate.y - 14 };   // Schlauch des Kollegen
       pixLine(R, a.x, a.y, nz.x - 6, nz.y + 10, 2, '#d8cfb4'); pixLine(R, nz.x - 6, nz.y + 10, nz.x, nz.y, 2, '#d8cfb4'); R('#5a5a5a', nz.x - 7, nz.y - 1, 8, 3); R('#c48a00', nz.x, nz.y - 1, 4, 3); }
+    if (GROSS && hyd) {                               // Überflurhydrant (rot) am Gehweg; Schlauch zum Löschfahrzeug; beim Aufdrehen großes Handrad
+      const hx = hyd.x, hy = hyd.y, a = { x: truck.x + Math.round(L * 0.18), y: truck.by - 10 };
+      R('rgba(0,0,0,.2)', hx - 4, hy - 1, 10, 2); R('#7a1a12', hx - 4, hy - 16, 8, 16); R('#c0392b', hx - 3, hy - 15, 6, 14); R('#e0604c', hx - 3, hy - 15, 1, 14);
+      R('#7a1a12', hx - 5, hy - 18, 10, 3); R('#9aa0a6', hx - 1, hy - 21, 2, 3); R('#9aa0a6', hx + 4, hy - 10, 3, 3);
+      if (phase === 'hyd') { const hd = { x: Math.round(kid.x + 10), y: Math.round(kid.y - 12) }, my = Math.max(a.y, hd.y) + 6;   // Kind zieht das Schlauchende
+        pixLine(R, a.x, a.y, (a.x + hd.x) / 2, my, 2, '#d8cfb4'); pixLine(R, (a.x + hd.x) / 2, my, hd.x, hd.y, 2, '#d8cfb4'); R('#9aa0a6', hd.x - 1, hd.y - 1, 4, 3);
+        const k = (0.35 + 0.5 * Math.abs(Math.sin(time / 220))).toFixed(2); R(`rgba(255,210,63,${k})`, hx - 8, hy - 22, 16, 24); }
+      if (hyd.conn) { const c = hyd.open && Math.floor(time / 200) % 2 ? '#bfe6ff' : '#d8cfb4'; pixLine(R, hx + 5, hy - 9, a.x, a.y, 2, c); }
+      if (phase === 'valve') { const c = valveC(), r = 12, ang = hyd.p * Math.PI * 2 * 4, glow = !hyd.hold && hyd.ang == null;
+        if (glow) { const k = (0.35 + 0.5 * Math.abs(Math.sin(time / 220))).toFixed(2); for (let i = 0; i < 24; i++) { const b = i / 24 * Math.PI * 2; R(`rgba(255,210,63,${k})`, Math.round(c.x + Math.cos(b) * (r + 5)) - 1, Math.round(c.y + Math.sin(b) * (r + 5)) - 1, 3, 3); } }
+        for (let i = 0; i < 32; i++) { const b = i / 32 * Math.PI * 2; R('#7a1a12', Math.round(c.x + Math.cos(b) * r) - 1, Math.round(c.y + Math.sin(b) * r) - 1, 3, 3); }
+        for (let i = 0; i < 4; i++) { const b = ang + i * Math.PI / 2; pixLine(R, c.x, c.y, c.x + Math.cos(b) * r, c.y + Math.sin(b) * r, 2, '#c0392b'); }
+        R('#333', c.x - 2, c.y - 2, 4, 4); pixLine(R, c.x, c.y + r, hx, hy - 20, 1, '#777');
+        const bw = 40, bx = Math.round(c.x - bw / 2), by = c.y - r - 10; R('#222', bx - 1, by - 1, bw + 2, 6); R('#555', bx, by, bw, 4); R('#3fa9f5', bx, by, Math.round(bw * hyd.p), 4); }
+    }
+    if (GROSS && helper && helper.show) { drawKidPal(R, helper.x, helper.y, HELP_PAL, 2, false, helper.step && Math.floor(time / 120) % 2 === 1, false);
+      R('#c0392b', Math.round(helper.x - 10), Math.round(helper.y - 26) + 4, 20, 2); }
     if (GROSS && sheet && sheet.show) {               // Sprungtuch (von der Seite): Rand rot, Mitte gelb, biegt sich beim Aufprall; Hinweis unter dem Fenster
       const cx = Math.round(sheet.cx), y = roadY - 17, sg = sheet.sag, w = 40;
       if (phase === 'sheet') { const a = (0.35 + 0.45 * Math.abs(Math.sin(time / 220))).toFixed(2); R(`rgba(255,210,63,${a})`, sheet.target - 18, roadY - 4, 36, 3); pixLine(R, sheet.target, house.top.y + house.top.h + 4, sheet.target, roadY - 26, 1, `rgba(255,210,63,${a})`); }
@@ -1107,6 +1152,7 @@ const Einsatz = (() => {
     if (AST && phase === 'asaw' && idle > 4) { const m = bmarks.find(m => !m.done); if (m) drawArrow(Math.round(m.x - 3), Math.round(m.y - 26 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (AST && phase === 'crane' && idle > 4) { const p = crane.hooked ? { x: bedSpot().x + parked.w / 2, y: bedSpot().by - 30 } : { x: carTop().x, y: carTop().y - 10 }; drawArrow(Math.round(p.x - 3), Math.round(p.y - 14 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (AST && phase === 'acarry' && idle > 4 && !carry) { const q = bpieces.find(q => !q.gone); if (q) drawArrow(Math.round(q.c.x + q.dx - 3), Math.round(q.c.y + q.dy - 30 - Math.abs(Math.sin(time / 220)) * 4)); }
+    if (GROSS && phase === 'hyd' && idle > 3) drawArrow(hyd.x - 3, Math.round(hyd.y - 40 - Math.abs(Math.sin(time / 220)) * 4));
     if (GROSS && phase === 'sheet' && idle > 3) drawArrow(sheet.target - 3, Math.round(roadY - 40 - Math.abs(Math.sin(time / 220)) * 4));
     if (GRABEN && phase === 'rope' && idle > 3) { const h = hookP(); drawArrow(h.x - 3, Math.round(h.y - 18 - Math.abs(Math.sin(time / 220)) * 4)); }
     if (BAUM && phase === 'saw' && idle > 4) { const m = marks.find(m => !m.done); if (m) drawArrow(Math.round(m.x - 3), Math.round(trunk.y - trunk.th - 26 - Math.abs(Math.sin(time / 220)) * 4)); }
@@ -1129,7 +1175,7 @@ const Einsatz = (() => {
     if (phase === 'steer' && idle > 4 && cat.on === 'tree' && !cat.anim) { const c = catC(); drawArrow(Math.round(c.x - 3), Math.round(c.y - 26 - pulse * 4)); }
   }
   function resize() { layout(false); }
-  return { enter, update, draw, resize, onPointer, _dbg: () => ({ sheet, tool, oil: blobs.map(b => ({ x: b.x, y: b.y, rx: b.rx, covered: b.covered, swept: b.swept })), graben: gcar && { k: gcar.k, x: gcar.x, by: gcar.by, rope, hook: hookP(), crank: crankC(), kid: { x: kid.x, y: kid.y } }, phase, t, wrong, cat: { on: cat.on, i: cat.i, x: cat.x, y: cat.y }, basket, bar, stars: Hof.save.stars, cuts, crash, marks, pieces: pieces.map(q => ({ a: q.a, b: q.b, gone: q.gone })), trunk, bmarks, bpieces: bpieces.map(q => ({ c: q.c, dx: q.dx, dy: q.dy, gone: q.gone })), pile, carry: !!carry, mate, amb, tow, tool, driver, parked, plaster, crane, sani, truck2, victim, rescued, pgeo: AST && plaster ? plasterGeo() : null, fires: fires.map(f => ({ x: f.x, y: f.y, h: f.h, hp: f.hp, dmg: f.dmg })), kid }) };
+  return { enter, update, draw, resize, onPointer, _dbg: () => ({ sheet, tool, hyd, valve: hyd && valveC(), helper, oil: blobs.map(b => ({ x: b.x, y: b.y, rx: b.rx, covered: b.covered, swept: b.swept })), graben: gcar && { k: gcar.k, x: gcar.x, by: gcar.by, rope, hook: hookP(), crank: crankC(), kid: { x: kid.x, y: kid.y } }, phase, t, wrong, cat: { on: cat.on, i: cat.i, x: cat.x, y: cat.y }, basket, bar, stars: Hof.save.stars, cuts, crash, marks, pieces: pieces.map(q => ({ a: q.a, b: q.b, gone: q.gone })), trunk, bmarks, bpieces: bpieces.map(q => ({ c: q.c, dx: q.dx, dy: q.dy, gone: q.gone })), pile, carry: !!carry, mate, amb, tow, tool, driver, parked, plaster, crane, sani, truck2, victim, rescued, pgeo: AST && plaster ? plasterGeo() : null, fires: fires.map(f => ({ x: f.x, y: f.y, h: f.h, hp: f.hp, dmg: f.dmg })), kid }) };
 })();
 startLoop(Einsatz);
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });

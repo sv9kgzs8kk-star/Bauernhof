@@ -792,7 +792,7 @@ function drawFireStation(F, x, y, w, h, o = {}) {
   const fg = fireGeo(x, y, w, h), st = o.step || 0;
   if (st >= 3) drawGarage(F, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], time: o.time });
   if (st >= 4) drawMain(F, fg.main, { done: true, time: o.time });
-  if (st >= 5) { drawStationPad(F, fg, o.time); drawHoseTower(F, fg.main, { blocks: HOSE_BLOCKS, cap: true, time: o.time }); }
+  if (st >= 5) { if (o.pad) drawStationPad(F, fg, o.time); drawHoseTower(F, fg.main, { blocks: HOSE_BLOCKS, cap: true, time: o.time }); }   // Landeplatz erst mit dem Anbau (Michael), o.pad
   return fg;
 }
 

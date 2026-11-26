@@ -80,7 +80,7 @@ if (ORT !== 'wache') location.replace(location.pathname + '?ort=wache');
 const Q = snapF(R, 2);
 const Hose = (() => {
   let s0, fg, gg, m, hg, crane, MH, truck, hook, load, hq, follow, finger, idle = 0, paused = false, done = false, placed, heli = null, L, D;
-  const PIECES = ['b0', 'b1', 'b2', 'cap', 'pad0', 'pad1'];   // Landeplatz in 2 Hälften, jede auf einem eigenen kurzen Tieflader (Michael)
+  const PIECES = ['b0', 'b1', 'b2', 'cap'];   // Michael: Landeplatz kommt erst mit dem Anbau (3. Stellplatz); die Landeplatz-Teile unten (pad0/pad1, quer geteilt) sind dafür vorbereitet
   const isPad = p => p === 'pad0' || p === 'pad1';
   function enter() {
     Hof.load();
@@ -152,11 +152,16 @@ const Hose = (() => {
     to(s.gx, s.gy, E); to(s.gx, s.gy, s.e + dims(p).h, () => {
       placed[p] = true; load = null; sfx.load(); hud();
       for (let i = 0; i < 10; i++) spawn(s.gx + rnd(-10, 10), s.gy - s.e - dims(p).h + rnd(-4, 4), rnd(-15, 15), rnd(-18, 2), .4, '#d0654a', 30);
-      if (p === 'cap') { confetti(); sayWord('hosetower'); truck.state = 'leave'; setTimeout(() => sfx.honk(), 300); }
+      if (p === 'cap') { confetti(); sayWord('hosetower'); truck.state = 'leave'; setTimeout(() => sfx.honk(), 300); towerDone(); }
       if (p === 'pad0') { truck.state = 'leave'; setTimeout(() => sfx.honk(), 300); }
       if (p === 'pad1') padDone();
     });
     to(s.gx, s.gy, carryE());
+  }
+  function towerDone() {                               // Turm fertig: Ausleger dreht weg, dann ist die Wache fertig gebaut
+    done = true; follow = null; to(Math.min(W - 10, crane.x + 50), crane.y + 4, carryE());
+    setTimeout(() => { sfx.win(); confetti(); }, 900);
+    setTimeout(() => { hide('khud'); finishStep(5, 'firestation', 'wache'); }, 2600);
   }
   function padDone() {
     confetti(); truck.state = 'leave'; done = true; follow = null;

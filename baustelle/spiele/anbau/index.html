@@ -75,7 +75,7 @@ const Anbau = (() => {
   let side, hammer;                                                                             // Seitenansicht mit Hammer
   let slots, crane, truck, hook, carry, queue, placed, follow, finger, delivered;               // Kran
   let gateK, rw;                                                                                // Tor und Rüstwagen
-  const N = ANNEX_PARTS, PER_TRUCK = 3, TIP = 50, HITS = 3;
+  const N = ANNEX_PARTS, PER_TRUCK = 3, TIP = 50, HITS = 5;   // Michael: 5 Hammerschläge je Feld
   const liftH = lh => Math.round(4 + lh * 22);
   function setWord(k, count) { const el = $('kword'); el.dataset.say = k; el.querySelector('.word').textContent = WORDS[k][0]; $('kcount').textContent = count || ''; }
   const B = (col, x, y, w, h) => { bctx.fillStyle = col; bctx.fillRect(x, y, w, h); };
@@ -139,12 +139,12 @@ const Anbau = (() => {
   const nearTip = () => tip && !veh.moving && veh.r >= gr - 2 && veh.c >= tip.tx - 1 && veh.c <= tip.tx + 2;
   const canUnload = () => fill >= cap || (left === 0 && fill > 0);
   function startVeh() {
-    left = cells.length; fill = 0; loads = 0;
+    left = cells.filter(q => !q.dug).length; fill = 0; loads = 0; totalLoads = left > 5 ? 2 : 1; cap = Math.ceil(left / totalLoads);
     let c0 = Math.max(0, pit.c0 - 1); while (c0 < gc - 1 && !passable(gr - 2, c0)) c0++;
     veh = newMover(gr - 2, c0, -Math.PI / 2); veh.unloading = false; newTip();
   }
   function startDig() { phase = 'dig'; for (const q of cells) q.dug = false; startVeh(); setWord('dig', '0/' + totalLoads); setTimeout(() => sayWord('digger'), 2200); }
-  function startClear() { phase = 'clear'; for (const q of cells) q.dug = false; startVeh(); setWord('rubble2', '0/' + totalLoads); sayWord('rubble2'); }
+  function startClear() { phase = 'clear'; for (const q of cells) q.dug = q.c !== pit.c0 + pit.w - 1; startVeh(); setWord('rubble2', '0/' + totalLoads); sayWord('rubble2'); }   // Michael: nur eine Reihe Schutt, direkt an der Halle
   function newTip() {
     tipCol = (tipCol + 1) % TIPPERS.length;
     let tx; for (let t = 0; t < 30; t++) { tx = 1 + ((Math.random() * (gc - 3)) | 0); if (!(veh.r === gr - 1 && (veh.c === tx || veh.c === tx + 1))) break; }
@@ -236,7 +236,9 @@ const Anbau = (() => {
   function startWall() {
     phase = 'wall'; view = 'side';
     const gy = Math.round(H * 0.78), sw = Math.min(Math.round(W * 0.56), 240), sh = Math.round(sw * 0.5), oh = Math.round(sh * 0.55), x0 = Math.round((W - sw) / 2);
-    side = { gy, sw, sh, oh, x0, panels: [0, 1, 2].map(i => { const x = Math.round(x0 + i * sw / 3); return { x, w: Math.round(x0 + (i + 1) * sw / 3) - x, hits: 0, fall: 0, down: false }; }) };
+    const cw = Math.max(6, Math.round(sw * 0.035)), bh = Math.max(6, Math.round(sh * 0.08));   // Säulen und Träger aus Beton bleiben stehen (Michael)
+    side = { gy, sw, sh, oh, x0, cw, bh, cols: [0, 1, 2, 3].map(i => Math.round(x0 + i * (sw - cw) / 3)),
+      panels: [0, 1, 2].map(i => { const a = Math.round(x0 + i * (sw - cw) / 3) + cw, b = Math.round(x0 + (i + 1) * (sw - cw) / 3); return { x: a, w: b - a, hits: 0, fall: 0, down: false }; }) };
     hammer = { x: x0 - 26, y: gy - Math.round(sh / 2), t: 9 };
     setWord('hammer', '0/3'); setTimeout(() => sayWord('hammer'), 300);
   }
@@ -244,12 +246,12 @@ const Anbau = (() => {
   function smash(x, y) {
     const ps = standing(); if (!ps.length) return;
     const p = ps.find(p => x >= p.x && x < p.x + p.w) || ps.sort((a, b) => Math.abs(x - a.x - a.w / 2) - Math.abs(x - b.x - b.w / 2))[0];
-    const hy = clamp(y, side.gy - side.sh + 8, side.gy - 8);
+    const hy = clamp(y, side.gy - side.sh + side.bh + 8, side.gy - 8);
     p.hits++; hammer = { x: clamp(x, p.x + 6, p.x + p.w - 6), y: hy, t: 0 }; shake = 0.15; idle = 0;
     tone(150, .14, 'square', .13, 0, 80); noise(250, 900, .14, 2);
     for (let k = 0; k < 12; k++) spawn(hammer.x + rnd(-6, 6), hy + rnd(-6, 6), rnd(-40, 40), rnd(-40, 5), rnd(.4, .8), pick(['#cfc8b8', '#b5a58a', '#e0604c']), 60);
     if (p.hits >= HITS) setTimeout(() => { p.down = true; sfx.timber(); shake = 0.4;
-      for (let k = 0; k < 24; k++) spawn(p.x + rnd(0, p.w), side.gy + rnd(-6, 10), rnd(-30, 30), rnd(-40, -5), rnd(.6, 1.1), pick(['#cfc8b8', '#b5a58a', 'rgba(220,210,190,.8)']), 40);
+      for (let k = 0; k < 30; k++) spawn(p.x + rnd(0, p.w), side.gy - rnd(0, side.sh * 0.6), rnd(-30, 30), rnd(-40, -5), rnd(.6, 1.1), pick(['#cfc8b8', '#b5a58a', 'rgba(220,210,190,.8)']), 40);
       const n = side.panels.filter(q => q.down).length; setWord('hammer', n + '/3');
       if (n === 3) { setTimeout(() => say('Super! Die Wand ist weg.'), 700); setTimeout(() => startTurn('front', startClear), 2600); } }, 200);
   }
@@ -268,31 +270,42 @@ const Anbau = (() => {
     for (const fx of [0.25, 0.6]) { const wx = Math.round(x0 + sw * fx), ww = Math.round(sw * 0.14), wy = ogTop + Math.round(oh * 0.25), wh = Math.round(oh * 0.45);
       R('#f2f2f2', wx, wy, ww, wh); R('#6cc4f0', wx + 2, wy + 2, ww - 4, wh - 4); R('#9fe3ff', wx + 2, wy + 2, ww - 4, Math.max(1, (wh >> 1) - 2)); }
     R('#7a1a12', x0 - 3, ogTop - 5, sw + 6, 6); R('#c0392b', x0 - 2, ogTop - 4, sw + 4, 4); R('#e0604c', x0 - 2, ogTop - 4, sw + 4, 1);
-    // Halle innen (hinter den Platten): dunkel, Löschfahrzeug von der Seite
+    // Halle innen (hinter der Wand): dunkel, Löschfahrzeug von der Seite in echten Proportionen (doppelte Pixel, nicht hallenlang)
     R('#2a2a2a', x0, top, sw, sh); R('#3a3a3a', x0, gy - 4, sw, 4);
-    if (side.panels.some(p => p.down)) drawFireTruckSide(Q, x0 + Math.round(sw * 0.12), gy - 4, Math.round(sw * 0.76), 'lf', null);
+    { const L = Math.round(sw * 0.3), k = 2; ctx.save(); ctx.translate(x0 + Math.round((sw - L * k) / 2), gy - 4); ctx.scale(k, k); drawFireTruckSide(R, 0, 0, L, 'lf', null); ctx.restore(); }
+    const brick = (x, y, w, h, seed) => {                // Backsteine (versetzt), nur innerhalb x..x+w
+      R('#d8c8a8', x, y, w, h);
+      for (let yy = y, row = 0; yy < y + h; yy += 5, row++) for (let xx = x - (row % 2) * 6; xx < x + w; xx += 12) {
+        const a = Math.max(x, xx), b = Math.min(x + w, xx + 11), hh = Math.min(4, y + h - yy); if (b - a < 1 || hh < 1) continue;
+        R(((xx * 7 + yy * 3 + seed) % 5) ? FIRE_BRICK[1] : FIRE_BRICK[0], a, yy, b - a, hh); R(FIRE_BRICK[2], a, yy, b - a, 1); }
+    };
+    const wTop = top + S.bh;
     for (const p of S.panels) {
-      if (!p.down) {                                   // stehende Platte mit Rissen
-        R(C.edge, p.x, top, p.w, sh); R(C.base, p.x + 1, top + 1, p.w - 2, sh - 2); R(C.light, p.x + 1, top + 1, p.w - 2, 1); R(C.red, p.x + 1, top + 4, p.w - 2, 3);
-        for (const by of [top + 10, gy - 8]) for (const bx of [p.x + 4, p.x + p.w - 6]) R('#7a1a12', bx, by, 2, 2);   // Schrauben
-        for (let k = 0; k < p.hits; k++) { const cx = p.x + Math.round(p.w * (0.3 + 0.2 * k)), cy = top + Math.round(sh * (0.35 + 0.15 * k));
-          pixLine(R, cx, cy, cx - 9, cy - 7, 1, '#2a0905'); pixLine(R, cx, cy, cx + 8, cy - 4, 1, '#2a0905'); pixLine(R, cx, cy, cx + 3, cy + 10, 1, '#2a0905'); pixLine(R, cx + 3, cy + 10, cx - 4, cy + 16, 1, '#2a0905'); }
-      } else {                                         // kippt nach vorne und liegt dann vor der Wand
-        const k = Math.min(1, p.fall), e = k * k, ht = Math.round(sh * (1 - e)), lie = Math.round(sh * 0.28 * e);
-        if (ht > 1) { R(C.edge, p.x, gy - ht, p.w, ht); R(C.base, p.x + 1, gy - ht + 1, p.w - 2, Math.max(0, ht - 2)); }
-        if (lie > 0) { R(C.edge, p.x - 2, gy, p.w + 4, lie); R(C.joint, p.x - 1, gy + 1, p.w + 2, Math.max(0, lie - 2)); R(C.light, p.x - 1, gy, p.w + 2, 1); }
+      const fh = gy - wTop;
+      if (!p.down) {                                   // Backsteinfeld mit Rissen
+        brick(p.x, wTop, p.w, fh, p.x);
+        for (let k = 0; k < p.hits; k++) { const cx = p.x + Math.round(p.w * (0.2 + 0.15 * k)), cy = wTop + Math.round(fh * (0.25 + 0.12 * k));
+          pixLine(R, cx, cy, cx - 9, cy - 7, 1, '#2a0905'); pixLine(R, cx, cy, cx + 8, cy - 4, 1, '#2a0905'); pixLine(R, cx, cy, cx + 3, cy + 10, 1, '#2a0905'); pixLine(R, cx + 3, cy + 10, cx - 4, cy + 16, 1, '#2a0905');
+          if (k >= 2) R('#2a2a2a', cx - 2, cy - 1, 4, 3); }   // ab dem 3. Schlag fehlen schon Steine
+      } else {                                         // Steine fallen nach unten, unten liegt ein Schutthaufen vor der Wand
+        const k = Math.min(1, p.fall), rest = Math.round(fh * (1 - k) * (1 - k));
+        if (rest > 1) brick(p.x, gy - rest, p.w, rest, p.x);
+        const ph = Math.round(fh * 0.22 * k);
+        for (let i = 0; i < ph; i += 2) { const w = Math.round((p.w + 8) * (1 - i / Math.max(1, ph) * 0.6)); R(i % 4 ? '#b5442e' : '#8a7a66', p.x + Math.round((p.w - w) / 2), gy + 4 - i, w, 2); }
+        if (ph > 2) for (let i = 0; i < p.w / 4; i++) R(['#7a2218', '#d0654a', '#9a9a9a'][i % 3], p.x + (i * 13) % p.w, gy + 2 - ((i * 7) % Math.max(1, ph)), 3, 2);
       }
-      if (!p.down) R('#7a1a12', p.x + p.w - 1, top, 1, sh);
     }
+    for (const cx of S.cols) { R('#6a7076', cx, top, S.cw, sh); R('#a2a8ae', cx + 1, top, S.cw - 2, sh); R('#c4c9ce', cx + 1, top, 1, sh); }   // Säulen
+    R('#6a7076', x0, top, sw, S.bh); R('#a2a8ae', x0, top + 1, sw, S.bh - 2); R('#c4c9ce', x0, top + 1, sw, 1);                             // Träger
     // leuchtender Rahmen um die stehenden Platten
     const a = Math.abs(Math.sin(time / 260)) > .5, col = a ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.45)';
-    if (phase === 'wall') for (const p of standing()) { R(col, p.x + 2, top + 2, p.w - 4, 2); R(col, p.x + 2, gy - 4, p.w - 4, 2); R(col, p.x + 2, top + 2, 2, sh - 4); R(col, p.x + p.w - 4, top + 2, 2, sh - 4); }
+    if (phase === 'wall') for (const p of standing()) { const t2 = top + S.bh; R(col, p.x + 1, t2 + 1, p.w - 2, 2); R(col, p.x + 1, gy - 3, p.w - 2, 2); R(col, p.x + 1, t2 + 1, 2, gy - t2 - 2); R(col, p.x + p.w - 3, t2 + 1, 2, gy - t2 - 2); }
     // Hammer: liegt am Anfang links bereit, sonst schlägt er an der Stelle des Fingers zu
     const hk = hammer.t < 0.3 ? hammer.t / 0.3 : 1, ang = hammer.t > 5 ? -0.5 + Math.sin(time / 300) * 0.15 : -1.2 + Math.min(1, hk * 2.5) * 1.2;
     const hx = hammer.x - Math.round(Math.cos(ang) * 22), hyy = hammer.y - Math.round(Math.sin(ang) * 22);
     pixLine(R, hx, hyy + 18, hammer.x - 2, hammer.y + 4, 3, '#8a5a2b'); pixLine(R, hx, hyy + 18, hammer.x - 2, hammer.y + 4, 1, '#c08a4a');
     R('#444', hammer.x - 6, hammer.y - 4, 12, 9); R('#9aa0a6', hammer.x - 5, hammer.y - 3, 10, 2); R('#666', hammer.x + 4, hammer.y - 4, 2, 9);
-    if (phase === 'wall' && idle > 1.2 && standing().length) { const p = standing()[0]; drawArrow(Math.round(p.x + p.w / 2 - 3), Math.round(top - 16 - Math.abs(Math.sin(time / 220)) * 4)); }
+    if (phase === 'wall' && idle > 1.2 && standing().length) { const p = standing()[0]; drawArrow(Math.round(p.x + p.w / 2 - 3), Math.round(top + S.bh + 6 + Math.abs(Math.sin(time / 220)) * 4)); }
   }
 
   // ---------- Autokran ----------
@@ -461,7 +474,7 @@ const Anbau = (() => {
     // Hinweise
     if ((phase === 'dig' || phase === 'clear') && veh) {
       if (tip && canUnload() && tip.state === 'park' && !veh.unloading) drawArrow(Math.round(tip.x + 16), Math.round(tip.y - 12 - b));
-      else if (left === cells.length && !veh.moving && !tapGoal) { const q = cells[0]; drawArrow(q.c * G + 9, Math.round(q.r * G - 14 - b)); }
+      else if (!veh.moving && !tapGoal && fill === 0 && !loads && cells.filter(q => !q.dug).length === left) { const q = cells.find(q => !q.dug); drawArrow(q.c * G + 9, Math.round(q.r * G - 14 - b)); }
     }
     if (phase === 'pour' && !pour.holding && mixReady()) { const i = pour.sub.findIndex(f => f < 1); if (i >= 0) { const [cx, cy] = subCenter(i); drawArrow(Math.round(cx - 3), Math.round(cy - 16 - b)); } }
     if (phase === 'crane' && !busy() && !follow) {

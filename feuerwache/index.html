@@ -103,7 +103,8 @@ const Wache = (() => {
     //   Mitte: Flur über beide Etagen mit Rutschstange (hinten), Treppe an der rechten Flurwand, unten die Haustür
     //   rechts: EG hinten Einsatzzentrale (Leitstelle), vorne Bad | OG hinten Küche, vorne Aufenthaltsraum
     const fx = floor.x, fy = floor.y, fw = floor.w, fh = floor.h, fb = fy + fh, fr = fx + fw;
-    const cw = Math.max(64, Math.round(fw * 0.2)), hw = Math.round((fw - cw - 2 * T4) * 0.58);
+    const big = ((Hof.save.fire || {}).annex | 0) >= 2;   // Anbau gebaut: Halle breiter, 3 Stellplätze (Michael)
+    const cw = Math.max(64, Math.round(fw * (big ? 0.17 : 0.2))), hw = Math.round((fw - cw - 2 * T4) * (big ? 0.66 : 0.58));
     const vx = fx + hw, cx0 = vx + T4, cx1 = cx0 + cw, ux = cx1, rx = ux + T4, rw = fr - rx, hy = Math.round(fy + fh * 0.42);
     const top = room.y + WH - 2;
     const vwall = (x, gaps) => { let y0 = top; for (const [a, b] of gaps.concat([[fb + 9, fb + 9]])) { if (a > y0) walls.push({ x, y: y0, w: T4, h: Math.min(a, fb) - y0 }); y0 = b; } };
@@ -121,8 +122,13 @@ const Wache = (() => {
       vwall(ux, [[lDoor, lDoor + GAP], [rDoorLow, rDoorLow + GAP]]);  // Flur | Einsatzzentrale und Bad
       hwall(hy, rx, fr + 4, []);                                      // Einsatzzentrale | Bad
       const vw = Math.max(26, Math.min(56, Math.round(hw * 0.3))), vl = Math.max(50, Math.min(104, fh - 46));   // 2 Stellplätze (passt zu den 2 Toren außen)
-      vehicles = [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'dlk', cx: fx + Math.round(hw * 0.7) }]
-        .map((v, i) => Object.assign(v, { i, x: v.cx - (vw >> 1), y: fb - vl - 14, w: vw, h: vl, blink: 0 }));
+      vehicles = (big ? [{ key: 'rw', cx: fx + Math.round(hw * 0.17) }, { key: 'lf', cx: fx + Math.round(hw * 0.5) }, { key: 'dlk', cx: fx + Math.round(hw * 0.81) }]
+                      : [{ key: 'lf', cx: fx + Math.round(hw * 0.27) }, { key: 'dlk', cx: fx + Math.round(hw * 0.7) }])
+        .map((v, i) => Object.assign(v, { i, x: v.cx - (vw >> 1), y: fb - vl - 14, w: big ? Math.min(vw, Math.round(hw * 0.2)) : vw, h: vl, blink: 0 }));
+      if (big) for (const v of vehicles) v.x = v.cx - (v.w >> 1);
+      while (gates.length < vehicles.length) { gates.push(0); gateGoal.push(0); }
+      // Anbau: 2 Säulen, wo früher die linke Außenwand war (Michael: üblich bei Anbauten)
+      spots.pillars = big ? (px => [{ x: px - 5, y: fy + 22, w: 10, h: 10, pillar: true }, { x: px - 5, y: fb - Math.round(vl / 2) - 18, w: 10, h: 10, pillar: true }])(Math.round((vehicles[0].x + vehicles[0].w + vehicles[1].x) / 2)) : [];
       spots.gates = vehicles.map(v => ({ x: v.x - 8, w: v.w + 16 }));
       spots.hoses = { x: fx + 4, y: room.y + 2, w: Math.min(44, Math.round(hw * 0.22)), h: WH + 6 };
       spots.lockers = { x: vx - 6 - 3 * 16, y: fy, w: 3 * 16, h: 12 };   // Spinde hinten rechts in der Halle, gleich am Durchgang zur Rutschstange
@@ -136,7 +142,7 @@ const Wache = (() => {
       for (const c of spots.cabins) if (c.k === 'toilet') furn.push({ k: 'toilet', x: fr - 16, y: c.y + Math.max(1, Math.round((ch - 20) / 2)) });
       spots.sink = { x: rx + Math.max(4, Math.round((kx - rx - 24) / 2)), y: by + 2, w: 24, h: 16 };
       furn = furn.filter(o => BY[o.k]).map(o => Object.assign(o, { f: BY[o.k], w: BY[o.k].w, h: BY[o.k].h }));
-      walls.push(...vehicles, spots.lockers, spots.desk);
+      walls.push(...vehicles, spots.lockers, spots.desk, ...spots.pillars);
     } else {
       const dormDoor = fy + 44, fitDoor = Math.round(hy + T4 + (fb - hy) * 0.3);
       vwall(vx, [[dormDoor, dormDoor + GAP], [fitDoor, fitDoor + GAP]]);   // Flur | Schlafraum und Fitnessraum
@@ -238,9 +244,10 @@ const Wache = (() => {
     const holes = level === 0 ? [...spots.gates, spots.door] : [];
     let cx = x - 4; for (const o of holes.slice().sort((a, b) => a.x - b.x)) { B(OD, cx, y + h, o.x - cx, 4); B(OC, cx, y + h, o.x - cx, 2); cx = o.x + o.w; }
     B(OD, cx, y + h, x + w + 4 - cx, 4); B(OC, cx, y + h, x + w + 4 - cx, 2);
+    if (level === 0) for (const p of spots.pillars || []) { B('rgba(0,0,0,.25)', p.x + 2, p.y + 3, p.w, p.h); B('#6a7076', p.x, p.y, p.w, p.h); B('#a2a8ae', p.x + 1, p.y + 1, p.w - 2, p.h - 2); B('#c4c9ce', p.x + 1, p.y + 1, p.w - 2, 1); }   // Säulen aus Beton
     if (level === 0) { const d = spots.door; B('#c9b48a', d.x + 4, y + h, d.w - 8, 4); for (const g of spots.gates) B('#5a5a5a', g.x, y + h + 3, g.w, 3); }   // Schwelle, Torschienen
     else { B('#9fe3ff', x + Math.round(w * 0.2), y + h, 30, 2); B('#9fe3ff', x + Math.round(w * 0.7), y + h, 30, 2); }
-    for (const r of walls.filter(r => !r.key && !r.k && r !== spots.lockers && r !== spots.bench && r !== spots.desk)) { B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2)); }
+    for (const r of walls.filter(r => !r.key && !r.k && !r.pillar && r !== spots.lockers && r !== spots.bench && r !== spots.desk)) { B('rgba(0,0,0,.18)', r.x + 2, r.y + 2, r.w, r.h); B(WD, r.x, r.y, r.w, r.h); B(WC, r.x, r.y, Math.max(1, r.w - 2), Math.max(1, r.h - 2)); }
   }
 
   // ---------- Zeichnen der Dinge ----------
@@ -572,7 +579,7 @@ const Wache = (() => {
       const gi = spots.gates.findIndex(g => x > g.x - 4 && x < g.x + g.w + 4 && y > room.y + room.h - 14 && y < room.y + room.h + 12);
       if (gi >= 0) { gateGoal[gi] = gateGoal[gi] ? 0 : 1; sfx.click(); for (let k = 0; k < 6; k++) tone(180 + k * 10, .05, 'square', .03, k * .08); setWord('rolltor'); sayWord('rolltor'); return true; }
       if (inR(spots.hoses, x, y, 4)) { hoseWob = 1.5; setWord('hoses'); sayWord('hoses'); sfx.clod(); return true; }
-      if (annex && !alarm && inR(spots.mon, x, y, 4)) { walkTo(spots.desk.x + spots.desk.w / 2, spots.desk.y + spots.desk.h + 10); return true; }   // Anbau-Bild antippen = hinlaufen
+      if (annex && !alarm && inR(spots.mon, x, y, 8)) { annexGo(); return true; }   // Anbau-Bild antippen = sofort zur Baustelle (Michael: Adrian wartet nicht)
       if (inR(spots.desk, x, y, 6) || inR({ x: spots.desk.x, y: spots.desk.y - 8, w: spots.desk.w, h: 10 }, x, y, 2)) { radio(); return true; }
     }
     if (level === 1) {                                // Fernseher antippen: sitzend = neue Sendung, sonst aufs Sofa gehen
@@ -622,7 +629,8 @@ const Wache = (() => {
     setWord(vs[0].key); sayWord(vs[0].key);
   }
   // Vor dem Anbau-Bild stehen: los zum Bau-Minispiel „Anbau“ (draußen an der Wache)
-  function annexGo() { annexGuide = 0; annexAt = 1; sfx.enter(); setWord('annex'); say('Auf zur Baustelle!'); setTimeout(() => { location.href = '../baustelle/spiele/anbau/index.html?ort=wache'; }, 1400); }
+  let annexGoing = false;
+  function annexGo() { if (annexGoing) return; annexGoing = true; annexGuide = 0; annexAt = 1; sfx.enter(); setWord('annex'); say('Auf zur Baustelle!'); setTimeout(() => { location.href = '../baustelle/spiele/anbau/index.html?ort=wache'; }, 900); }
   function tatuta() { for (let k = 0; k < 4; k++) { tone(466, .32, 'square', .05, k * .7); tone(622, .32, 'square', .05, k * .7 + .35); } }
   function radio() { radioT = 2; setWord('radio'); sayWord('radio'); for (let k = 0; k < 10; k++) tone(300 + Math.random() * 900, .04, 'sawtooth', .02, k * .05); tone(1200, .08, 'sine', .04, .6); }
 

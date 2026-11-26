@@ -250,8 +250,7 @@ const Anbau = (() => {
     p.hits++; hammer = { x: clamp(x, p.x + 6, p.x + p.w - 6), y: hy, t: 0 }; shake = 0.15; idle = 0;
     tone(150, .14, 'square', .13, 0, 80); noise(250, 900, .14, 2);
     for (let k = 0; k < 12; k++) spawn(hammer.x + rnd(-6, 6), hy + rnd(-6, 6), rnd(-40, 40), rnd(-40, 5), rnd(.4, .8), pick(['#cfc8b8', '#b5a58a', '#e0604c']), 60);
-    if (p.hits >= HITS) setTimeout(() => { p.down = true; sfx.timber(); shake = 0.4;
-      for (let k = 0; k < 30; k++) spawn(p.x + rnd(0, p.w), side.gy - rnd(0, side.sh * 0.6), rnd(-30, 30), rnd(-40, -5), rnd(.6, 1.1), pick(['#cfc8b8', '#b5a58a', 'rgba(220,210,190,.8)']), 40);
+    if (p.hits >= HITS) setTimeout(() => { p.down = true; tone(220, .5, 'triangle', .08, 0, 120);   // knackt und kippt nach außen
       const n = side.panels.filter(q => q.down).length; setWord('hammer', n + '/3');
       if (n === 3) { setTimeout(() => say('Super! Die Wand ist weg.'), 700); setTimeout(() => startTurn('front', startClear), 2600); } }, 200);
   }
@@ -287,16 +286,24 @@ const Anbau = (() => {
         for (let k = 0; k < p.hits; k++) { const cx = p.x + Math.round(p.w * (0.2 + 0.15 * k)), cy = wTop + Math.round(fh * (0.25 + 0.12 * k));
           pixLine(R, cx, cy, cx - 9, cy - 7, 1, '#2a0905'); pixLine(R, cx, cy, cx + 8, cy - 4, 1, '#2a0905'); pixLine(R, cx, cy, cx + 3, cy + 10, 1, '#2a0905'); pixLine(R, cx + 3, cy + 10, cx - 4, cy + 16, 1, '#2a0905');
           if (k >= 2) R('#2a2a2a', cx - 2, cy - 1, 4, 3); }   // ab dem 3. Schlag fehlen schon Steine
-      } else {                                         // Steine fallen nach unten, unten liegt ein Schutthaufen vor der Wand
-        const k = Math.min(1, p.fall), rest = Math.round(fh * (1 - k) * (1 - k));
-        if (rest > 1) brick(p.x, gy - rest, p.w, rest, p.x);
-        const ph = Math.round(fh * 0.22 * k);
-        for (let i = 0; i < ph; i += 2) { const w = Math.round((p.w + 8) * (1 - i / Math.max(1, ph) * 0.6)); R(i % 4 ? '#b5442e' : '#8a7a66', p.x + Math.round((p.w - w) / 2), gy + 4 - i, w, 2); }
-        if (ph > 2) for (let i = 0; i < p.w / 4; i++) R(['#7a2218', '#d0654a', '#9a9a9a'][i % 3], p.x + (i * 13) % p.w, gy + 2 - ((i * 7) % Math.max(1, ph)), 3, 2);
       }
     }
+    const fallen = [];                                 // umgefallene Felder werden VOR den Säulen gezeichnet (sie kippen nach außen, zum Betrachter)
     for (const cx of S.cols) { R('#6a7076', cx, top, S.cw, sh); R('#a2a8ae', cx + 1, top, S.cw - 2, sh); R('#c4c9ce', cx + 1, top, 1, sh); }   // Säulen
     R('#6a7076', x0, top, sw, S.bh); R('#a2a8ae', x0, top + 1, sw, S.bh - 2); R('#c4c9ce', x0, top + 1, sw, 1);                             // Träger
+    for (const p of S.panels) if (p.down) {             // Feld kippt nach außen: wird oben kürzer und ragt unten nach vorne (größer, vor den Säulen); am Boden zerbricht es zum Schutthaufen
+      const fh = gy - wTop, k = Math.min(1, p.fall);
+      if (k < 0.7) {
+        const t = k / 0.7, a = t * t * Math.PI / 2, up = Math.round(fh * Math.cos(a)), front = Math.round(fh * 0.35 * Math.sin(a)), grow = Math.round(p.w * 0.12 * Math.sin(a));
+        if (up > 1) brick(p.x - Math.round(grow / 2), gy - up, p.w + grow, up, p.x);
+        if (front > 1) { brick(p.x - grow, gy, p.w + 2 * grow, front, p.x + 3); R('rgba(0,0,0,.25)', p.x - grow, gy, p.w + 2 * grow, 1); }
+      } else {
+        const t = Math.min(1, (k - 0.7) / 0.3), ph = Math.round(fh * 0.24), w0 = p.w + 14;
+        for (let i = 0; i < ph; i += 2) { const w = Math.round(w0 * (1 - i / Math.max(1, ph) * 0.65)); R(i % 4 ? '#b5442e' : '#8a7a66', p.x + Math.round((p.w - w) / 2), gy + 10 - i, w, 2); }
+        for (let i = 0; i < p.w / 3; i++) R(['#7a2218', '#d0654a', '#9a9a9a', '#d8c8a8'][i % 4], p.x - 6 + (i * 13) % (p.w + 12), gy + 10 - ((i * 7) % Math.max(1, ph)), 4, 3);
+        if (t < 1) brick(p.x - Math.round(p.w * 0.12), gy, p.w + Math.round(p.w * 0.24), Math.round(fh * 0.35 * (1 - t)), p.x + 3);   // Platte zerbröselt
+      }
+    }
     // leuchtender Rahmen um die stehenden Platten
     const a = Math.abs(Math.sin(time / 260)) > .5, col = a ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.45)';
     if (phase === 'wall') for (const p of standing()) { const t2 = top + S.bh; R(col, p.x + 1, t2 + 1, p.w - 2, 2); R(col, p.x + 1, gy - 3, p.w - 2, 2); R(col, p.x + 1, t2 + 1, 2, gy - t2 - 2); R(col, p.x + p.w - 3, t2 + 1, 2, gy - t2 - 2); }
@@ -420,7 +427,9 @@ const Anbau = (() => {
     idle += dt; shake = Math.max(0, shake - dt);
     if (turn) { turn.t += dt; if (turn.t >= 0.45 && !turn.swapped) { turn.swapped = true; view = turn.to; if (turn.then) turn.then(); } if (turn.t >= 0.9) turn = null; }
     if (hammer) hammer.t += dt;
-    if (side) for (const p of side.panels) if (p.down) p.fall = Math.min(1, p.fall + dt * 2.2);
+    if (side) for (const p of side.panels) if (p.down) { const a = p.fall; p.fall = Math.min(1, p.fall + dt * 1.3);
+      if (a < 0.7 && p.fall >= 0.7) { sfx.timber(); noise(120, 500, .2, 5); shake = 0.45;        // schlägt draußen auf
+        for (let k = 0; k < 34; k++) spawn(p.x + rnd(-8, p.w + 8), side.gy + rnd(0, 14), rnd(-50, 50), rnd(-60, -10), rnd(.6, 1.2), pick(['#cfc8b8', '#b5a58a', 'rgba(220,210,190,.8)', '#b5442e']), 60); } }
     if (vexit) { vexit.x -= 90 * dt; if (vexit.x < -40) vexit = null; }
     if ((phase === 'dig' || phase === 'clear') && veh) updVeh(dt);
     if (phase === 'pour') updPour(dt); else if (pour && pour.mixer.x < W + 10 && pour.mixer.state === 'leave') pour.mixer.x += 120 * dt;

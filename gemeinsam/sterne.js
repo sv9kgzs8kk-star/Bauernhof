@@ -166,7 +166,7 @@
     if (q.has('wache')) { Hof.save.house.towerDone = true; Hof.save.fire = Object.assign(Hof.save.fire || {}, { step: Math.max(0, Math.min(5, parseInt(q.get('wache'), 10) || 0)) }); Hof.persist(); }   // Feuerwache: freischalten und Bauschritt setzen
     if (q.has('einsaetze')) { const n = parseInt(q.get('einsaetze'), 10) || 0, all = ['katze', 'muell', 'haus', 'baum', 'unfall', 'ball', 'ast', 'klein'];   // Feuerwache: so viele Einsätze gelten als geschafft (Anbau wieder zu)
       Hof.save.fire = Object.assign(Hof.save.fire || {}, { done: all.slice(0, Math.max(0, n)), annex: 0 }); Hof.persist(); }
-    if (q.has('anbau')) { Hof.save.house.towerDone = true; Hof.save.fire = Object.assign(Hof.save.fire || {}, { step: 5, unlocked: true, annex: 1, annexStep: Math.max(0, Math.min(2, parseInt(q.get('anbau'), 10) || 0)) }); Hof.persist(); }   // Anbau: Teil 0–2 setzen
+    if (q.has('anbau')) { Hof.save.house.towerDone = true; Hof.save.fire = (n => Object.assign(Hof.save.fire || {}, { step: 5, unlocked: true, annex: n >= 3 ? 2 : 1, annexStep: Math.min(2, n) }))(Math.max(0, Math.min(3, parseInt(q.get('anbau'), 10) || 0))); Hof.persist(); }   // Anbau: Teil 0–2 setzen, 3 = Anbau fertig
     if (q.has('haus')) { Hof.save.home = { unlocked: q.get('haus') === '1', items: [] }; Hof.persist(); }   // Wohnhaus: ?haus=0 zu und leer, ?haus=1 offen und leer
   }
 })();

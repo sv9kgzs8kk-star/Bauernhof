@@ -3,7 +3,7 @@
    Fahrzeuge von oben, Werkzeuge, Katze, Feuerwehranzug, Liste der Einsätze
    ===================================================================== */
 Object.assign(WORDS, {
-  annex: ['ANBAU', 'Anbau'],
+  annex: ['ANBAU', 'Anbau'], winch: ['SEILWINDE', 'Seilwinde'], ditch: ['AUTO IM GRABEN', 'Auto im Graben'], hook: ['HAKEN', 'Haken'],
   lf: ['LÖSCHFAHRZEUG', 'Löschfahrzeug'], dlk: ['DREHLEITER', 'Drehleiter'], basket: ['KORB', 'Korb'], rw: ['RÜSTWAGEN', 'Rüstwagen'], alarm: ['ALARM', 'Alarm'], gear: ['FEUERWEHRANZUG', 'Feuerwehranzug'],
   ladder: ['LEITER', 'Leiter'], hose: ['SCHLAUCH', 'Schlauch'], cutter: ['RETTUNGSSCHERE', 'Rettungsschere'], chainsaw: ['KETTENSÄGE', 'Kettensäge'],
   cat: ['KATZE', 'Katze'], cattree: ['KATZE IM BAUM', 'Katze im Baum'], thanks: ['DANKE', 'Danke'],
@@ -19,8 +19,11 @@ const EINSAETZE = {
   ast: { word: 'astcar', veh: ['lf'], tool: 'chainsaw', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },    // Ast auf Auto: erst Kettensäge, dann Rettungsschere (Fahrerin eingeklemmt)
   klein: { word: 'smallfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Haus brennt: ein Fenster, dauert länger als die Mülltonne
   muell: { word: 'binfire', veh: ['lf'], tool: 'hose', tools: ['ladder', 'hose', 'cutter', 'chainsaw'] },   // kleines Feuer: Mülltonne am Gehweg (Löschfahrzeug)
+  // Runde 2 (wave 2, Michael 26.11.): erst nach dem Anbau (Rüstwagen in der Halle); 6 Einsätze, danach Treppe und Landeplatz
+  graben: { word: 'ditch', veh: ['rw'], tool: 'winch', tools: ['winch', 'cutter', 'chainsaw', 'hose'], wave: 2 },   // Auto im Graben: Seil einhaken, Winde drehen
 };
 const EINSATZ_KEYS = Object.keys(EINSAETZE);
+const einsatzWave = k => EINSAETZE[k].wave || 1;      // Runde 1 = die ersten 8 Einsätze (schalten den Anbau frei), Runde 2 = nach dem Anbau
 // Feuerwehranzug fürs Kind (KID aus moebel.js): gelber Helm, dunkelblaue Jacke mit gelbem Streifen
 const GEAR_PAL = { h: '#ffd23f', r: '#24346b', w: '#ffd23f', b: '#24346b', n: '#111' };
 
@@ -38,8 +41,13 @@ function drawFireTruckSide(F, x, by, L, key, on = false, deployed = false) {
   F('#7a1a12', x, bodyTop, L - 25, by - 9 - bodyTop); F('#c0392b', x + 1, bodyTop + 1, L - 27, by - 11 - bodyTop); F('#e0604c', x + 1, bodyTop + 1, L - 27, 1);
   if (!dlk) { const n = 3, pw = Math.floor((L - 33) / n);                                  // Rollläden der Geräteräume
     for (let i = 0; i < n; i++) { const px = x + 3 + i * (pw + 1); F('#9aa0a6', px, bodyTop + 4, pw, by - 17 - bodyTop); for (let yy = bodyTop + 5; yy < by - 13; yy += 2) F('#c8ccd0', px, yy, pw, 1); F('#555', px + Math.round(pw / 2) - 1, by - 15, 3, 1); }
-    F('#c8ccd0', x + 3, bodyTop - 3, L - 31, 1); F('#c8ccd0', x + 3, bodyTop - 1, L - 31, 1);   // Steckleiter auf dem Dach
-    for (let lx = x + 5; lx < x + L - 29; lx += 5) F('#9aa0a6', lx, bodyTop - 3, 1, 3);
+    if (key === 'rw') {                                 // Rüstwagen: Lichtmast (eingeklappt) und Dachkasten statt Steckleiter
+      F('#555', x + 4, bodyTop - 4, L - 36, 4); F('#8a8f94', x + 5, bodyTop - 3, L - 38, 2);
+      F('#9aa0a6', x + L - 34, bodyTop - 8, 2, 8); F('#333', x + L - 37, bodyTop - 10, 8, 3); F('#fff6c0', x + L - 36, bodyTop - 9, 6, 1);
+    } else {
+      F('#c8ccd0', x + 3, bodyTop - 3, L - 31, 1); F('#c8ccd0', x + 3, bodyTop - 1, L - 31, 1);   // Steckleiter auf dem Dach
+      for (let lx = x + 5; lx < x + L - 29; lx += 5) F('#9aa0a6', lx, bodyTop - 3, 1, 3);
+    }
   } else { for (let i = 0; i < 3; i++) { const px = x + 3 + i * 16; F('#b8bcc0', px, bodyTop + 3, 14, by - 16 - bodyTop); F('#555', px + 6, by - 15, 3, 1); } }   // Geräteklappen
   F('#ffd23f', x, by - 13, L - 25, 1); F('#f2f2f2', x, by - 12, L - 25, 1);               // Warnstreifen
   F('#555', x - 1, by - 12, 2, 3);                                                         // Trittstufe hinten
@@ -51,6 +59,7 @@ function drawFireTruckSide(F, x, by, L, key, on = false, deployed = false) {
   F('#1c2430', cx + 3, ct + 3, 12, 7); F('#3d8fc9', cx + 4, ct + 4, 10, 5); F('#6cc4f0', cx + 4, ct + 4, 4, 5); F('#d6f2ff', cx + 9, ct + 4, 1, 3);   // Seitenfenster
   F('#7a1a12', cx + 2, ct + 3, 1, by - 12 - ct - 3); F('#7a1a12', cx + 16, ct + 3, 1, by - 12 - ct - 3); F('#333', cx + 12, by - 17, 3, 1);   // Tür
   F('#f2f2f2', cx + 3, by - 15, 12, 1);
+  if (key === 'rw') { F('#3a3a3a', x + L - 3, by - 13, 6, 6); F('#9aa0a6', x + L - 2, by - 12, 4, 4); F('#555', x + L - 1, by - 11, 2, 2); }   // Seilwinde vorne (rwWinch)
   F('#3a3a3a', x + L - 3, by - 12, 3, 3); F('#fff6c0', x + L - 2, by - 16, 2, 3); F('#e03b3b', x, by - 17, 1, 3);   // Stoßstange, Scheinwerfer, Rücklicht
   // Blaulichter: Balken auf dem Fahrerhaus, eins hinten
   const lamp = (lx, ly, lit) => { F('#163a63', lx, ly, 6, 3); F(lit ? '#5cc0ff' : '#1c5e9e', lx + 1, ly, 4, 2); if (lit) F('rgba(92,192,255,.35)', lx - 2, ly - 2, 10, 6); };
@@ -65,6 +74,9 @@ function drawFireTruckSide(F, x, by, L, key, on = false, deployed = false) {
   // Räder
   for (const wx of dlk ? [x + 11, x + 24, x + L - 15] : [x + 14, x + L - 15]) { F('#1b1b1b', wx - 5, by - 11, 10, 11); F('#1b1b1b', wx - 6, by - 10, 12, 9); F('#9aa0a6', wx - 2, by - 7, 4, 4); F('#555', wx - 1, by - 6, 2, 2); }
 }
+
+// Seilwinde des Rüstwagens (Seitenansicht): hier kommt das Seil heraus
+const rwWinch = (x, by, L) => ({ x: Math.round(x) + L + 2, y: Math.round(by) - 10 });
 
 // Feuerwehrauto von oben. x0,y0 = linke obere Ecke, L = Länge, Wd = Breite.
 // dir 'down': Fahrerhaus unten (steht in der Halle vor dem Tor), 'right': fährt nach rechts.
@@ -125,7 +137,10 @@ function drawFireTruck(F, x0, y0, L, Wd, key, dir = 'down', on = false, glow = f
 // Werkzeug-Bild (16×16 Raster, Pixelgröße s) für die Werkzeugleiste
 function drawToolIcon(F, x, y, s, key) {
   const P = (c, a, b, w, h) => F(c, x + a * s, y + b * s, w * s, h * s);
-  if (key === 'ladder') { P('#7f8388', 3, 0, 2, 16); P('#7f8388', 11, 0, 2, 16); P('#c8ccd0', 3, 0, 1, 16); P('#c8ccd0', 11, 0, 1, 16); for (let b = 2; b < 16; b += 4) P('#c8ccd0', 5, b, 6, 2); }
+  if (key === 'winch') {                               // Seilwinde: Trommel mit Seil und Haken
+    P('#555', 1, 3, 9, 10); P('#9aa0a6', 2, 4, 7, 8); for (let b = 5; b < 12; b += 2) P('#6a6e72', 2, b, 7, 1); P('#333', 4, 1, 3, 2); P('#333', 4, 13, 3, 2);
+    P('#333', 10, 7, 4, 1); P('#7f8388', 13, 7, 1, 6); P('#7f8388', 11, 12, 3, 1); P('#7f8388', 11, 10, 1, 2);
+  } else if (key === 'ladder') { P('#7f8388', 3, 0, 2, 16); P('#7f8388', 11, 0, 2, 16); P('#c8ccd0', 3, 0, 1, 16); P('#c8ccd0', 11, 0, 1, 16); for (let b = 2; b < 16; b += 4) P('#c8ccd0', 5, b, 6, 2); }
   else if (key === 'hose') {
     for (let b = 0; b < 16; b++) for (let a = 0; a < 16; a++) { const d = Math.hypot(a - 7.5, b - 7.5); if (d < 7.5 && d > 2.5) P(Math.floor(d) % 2 ? '#e8e2d0' : '#c8bfa4', a, b, 1, 1); }
     P('#555', 6, 6, 4, 4); P('#9aa0a6', 13, 12, 3, 3); P('#e8e2d0', 11, 11, 3, 2);
@@ -180,6 +195,9 @@ function drawEinsatzIcon(F, x, y, key) {
     F('#2e9e5b', x + 2, y + 13, 24, 7); F('#2e9e5b', x + 7, y + 8, 13, 6); F('#9fe3ff', x + 9, y + 9, 9, 3); F('#222', x + 5, y + 19, 4, 4); F('#222', x + 19, y + 19, 4, 4);   // Auto
     F('#6b4423', x + 20, y + 2, 10, 3); F('#6b4423', x + 12, y + 5, 10, 3); F('#4a2e14', x + 12, y + 7, 10, 1);   // Ast quer übers Dach
     F('#24561f', x + 3, y + 2, 11, 8); F('#3f8f37', x + 5, y + 3, 7, 5);   // Blätter
+  } else if (key === 'graben') {                       // Auto schräg im Graben
+    F('#3f8f37', x, y + 14, 30, 10); F('#4a3a2a', x + 8, y + 16, 18, 8); F('#3a6f9a', x + 10, y + 21, 14, 2);   // Wiese, Graben mit Wasser
+    F('#2a7fd0', x + 6, y + 9, 20, 7); F('#2a7fd0', x + 10, y + 5, 10, 5); F('#9fe3ff', x + 12, y + 6, 6, 3); F('#2a7fd0', x + 22, y + 14, 6, 4); F('#222', x + 7, y + 15, 4, 4);   // Auto, Nase unten
   } else if (key === 'muell') {
     F('#4a4d50', x + 9, y + 10, 13, 14); F('#6a6e72', x + 10, y + 11, 11, 12); F('#333', x + 8, y + 9, 15, 2);   // Tonne
     F('#e74c3c', x + 10, y + 1, 11, 8); F('#ff8a3c', x + 12, y + 3, 7, 6); F('#ffd23f', x + 14, y + 5, 3, 4); F('#e74c3c', x + 13, y - 2, 4, 3);   // Flammen

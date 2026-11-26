@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125n">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261126a">
 <title>Einsatz</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="alarm" style="pointer-events:auto"><span class="word">ALARM</span></div>
 </div>
 <script>window.NO_PAD = true;</script>
-<script src="../../../gemeinsam/sterne.js?v=20261125n"></script>
-<script src="../../../gemeinsam/basis.js?v=20261125n"></script>
-<script src="../../../gemeinsam/moebel.js?v=20261125n"></script>
-<script src="../../../gemeinsam/bau.js?v=20261125n"></script>
-<script src="../../../gemeinsam/feuerwehr.js?v=20261125n"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261126a"></script>
+<script src="../../../gemeinsam/basis.js?v=20261126a"></script>
+<script src="../../../gemeinsam/moebel.js?v=20261126a"></script>
+<script src="../../../gemeinsam/bau.js?v=20261126a"></script>
+<script src="../../../gemeinsam/feuerwehr.js?v=20261126a"></script>
 <script>
 /* =====================================================================
    FEUERWEHR-EINSATZ (eine Szene je Einsatz, ?e=katze). Kommt aus der Wache, geht danach zurück (#einsatz).
@@ -474,7 +474,7 @@ const Einsatz = (() => {
         kid.x = p.x; kid.y = p.y; kid.step = t < 1.3; }
         if (t > 1.4) { cat.on = 'girl'; go('thanks'); say('Danke!'); confetti(); sfx.win();
           for (let k = 0; k < 6; k++) hearts.push({ x: girl.x + rnd(-12, 12), y: girl.y - 30 - rnd(0, 10), t: -k * 0.15 });
-          if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
+          if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(KEY); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
       case 'cut': {                                   // Kind läuft zum gedrückten Punkt, Schere schließt sich langsam
         const c = holdPt || cuts.find(c => c.p > 0 && c.p < 1) || null;
         if (c) { const tx = CC().x - 8; kid.x = approach(kid.x, tx, 90 * dt); kid.y = approach(kid.y, CC().by + 14, 90 * dt); kid.step = Math.abs(kid.x - tx) > 1; }   // links neben der Tür, damit man die Punkte sieht
@@ -493,7 +493,7 @@ const Einsatz = (() => {
             break; }
         if (t > 1.3 && !starGiven) { starGiven = true; say('Danke, liebe Feuerwehr!'); sfx.win(); confetti(); owner.x = driver.x; owner.y = driver.y;
           for (let k2 = 0; k2 < 6; k2++) hearts.push({ x: driver.x + rnd(-12, 12), y: driver.y - 30 - rnd(0, 10), t: -k2 * 0.15 });
-          Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1700); }
+          Hof.addStars(1); Hof.fireMission(KEY); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1700); }
         if (t > 1.6) go('thanks'); break; }
       case 'asaw': {                                  // Ast: Kind läuft unter die Linie, Säge brummt, Späne fliegen
         if (walkTo) { kid.x = approach(kid.x, walkTo.x, 90 * dt); kid.y = approach(kid.y, walkTo.y, 90 * dt); kid.step = Math.abs(kid.x - walkTo.x) > 1 || Math.abs(kid.y - walkTo.y) > 1; }
@@ -575,7 +575,7 @@ const Einsatz = (() => {
       case 'craneback': { const b = towBase(); crane.tip.x = approach(crane.tip.x, b.x - 8, 60 * dt); crane.tip.y = approach(crane.tip.y, b.y - 10, 60 * dt);
         if (t > 1) { go('towgo'); tone(330, .2, 'square', .03); } break; }
       case 'towgo': { const v = 100 * dt; tow.x += v; parked.x += v; if (crane) crane.tip.x += v;
-        if (tow.x > W + 10 && !starGiven) { starGiven = true; say('Alles erledigt! Super gemacht!'); sfx.win(); confetti(); Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 2000); }
+        if (tow.x > W + 10 && !starGiven) { starGiven = true; say('Alles erledigt! Super gemacht!'); sfx.win(); confetti(); Hof.addStars(1); Hof.fireMission(KEY); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 2000); }
         if (starGiven && t > 0 && tow.x > W + 60) go('thanks'); break; }
       case 'saw': {                                   // Kind läuft zur gerade gesägten Linie, Säge brummt, Späne fliegen
         if (walkTo != null) { kid.x = approach(kid.x, walkTo, 90 * dt); kid.y = approach(kid.y, trunk.y - 10, 90 * dt); kid.step = Math.abs(kid.x - walkTo) > 1; }
@@ -596,7 +596,7 @@ const Einsatz = (() => {
         break; }
       case 'carGo': car.x -= 110 * dt;                   // das Auto fährt vorbei, hupt und bedankt sich
         if (!starGiven && t > 1.2) { starGiven = true; sfx.honk(); say('Danke!'); for (let k = 0; k < 6; k++) hearts.push({ x: car.x + rnd(-10, 10), y: car.y - 30 - rnd(0, 10), t: -k * 0.15 });
-          Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); }
+          Hof.addStars(1); Hof.fireMission(KEY); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); }
         if (car.x < -60) go('thanks'); break;
       case 'hdown': {                                  // Kind und Person klettern runter, gehen auf den Gehweg rechts neben der Drehleiter, Danke
         const vs = { x: Math.min(W - 16, truck2.park + L + 18), y: roadY - 4 }, ft = foot();
@@ -628,7 +628,7 @@ const Einsatz = (() => {
         break; }
       case 'out': if (t > 1.6) { go('thanks'); say(HAUS || KLEIN ? 'Danke, liebe Feuerwehr!' : 'Danke!');   // der Nachbar bedankt sich
           for (let k = 0; k < 6; k++) hearts.push({ x: owner.x + rnd(-12, 12), y: owner.y - 30 - rnd(0, 10), t: -k * 0.15 });
-          if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
+          if (!starGiven) { starGiven = true; Hof.addStars(1); Hof.fireMission(KEY); setTimeout(() => { sfx.unlock(); say('Ein Stern für dich'); }, 1600); } } break;
       case 'thanks': if (t > (AST ? 1 : 3.2)) { go('back'); truck.deployed = false; if (mate) mate.spray = false; backFrom = { x: kid.x, y: kid.y }; if (mate) mate.from = { x: mate.x, y: mate.y }; } break;
       case 'back': { const p = lerp(backFrom || { x: girl.x + 26, y: girl.y }, door(), clamp(t / 1.2, 0, 1)); kid.x = p.x; kid.y = p.y; kid.step = true;
           if (mate && mate.show) { const q = lerp(mate.from, door(), clamp(t / 1.2, 0, 1)); mate.x = q.x; mate.y = q.y; mate.step = true; if (t > 1.25) mate.show = false; } }

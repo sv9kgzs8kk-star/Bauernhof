@@ -121,9 +121,15 @@
     Hof.load(); if (!Hof.save.fire || typeof Hof.save.fire !== 'object') Hof.save.fire = { step: 5 }; Hof.save.fire.unlocked = true; Hof.persist();
   };
 
-  // Feuerwehr-Einsatz geschafft: mitzählen (fire.missions, fehlt = 0)
-  Hof.fireMission = function () {
-    Hof.load(); if (!Hof.save.fire || typeof Hof.save.fire !== 'object') Hof.save.fire = { step: 5 }; Hof.save.fire.missions = (Hof.save.fire.missions | 0) + 1; Hof.persist();
+  // Feuerwehr-Einsatz geschafft: mitzählen (fire.missions, fehlt = 0) und merken, welcher (fire.done = Liste der Schlüssel, fehlt = [])
+  Hof.fireMission = function (key) {
+    Hof.load(); if (!Hof.save.fire || typeof Hof.save.fire !== 'object') Hof.save.fire = { step: 5 }; Hof.save.fire.missions = (Hof.save.fire.missions | 0) + 1;
+    if (key) { if (!Array.isArray(Hof.save.fire.done)) Hof.save.fire.done = []; if (!Hof.save.fire.done.includes(key)) Hof.save.fire.done.push(key); }
+    Hof.persist();
+  };
+  // Anbau der Feuerwache freigeschaltet (alle Einsätze einmal geschafft); fire.annex fehlt = 0. Bleibt freigeschaltet, auch wenn neue Einsätze dazukommen.
+  Hof.openFireAnnex = function () {
+    Hof.load(); if (!Hof.save.fire || typeof Hof.save.fire !== 'object') Hof.save.fire = { step: 5 }; if (!(Hof.save.fire.annex > 0)) { Hof.save.fire.annex = 1; Hof.persist(); return true; } return false;
   };
 
   // Möbel im Wohnhaus speichern: Liste [{ k, x, y }] (x/y je 0–1 im Zimmer), gleiche Möbel dürfen mehrfach vorkommen
@@ -150,6 +156,8 @@
     if (q.has('haustyp')) { const t = Math.max(0, parseInt(q.get('haustyp'), 10) || 0); Object.assign(Hof.save.house, { type: t, maxType: Math.max(t, Hof.save.house.maxType | 0) }); Hof.persist(); }   // Haustyp (0 klein, 1 groß)
     if (q.has('moebel')) { Hof.save.home.items = [{ k: 'bed', x: .9, y: .1 }, { k: 'sofa', x: .1, y: .5 }, { k: 'tv', x: .2, y: .05 }, { k: 'tub', x: .9, y: .9 }]; Hof.persist(); }   // ein paar Möbel fürs Umzug-Testen
     if (q.has('wache')) { Hof.save.house.towerDone = true; Hof.save.fire = Object.assign(Hof.save.fire || {}, { step: Math.max(0, Math.min(5, parseInt(q.get('wache'), 10) || 0)) }); Hof.persist(); }   // Feuerwache: freischalten und Bauschritt setzen
+    if (q.has('einsaetze')) { const n = parseInt(q.get('einsaetze'), 10) || 0, all = ['katze', 'muell', 'haus', 'baum', 'unfall', 'ball', 'ast', 'klein'];   // Feuerwache: so viele Einsätze gelten als geschafft (Anbau wieder zu)
+      Hof.save.fire = Object.assign(Hof.save.fire || {}, { done: all.slice(0, Math.max(0, n)), annex: 0 }); Hof.persist(); }
     if (q.has('haus')) { Hof.save.home = { unlocked: q.get('haus') === '1', items: [] }; Hof.persist(); }   // Wohnhaus: ?haus=0 zu und leer, ?haus=1 offen und leer
   }
 })();

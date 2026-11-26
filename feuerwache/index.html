@@ -616,12 +616,12 @@ const Wache = (() => {
     let known = null; try { known = JSON.parse(localStorage.getItem('wache.alle') || 'null'); } catch (e) {}
     if (!Array.isArray(known)) known = ['katze', 'haus', 'ball', 'unfall', 'baum', 'muell'];   // Stand vor dem Merken (#85)
     const fresh = KEYS.filter(k => !known.includes(k) && !deck.includes(k));
-    if (fresh.length && deck.length) deck.unshift(...fresh);   // neuer Einsatz (neu eingebaut) kommt als Nächstes dran, danach normal gemischt
     if (!deck.length) {
-      deck = KEYS.slice();
+      deck = KEYS.filter(k => !fresh.includes(k));
       for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
       if (deck.length > 1 && deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];   // auch über die Mischgrenze nie zweimal derselbe
     }
+    if (fresh.length) deck.unshift(...fresh);   // neuer (oder neu verfügbarer) Einsatz kommt als Nächstes dran, danach normal gemischt
     const key = deck.shift();
     try { localStorage.setItem('wache.stapel', JSON.stringify(deck)); localStorage.setItem('wache.letzter', key); localStorage.setItem('wache.alle', JSON.stringify(KEYS)); } catch (e) {}
     return key;

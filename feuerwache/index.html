@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261126c">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261126d">
 <title>Feuerwache</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261126c"></script>
-<script src="../gemeinsam/basis.js?v=20261126c"></script>
-<script src="../gemeinsam/moebel.js?v=20261126c"></script>
-<script src="../gemeinsam/bau.js?v=20261126c"></script>
-<script src="../gemeinsam/feuerwehr.js?v=20261126c"></script>
+<script src="../gemeinsam/sterne.js?v=20261126d"></script>
+<script src="../gemeinsam/basis.js?v=20261126d"></script>
+<script src="../gemeinsam/moebel.js?v=20261126d"></script>
+<script src="../gemeinsam/bau.js?v=20261126d"></script>
+<script src="../gemeinsam/feuerwehr.js?v=20261126d"></script>
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
@@ -82,7 +82,7 @@ const Wache = (() => {
     const qa = +new URLSearchParams(location.search).get('alarm'); if (qa > 0) { ALARM_FIRST = ALARM_NEXT = [qa, qa]; nextAlarm = qa; }   // Test: ?alarm=5 = Alarm nach 5 s
     show('ihud'); setWord('firestation');
     const hf = Hof.save.fire || {}, done = Array.isArray(hf.done) ? hf.done : [];
-    let fresh = false; if (EINSATZ_KEYS.every(k => done.includes(k))) fresh = Hof.openFireAnnex();
+    let fresh = false; if (EINSATZ_KEYS.filter(k => einsatzWave(k) === 1).every(k => done.includes(k))) fresh = Hof.openFireAnnex();   // Anbau: alle Einsätze der 1. Runde
     annex = ((Hof.save.fire || {}).annex | 0) === 1;   // Hinweis nur, solange der Anbau (Etappe 1) noch nicht gebaut ist annexGuide = 0; annexAt = 0;
     if (fresh) setTimeout(() => { annexGuide = 25; setWord('annex'); say('Wir brauchen eine größere Halle! Komm zur Leitstelle.'); }, location.hash === '#einsatz' ? 2200 : 1600);   // nur einmal, beim Freischalten
     if (location.hash === '#einsatz') {               // zurück vom Einsatz: im Anzug neben dem Fahrzeug, nächster Alarm später
@@ -609,20 +609,21 @@ const Wache = (() => {
   // Einsatz ziehen wie aus einem Kartenstapel: jeder Einsatz kommt einmal dran, dann wird neu gemischt
   // (Michael: reiner Zufall wiederholte zu oft dieselben). Stapel in localStorage, damit er auch nach App-Neustart weiterläuft.
   function drawEinsatz() {
+    const rw = ((Hof.save.fire || {}).annex | 0) >= 2, KEYS = EINSATZ_KEYS.filter(k => rw || !EINSAETZE[k].veh.includes('rw'));   // Rüstwagen-Einsätze erst nach dem Anbau
     let deck = [], last = null;
     try { deck = JSON.parse(localStorage.getItem('wache.stapel') || '[]'); last = localStorage.getItem('wache.letzter'); } catch (e) {}
-    deck = Array.isArray(deck) ? deck.filter(k => EINSAETZE[k]) : [];
+    deck = Array.isArray(deck) ? deck.filter(k => KEYS.includes(k)) : [];
     let known = null; try { known = JSON.parse(localStorage.getItem('wache.alle') || 'null'); } catch (e) {}
     if (!Array.isArray(known)) known = ['katze', 'haus', 'ball', 'unfall', 'baum', 'muell'];   // Stand vor dem Merken (#85)
-    const fresh = EINSATZ_KEYS.filter(k => !known.includes(k) && !deck.includes(k));
+    const fresh = KEYS.filter(k => !known.includes(k) && !deck.includes(k));
     if (fresh.length && deck.length) deck.unshift(...fresh);   // neuer Einsatz (neu eingebaut) kommt als Nächstes dran, danach normal gemischt
     if (!deck.length) {
-      deck = EINSATZ_KEYS.slice();
+      deck = KEYS.slice();
       for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
       if (deck.length > 1 && deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];   // auch über die Mischgrenze nie zweimal derselbe
     }
     const key = deck.shift();
-    try { localStorage.setItem('wache.stapel', JSON.stringify(deck)); localStorage.setItem('wache.letzter', key); localStorage.setItem('wache.alle', JSON.stringify(EINSATZ_KEYS)); } catch (e) {}
+    try { localStorage.setItem('wache.stapel', JSON.stringify(deck)); localStorage.setItem('wache.letzter', key); localStorage.setItem('wache.alle', JSON.stringify(KEYS)); } catch (e) {}
     return key;
   }
   const need = () => alarm ? EINSAETZE[alarm.key].veh : [];

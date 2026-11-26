@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+/* Zeigt Fehler direkt auf dem Bildschirm an (es gibt auf dem iPad keine Konsole) */
+window.addEventListener('error', function (e) {
+  var d = document.getElementById('fehler');
+  if (!d) { d = document.createElement('pre'); d.id = 'fehler'; (document.body || document.documentElement).appendChild(d);
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#b00020;color:#fff;font:15px/1.3 monospace;z-index:999;white-space:pre-wrap'; }
+  var t = e.target, msg;
+  if (t && t !== window && (t.src || t.href)) msg = 'Datei nicht gefunden: ' + (t.src || t.href);
+  else msg = 'Fehler: ' + e.message + (e.filename ? '  (' + e.filename.split('/').slice(-2).join('/') + ', Zeile ' + e.lineno + ')' : '');
+  d.textContent += msg + '\n';
+}, true);
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bauernhof">
+<link rel="manifest" href="../../../manifest.json">
+<link rel="apple-touch-icon" href="../../../icon.png">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261126c">
+<title>Anbau</title>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="khud" class="hud gamehud hidden">
+  <div class="pill" id="kword" data-say="annexhall" style="pointer-events:auto"><span class="word">ANBAU</span> <span id="kcount"></span></div>
+  <button class="pill btn" id="pausebtn" aria-label="Pause"><i class="ico" data-ico="pause"></i></button>
+</div>
+<div id="gpause" class="overlay hidden">
+  <div class="row">
+    <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+    <button class="big" id="gresume" aria-label="Weiter"><svg width="70" height="70" viewBox="0 0 10 10"><path d="M2 1 L9 5 L2 9 Z" fill="#5a3d00"/></svg></button>
+  </div>
+  <button class="mute" aria-label="Ton"><i class="ico" data-ico="sound"></i></button>
+</div>
+<div id="gwin" class="overlay hidden">
+  <div class="stars"></div>
+  <div class="row">
+    <div class="pill gain" data-say="star" style="cursor:pointer">+<span id="wingain">3</span> <i class="ico" data-ico="star"></i></div>
+    <div class="pill gain" id="winword" style="cursor:pointer"><span class="word"></span></div>
+  </div>
+  <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
+</div>
+<script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
+<script src="../../../gemeinsam/sterne.js?v=20261126c"></script>
+<script src="../../../gemeinsam/basis.js?v=20261126c"></script>
+<script src="../../../gemeinsam/bau.js?v=20261126c"></script>
+<script src="../../../gemeinsam/feuerwehr.js?v=20261126c"></script>
+<script>
+window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof, zurück an die Feuerwache
+const save = Hof.save;
+let winTimer = null;
+</script>
+<script>
+/* =====================================================================
+   MINISPIEL: ANBAU DER FEUERWACHE (dritter Stellplatz links an der Halle), Etappe 1 in 3 Teilen (Michael 26.11.)
+   Fortschritt in save.fire.annexStep, jeder Teil ist eine eigene Runde (3 Sterne) und endet in der Stadt:
+   Teil A (annexStep 0 → 1), Ansicht von vorne: Grube baggern (Felder antippen, Schaufel voll → Kipper), dann Beton mit der Pumpe malen.
+   Teil B (1 → 2): Kamera schwenkt, Seitenansicht der Wache: mit dem Hammer die 3 Wandplatten der Halle einschlagen (je 3 Schläge, Platte kippt nach vorne);
+          Kamera schwenkt zurück, der Schutt liegt auf der neuen Bodenplatte → mit dem Bagger zum Kipper.
+   Teil C (2 → annex 2): Autokran hebt Rückwand, Seitenwand, Vorderwand mit Torloch und Flachdach vom Tieflader; Torloch antippen = Rolltor;
+          der Rüstwagen setzt rückwärts ganz in die Halle, das Tor geht wieder zu.
+   Start über den Monitor in der Leitstelle. Etappe 2 (Treppe, Landeplatz, Hubschrauber) kommt später.
+   ===================================================================== */
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => goHof('wache')));
+if (ORT !== 'wache') location.replace(location.pathname + '?ort=wache');
+const Q = snapF(R, 2);
+const Anbau = (() => {
+  let s0, fg, fb, gg, part, phase, paused = false, idle = 0, shake = 0, turn = null, view = 'front', pit, cells, plate = false;
+  let veh, tip, fill, cap, loads, totalLoads, left, honked = false, tipCol = 0, vexit = null;   // Bagger und Kipper (Grube und Schutt)
+  let pour;                                                                                     // Beton
+  let side, hammer;                                                                             // Seitenansicht mit Hammer
+  let slots, crane, truck, hook, carry, queue, placed, follow, finger, delivered;               // Kran
+  let gateK, rw;                                                                                // Tor und Rüstwagen
+  const N = ANNEX_PARTS, PER_TRUCK = 3, TIP = 50, HITS = 5;   // Michael: 5 Hammerschläge je Feld
+  const liftH = lh => Math.round(4 + lh * 22);
+  function setWord(k, count) { const el = $('kword'); el.dataset.say = k; el.querySelector('.word').textContent = WORDS[k][0]; $('kcount').textContent = count || ''; }
+  const B = (col, x, y, w, h) => { bctx.fillStyle = col; bctx.fillRect(x, y, w, h); };
+  function enter() {
+    Hof.load();
+    const f = save.fire || {};
+    if ((f.step | 0) < 5 || (f.annex | 0) !== 1) { goHof('wache'); return; }
+    part = Math.min(2, f.annexStep | 0);
+    layout(true);
+    // Platz: links der Anbau (genau 2 Rasterfelder breit, damit Grube und Schutt ins Raster passen), rechts die Wache; unten die Straße
+    const hh = Math.max(40, Math.min(4 * G, Math.floor((H - 42 - 8 - 22 - 14) / 2.12)));
+    let bw = Math.min(clamp(gc - 5, 3, 6) * G, Math.round(hh * 1.5));
+    const cs = Math.round(2.2 * G);
+    if (Math.round(bw * 1.33) + cs + 12 > W) bw = Math.floor((W - cs - 12) / 1.33);
+    const aw = Math.max(G, Math.round(bw * 0.32 / G) * G), tw = bw + aw;
+    let ax = Math.round((Math.round((W - tw - cs) / 2) + cs) / G) * G; while (ax + tw > W - 4 && ax > G) ax -= G;
+    const bot = Math.min((gr - 1) * G, Math.round((42 + hh * 2.1) / G) * G), hy = bot - hh;
+    s0 = { ax, hy, aw, bw, hh, bot }; fg = fireGeo(ax, hy, tw, hh, aw); gg = fg.garage; fb = fg.old;
+    for (let r = 0; r < gr; r++) for (let c = 0; c < gc; c++) {
+      const set = r === gr - 1 ? tiles.road : bauTiles.gravel;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(set), c*G+i*T, r*G+j*T);
+    }
+    B('#6a7076', ax + aw - 2, hy - 2, bw + 4, hh + 4); B('#a2a8ae', ax + aw - 1, hy - 1, bw + 2, hh + 2);   // Bodenplatte der Wache
+    // Grube: Rasterfelder links neben der Halle
+    const c0 = ax / G, r0 = Math.floor(gg.y / G), r1 = bot / G - 1;
+    pit = { c0, r0, w: aw / G, h: r1 - r0 + 1 };
+    cells = [];
+    for (let r = r0; r <= r1; r++) for (let c = c0; c < c0 + pit.w; c++) cells.push({ r, c, dug: false, seed: r * 31 + c * 7 });
+    const x0 = c0 * G, y0 = r0 * G, w = pit.w * G, h = pit.h * G;
+    if (part === 0) {                                  // Absteckung: orange Pflöcke mit Schnur
+      for (let x = x0; x <= x0 + w; x += 12) { B('#d35400', x - 1, y0 - 3, 3, 3); B('#d35400', x - 1, y0 + h, 3, 3); }
+      for (let y = y0; y <= y0 + h; y += 12) { B('#d35400', x0 - 3, y - 1, 3, 3); }
+      B('#ffffff', x0, y0 - 2, w, 1); B('#ffffff', x0, y0 + h + 1, w, 1); B('#ffffff', x0 - 2, y0, 1, h);
+    } else paintPlate();
+    totalLoads = cells.length > 5 ? 2 : 1; cap = Math.ceil(cells.length / totalLoads); left = cells.length; fill = 0; loads = 0; veh = null; tip = null; vexit = null;
+    crane = { x: Math.max(24, ax - Math.round(1.3 * G)), y: gg.y + 14 };
+    slots = annexSlots(gg); hook = { x: crane.x + 30, y: crane.y + 30, lh: 1, vx: 0 };
+    truck = null; carry = null; queue = []; placed = 0; follow = null; finger = null; delivered = 0; gateK = 0; rw = null;
+    pour = null; side = null; hammer = null; turn = null; view = 'front'; idle = 0; paused = false;
+    show('khud');
+    if (part === 0) { startDig(); setTimeout(() => say('Wir bauen an! Zuerst die Grube.'), 400); }
+    else if (part === 1) { phase = 'intro'; setWord('hammer'); setTimeout(() => say('Jetzt reißen wir die Wand ein.'), 400); setTimeout(() => startTurn('side', startWall), 1800); }
+    else { setTimeout(() => say('Jetzt kommt der Kran.'), 400); startCrane(); }
+  }
+  function paintPlate() {                              // fertige Bodenplatte des Anbaus ins Hintergrundbild
+    plate = true; const x0 = pit.c0 * G, y0 = pit.r0 * G, w = pit.w * G, h = pit.h * G;
+    B('#6a7076', x0 - 2, y0 - 2, w + 2, h + 4); B('#a2a8ae', x0 - 1, y0 - 1, w + 1, h + 2);
+    for (let i = 0; i < w * h / 60; i++) B(i % 2 ? '#989ea4' : '#b0b6bc', x0 + (i * 37) % w, y0 + (i * 23) % h, 2, 1);
+  }
+  $('pausebtn').addEventListener('click', () => { if (phase === 'done') return; paused = true; show('gpause'); });
+  $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
+
+  // ---------- Kamera schwenken (Bild wird schmal und wieder breit) ----------
+  function startTurn(to, then) { turn = { t: 0, to, then, swapped: false }; tone(180, .8, 'sine', .06, 0, 520); noise(600, 1800, .03, 3); }
+
+  // ---------- Bagger und Kipper: Grube (dig) und Schutt (clear) ----------
+  const cellAt = (r, c) => cells.find(q => q.r === r && q.c === c);
+  const inBase = (r, c) => { const cx = c * G + G / 2, cy = r * G + G / 2; return cx > s0.ax + s0.aw && cx < s0.ax + s0.aw + s0.bw + 4 && cy > fg.main.top - 10 && cy < s0.bot + 4; };
+  const tipCell = (r, c) => tip && r === gr - 1 && ['arrive', 'park', 'pause'].includes(tip.state) && (c === tip.tx || c === tip.tx + 1);
+  const passable = (r, c) => r >= 0 && c >= 0 && r < gr && c < gc && !inBase(r, c) && !tipCell(r, c);
+  const nearTip = () => tip && !veh.moving && veh.r >= gr - 2 && veh.c >= tip.tx - 1 && veh.c <= tip.tx + 2;
+  const canUnload = () => fill >= cap || (left === 0 && fill > 0);
+  function startVeh() {
+    left = cells.filter(q => !q.dug).length; fill = 0; loads = 0; totalLoads = left > 5 ? 2 : 1; cap = Math.ceil(left / totalLoads);
+    let c0 = Math.max(0, pit.c0 - 1); while (c0 < gc - 1 && !passable(gr - 2, c0)) c0++;
+    veh = newMover(gr - 2, c0, -Math.PI / 2); veh.unloading = false; newTip();
+  }
+  function startDig() { phase = 'dig'; for (const q of cells) q.dug = false; startVeh(); setWord('dig', '0/' + totalLoads); setTimeout(() => sayWord('digger'), 2200); }
+  function startClear() { phase = 'clear'; for (const q of cells) q.dug = q.c !== pit.c0 + pit.w - 1; startVeh(); setWord('rubble2', '0/' + totalLoads); sayWord('rubble2'); }   // Michael: nur eine Reihe Schutt, direkt an der Halle
+  function newTip() {
+    tipCol = (tipCol + 1) % TIPPERS.length;
+    let tx; for (let t = 0; t < 30; t++) { tx = 1 + ((Math.random() * (gc - 3)) | 0); if (!(veh.r === gr - 1 && (veh.c === tx || veh.c === tx + 1))) break; }
+    tip = { tx, x: W + 10, y: (gr - 1) * G + 4, park: tx * G + 6, fill: 0, state: 'arrive', timer: 0, col: TIPPERS[tipCol] };
+  }
+  const BITS = () => phase === 'dig' ? ['#4f3520', '#6b4a2b', '#8a6a4c'] : ['#8a7a66', '#9a9a9a', '#c0392b'];
+  function work(m) {
+    if (m.done || m.prog < 0.25) return;
+    m.done = true;
+    const q = cellAt(m.tr, m.tc);
+    if (!q || q.dug) return;
+    if (fill >= cap) { if (!honked) { sfx.honk(); honked = true; } return; }
+    q.dug = true; left--; fill++; honked = false; sfx.clod();
+    if (phase === 'dig') for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bctx.drawImage(pick(bauTiles.dug), q.c * G + i * T, q.r * G + j * T);   // Grube wird tiefer
+    const px = q.c * G + G / 2, py = q.r * G + G / 2;
+    for (let i = 0; i < 14; i++) spawn(px + rnd(-10, 10), py + rnd(-10, 10), rnd(-25, 25), rnd(-30, 10), rnd(.3, .8), pick(BITS()), 40);
+  }
+  function updVeh(dt) {
+    if (!veh.unloading) {
+      moverUpdate(veh, dt, { passable, speed: 1.9, onProg: m => { work(m); const p = moverPos(m); if (Math.random() < .25) spawn(p.x - Math.cos(m.a) * 12, p.y - Math.sin(m.a) * 12, rnd(-6, 6), rnd(-6, 6), .5, 'rgba(90,80,70,.6)'); } });
+      if (tip.state === 'park' && canUnload() && nearTip()) { veh.unloading = true; sfx.pour(); }
+    } else {
+      const amt = Math.min(fill, cap * dt / 1.3); fill -= amt; tip.fill += amt / cap;
+      const p = moverPos(veh), tx = tip.x + 23, ty = tip.y + 8;
+      for (let i = 0; i < 3; i++) { const sx = p.x + rnd(-3, 3), sy = p.y + rnd(-3, 3), ex = tx + rnd(-7, 7), ey = ty + rnd(-4, 4); spawn(sx, sy, (ex - sx) / .4, (ey - sy) / .4, .4, pick(BITS())); }
+      if (fill <= 0.001) { fill = 0; veh.unloading = false; loads++; sfx.load(); setWord(phase === 'dig' ? 'dig' : 'rubble2', loads + '/' + totalLoads); tip.state = 'pause'; tip.timer = 0.6; }
+    }
+    setEngine(true, veh.moving || veh.unloading, 40);
+    const t = tip;
+    if (t.state === 'arrive') { t.x = approach(t.x, t.park, 80 * dt); if (t.x === t.park) t.state = 'park'; }
+    else if (t.state === 'pause') { t.timer -= dt; if (t.timer <= 0) { t.state = 'leave'; t.v = 10; sfx.honk(); } }
+    else if (t.state === 'leave') { t.v += 90 * dt; t.x -= t.v * dt; if (t.x < -50) { if (left === 0 && fill === 0) vehDone(); else newTip(); } }
+  }
+  function vehDone() {
+    const p = moverPos(veh); vexit = { x: p.x, y: p.y }; veh = null; tip = null; clearTapGoal(); setEngine(false, false);
+    if (phase === 'dig') startPour(); else finishPart(2);
+  }
+
+  // ---------- Beton (wie beim Wohnhaus: Finger ziehen, Pumpe links, Mischer darunter; ab 90 % läuft der Rest nach) ----------
+  function startPour() {
+    phase = 'pour'; const nx = pit.w * 2, ny = pit.h * 2;
+    const pump = { x: Math.max(18, pit.c0 * G - 22), y: (pit.r0 + pit.h - 1) * G + G / 2 };
+    pour = { nx, ny, sub: new Array(nx * ny).fill(0), filled: 0, total: nx * ny, pump, tip: { x: pump.x - 8, y: pump.y - 30 }, target: null, holding: false,
+      mixer: { x: -70, park: Math.round(Math.min(pump.x - 8, W - 60)), y: Math.min((gr - 1) * G - 22, Math.max((pit.r0 + pit.h) * G + 6, pump.y + 20)), state: 'arrive', rot: 0 } };
+    setWord('concrete'); setTimeout(() => sayWord('concrete'), 900);
+  }
+  const subCenter = i => [pit.c0 * G + (i % pour.nx) * T + T / 2, pit.r0 * G + ((i / pour.nx) | 0) * T + T / 2];
+  const mixReady = () => pour.mixer.state === 'park';
+  function updPour(dt) {
+    const P = pour, m = P.mixer;
+    if (P.target) { P.tip.x = approach(P.tip.x, P.target.x, 160 * dt); P.tip.y = approach(P.tip.y, P.target.y, 160 * dt); }
+    m.rot += dt * (mixReady() ? 6 : 2);
+    if (m.state === 'arrive') { m.x = approach(m.x, m.park, 100 * dt); if (m.x === m.park) { m.state = 'park'; sfx.honk(); } }
+    else if (m.state === 'leave') m.x += 120 * dt;
+    setEngine(true, P.holding, 30);
+    if (P.filled >= P.total * 0.9) for (let i = 0; i < P.sub.length; i++) if (P.sub[i] < 1) { P.sub[i] = Math.min(1, P.sub[i] + dt * 1.2); if (P.sub[i] >= 1) P.filled++; }
+    if (P.filled >= P.total) { P.holding = false; m.state = 'leave'; sfx.load(); paintPlate(); phase = 'pourdone'; setEngine(false, false); setTimeout(() => finishPart(1), 900); return; }
+    $('kcount').textContent = Math.round(100 * P.filled / P.total) + ' %';
+    if (!P.holding || !mixReady()) return;
+    let any = false;
+    for (let i = 0; i < P.sub.length; i++) { if (P.sub[i] >= 1) continue; const [cx, cy] = subCenter(i);
+      if (Math.hypot(cx - P.tip.x, cy - P.tip.y) < 18) { P.sub[i] = Math.min(1, P.sub[i] + 2.4 * dt); any = true; if (P.sub[i] >= 1) P.filled++; } }
+    if (Math.random() < .7) spawn(P.tip.x + rnd(-2, 2), P.tip.y + 2, rnd(-15, 15), rnd(-10, 15), .5, pick(['#8e959c', '#a8aeb4', '#c4c9ce']), 30);
+    if (Math.random() < .6) { const sx = m.x - 3, sy = m.y + 4, ex = P.pump.x - 12, ey = P.pump.y + 4; spawn(sx, sy, (ex - sx) / .3, (ey - sy) / .3, .3, pick(['#8e959c', '#a8aeb4'])); }
+    if (any && Math.random() < .04) sfx.pour();
+  }
+  function drawPour(time) {
+    const P = pour, m = P.mixer;
+    if (phase === 'pour') for (let i = 0; i < P.sub.length; i++) { const f = P.sub[i]; if (f <= 0) continue; const [cx, cy] = subCenter(i);
+      ctx.globalAlpha = Math.min(1, 0.3 + f * 0.7); R(f >= 1 ? '#a2a8ae' : '#8e959c', cx - T / 2, cy - T / 2, T, T); ctx.globalAlpha = 1; }
+    if (m.x < W + 10) {                                // Betonmischer von oben (wie beim Wohnhaus)
+      const x = Math.round(m.x), y = m.y;
+      Q('rgba(0,0,0,.25)', x + 2, y + 3, 56, 18); for (const wx of [6, 16, 40]) { Q('#1a1a1a', x + wx, y - 1, 6, 2); Q('#1a1a1a', x + wx, y + 17, 6, 2); }
+      Q('#444', x, y + 1, 44, 16); Q('#9a5a00', x + 4, y, 34, 18); Q('#f08c00', x + 5, y + 1, 32, 16);
+      for (let i = 0; i < 6; i++) { const sx = x + 5 + ((i * 7 + Math.floor(m.rot * 4)) % 32); Q('#ffffff', sx, y + 2, 2, 14); }
+      Q('#2a6fdb', x + 44, y, 12, 18); Q('#173f80', x + 44, y, 12, 2); Q('#9fe3ff', x + 52, y + 2, 3, 14); Q('#777', x - 6, y + 5, 7, 4);
+    }
+    if (phase !== 'pour') return;
+    const bx = P.pump.x, by = P.pump.y;                // Betonpumpe mit Arm zum Finger
+    ctx.drawImage(PUMP.shadows[0], Math.round(bx - 15), Math.round(by - 15)); ctx.drawImage(PUMP.frames[0], Math.round(bx - 17), Math.round(by - 17));
+    const px = bx - 8, py = by, dx = P.tip.x - px, dy = P.tip.y - py, d = Math.hypot(dx, dy) || 1, ex = px + dx / 2 - dy / d * 26, ey = py + dy / 2 + dx / d * 26 - 10;
+    ctx.lineCap = 'round';
+    for (const [w, col] of [[7, '#5a1010'], [5, '#d83a3a'], [1, '#ffffff']]) { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.lineTo(P.tip.x, P.tip.y - 4); ctx.stroke(); }
+    R('#999', px - 4, py - 4, 8, 8); R('#cfcfcf', px - 3, py - 3, 6, 6); R('#333', ex - 2, ey - 2, 4, 4); R('#222', P.tip.x - 2, P.tip.y - 5, 4, 7);
+    if (P.holding) R('#a2a8ae', P.tip.x - 1, P.tip.y + 1, 2, 3);
+  }
+
+  // ---------- Seitenansicht: Wand mit dem Hammer einschlagen ----------
+  function startWall() {
+    phase = 'wall'; view = 'side';
+    const gy = Math.round(H * 0.78), sw = Math.min(Math.round(W * 0.56), 240), sh = Math.round(sw * 0.5), oh = Math.round(sh * 0.55), x0 = Math.round((W - sw) / 2);
+    const cw = Math.max(6, Math.round(sw * 0.035)), bh = Math.max(6, Math.round(sh * 0.08));   // Säulen und Träger aus Beton bleiben stehen (Michael)
+    side = { gy, sw, sh, oh, x0, cw, bh, cols: [0, 1, 2, 3].map(i => Math.round(x0 + i * (sw - cw) / 3)),
+      panels: [0, 1, 2].map(i => { const a = Math.round(x0 + i * (sw - cw) / 3) + cw, b = Math.round(x0 + (i + 1) * (sw - cw) / 3); return { x: a, w: b - a, hits: 0, fall: 0, down: false }; }) };
+    hammer = { x: x0 - 26, y: gy - Math.round(sh / 2), t: 9 };
+    setWord('hammer', '0/3'); setTimeout(() => sayWord('hammer'), 300);
+  }
+  const standing = () => side.panels.filter(p => p.hits < HITS);
+  function smash(x, y) {
+    const ps = standing(); if (!ps.length) return;
+    const p = ps.find(p => x >= p.x && x < p.x + p.w) || ps.sort((a, b) => Math.abs(x - a.x - a.w / 2) - Math.abs(x - b.x - b.w / 2))[0];
+    const hy = clamp(y, side.gy - side.sh + side.bh + 8, side.gy - 8);
+    p.hits++; hammer = { x: clamp(x, p.x + 6, p.x + p.w - 6), y: hy, t: 0 }; shake = 0.15; idle = 0;
+    tone(150, .14, 'square', .13, 0, 80); noise(250, 900, .14, 2);
+    for (let k = 0; k < 12; k++) spawn(hammer.x + rnd(-6, 6), hy + rnd(-6, 6), rnd(-40, 40), rnd(-40, 5), rnd(.4, .8), pick(['#cfc8b8', '#b5a58a', '#e0604c']), 60);
+    if (p.hits >= HITS) setTimeout(() => { p.down = true; tone(220, .5, 'triangle', .08, 0, 120);   // knackt und kippt nach außen
+      const n = side.panels.filter(q => q.down).length; setWord('hammer', n + '/3');
+      if (n === 3) { setTimeout(() => say('Super! Die Wand ist weg.'), 700); setTimeout(() => startTurn('front', startClear), 2600); } }, 200);
+  }
+  function drawSide(time) {
+    const S = side, { gy, sw, sh, oh, x0 } = S, C = PANEL_COL, top = gy - sh, ogTop = top - oh;
+    R('#9fd3f5', 0, 0, W, gy); R('#c6e8fb', 0, Math.round(gy * 0.35), W, 2);   // Himmel
+    for (const [cx, cy] of [[W * 0.18, gy * 0.22], [W * 0.78, gy * 0.15]]) { R('#ffffff', Math.round(cx), Math.round(cy), 30, 8); R('#ffffff', Math.round(cx) + 8, Math.round(cy) - 5, 16, 6); }
+    R('#8d8478', 0, gy, W, H - gy); for (let i = 0; i < 160; i++) R(i % 2 ? '#7a7166' : '#a39a8c', (i * 53) % W, gy + 2 + (i * 29) % Math.max(1, H - gy - 4), 2, 1);   // Kies
+    R('#a2a8ae', x0 - 10, gy, sw + 20, 6); R('#6a7076', x0 - 10, gy + 6, sw + 20, 2);   // neue Bodenplatte vor der Wand
+    // Schlauchturm hinten (links), ragt übers Dach
+    const tx = x0 + Math.round(sw * 0.12), tw = Math.round(sw * 0.13), th = Math.max(10, Math.min(Math.round(oh * 1.6), ogTop - 44));
+    R('#7a2218', tx, ogTop - th, tw, th); for (let k = 0; k < 3; k++) { R('#b5442e', tx + 1, ogTop - th + 1 + k * Math.round(th / 3), tw - 2, Math.round(th / 3) - 2); }
+    R('#5f646a', tx - 2, ogTop - th - 8, tw + 4, 8); R('#8d9196', tx - 1, ogTop - th - 7, tw + 2, 2);
+    // Obergeschoss (Ziegel, Fenster) und Flachdach mit roter Attika
+    R(FIRE_BRICK[0], x0, ogTop, sw, oh); for (let yy = ogTop + 1; yy < top; yy += 5) for (let xx = x0 + ((yy / 5 | 0) % 2) * 5; xx < x0 + sw - 2; xx += 10) R(FIRE_BRICK[1], xx, yy, Math.min(9, x0 + sw - 1 - xx), 4);
+    for (const fx of [0.25, 0.6]) { const wx = Math.round(x0 + sw * fx), ww = Math.round(sw * 0.14), wy = ogTop + Math.round(oh * 0.25), wh = Math.round(oh * 0.45);
+      R('#f2f2f2', wx, wy, ww, wh); R('#6cc4f0', wx + 2, wy + 2, ww - 4, wh - 4); R('#9fe3ff', wx + 2, wy + 2, ww - 4, Math.max(1, (wh >> 1) - 2)); }
+    R('#7a1a12', x0 - 3, ogTop - 5, sw + 6, 6); R('#c0392b', x0 - 2, ogTop - 4, sw + 4, 4); R('#e0604c', x0 - 2, ogTop - 4, sw + 4, 1);
+    // Halle innen (hinter der Wand): dunkel, Löschfahrzeug von der Seite in echten Proportionen (doppelte Pixel, nicht hallenlang)
+    R('#2a2a2a', x0, top, sw, sh); R('#3a3a3a', x0, gy - 4, sw, 4);
+    { const L = Math.round(sw * 0.3), k = 2; ctx.save(); ctx.translate(x0 + Math.round((sw - L * k) / 2), gy - 4); ctx.scale(k, k); drawFireTruckSide(R, 0, 0, L, 'lf', null); ctx.restore(); }
+    const brick = (x, y, w, h, seed) => {                // Backsteine (versetzt), nur innerhalb x..x+w
+      R('#d8c8a8', x, y, w, h);
+      for (let yy = y, row = 0; yy < y + h; yy += 5, row++) for (let xx = x - (row % 2) * 6; xx < x + w; xx += 12) {
+        const a = Math.max(x, xx), b = Math.min(x + w, xx + 11), hh = Math.min(4, y + h - yy); if (b - a < 1 || hh < 1) continue;
+        R(((xx * 7 + yy * 3 + seed) % 5) ? FIRE_BRICK[1] : FIRE_BRICK[0], a, yy, b - a, hh); R(FIRE_BRICK[2], a, yy, b - a, 1); }
+    };
+    const wTop = top + S.bh;
+    for (const p of S.panels) {
+      const fh = gy - wTop;
+      if (!p.down) {                                   // Backsteinfeld mit Rissen
+        brick(p.x, wTop, p.w, fh, p.x);
+        for (let k = 0; k < p.hits; k++) { const cx = p.x + Math.round(p.w * (0.2 + 0.15 * k)), cy = wTop + Math.round(fh * (0.25 + 0.12 * k));
+          pixLine(R, cx, cy, cx - 9, cy - 7, 1, '#2a0905'); pixLine(R, cx, cy, cx + 8, cy - 4, 1, '#2a0905'); pixLine(R, cx, cy, cx + 3, cy + 10, 1, '#2a0905'); pixLine(R, cx + 3, cy + 10, cx - 4, cy + 16, 1, '#2a0905');
+          if (k >= 2) R('#2a2a2a', cx - 2, cy - 1, 4, 3); }   // ab dem 3. Schlag fehlen schon Steine
+      }
+    }
+    const fallen = [];                                 // umgefallene Felder werden VOR den Säulen gezeichnet (sie kippen nach außen, zum Betrachter)
+    for (const cx of S.cols) { R('#6a7076', cx, top, S.cw, sh); R('#a2a8ae', cx + 1, top, S.cw - 2, sh); R('#c4c9ce', cx + 1, top, 1, sh); }   // Säulen
+    R('#6a7076', x0, top, sw, S.bh); R('#a2a8ae', x0, top + 1, sw, S.bh - 2); R('#c4c9ce', x0, top + 1, sw, 1);                             // Träger
+    for (const p of S.panels) if (p.down) {             // Feld kippt nach außen: wird oben kürzer und ragt unten nach vorne (größer, vor den Säulen); am Boden zerbricht es zum Schutthaufen
+      const fh = gy - wTop, k = Math.min(1, p.fall);
+      if (k < 0.7) {
+        const t = k / 0.7, a = t * t * Math.PI / 2, up = Math.round(fh * Math.cos(a)), front = Math.round(fh * 0.35 * Math.sin(a)), grow = Math.round(p.w * 0.12 * Math.sin(a));
+        if (up > 1) brick(p.x - Math.round(grow / 2), gy - up, p.w + grow, up, p.x);
+        if (front > 1) { brick(p.x - grow, gy, p.w + 2 * grow, front, p.x + 3); R('rgba(0,0,0,.25)', p.x - grow, gy, p.w + 2 * grow, 1); }
+      } else {
+        const t = Math.min(1, (k - 0.7) / 0.3), ph = Math.round(fh * 0.24), w0 = p.w + 14;
+        for (let i = 0; i < ph; i += 2) { const w = Math.round(w0 * (1 - i / Math.max(1, ph) * 0.65)); R(i % 4 ? '#b5442e' : '#8a7a66', p.x + Math.round((p.w - w) / 2), gy + 10 - i, w, 2); }
+        for (let i = 0; i < p.w / 3; i++) R(['#7a2218', '#d0654a', '#9a9a9a', '#d8c8a8'][i % 4], p.x - 6 + (i * 13) % (p.w + 12), gy + 10 - ((i * 7) % Math.max(1, ph)), 4, 3);
+        if (t < 1) brick(p.x - Math.round(p.w * 0.12), gy, p.w + Math.round(p.w * 0.24), Math.round(fh * 0.35 * (1 - t)), p.x + 3);   // Platte zerbröselt
+      }
+    }
+    // leuchtender Rahmen um die stehenden Platten
+    const a = Math.abs(Math.sin(time / 260)) > .5, col = a ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.45)';
+    if (phase === 'wall') for (const p of standing()) { const t2 = top + S.bh; R(col, p.x + 1, t2 + 1, p.w - 2, 2); R(col, p.x + 1, gy - 3, p.w - 2, 2); R(col, p.x + 1, t2 + 1, 2, gy - t2 - 2); R(col, p.x + p.w - 3, t2 + 1, 2, gy - t2 - 2); }
+    // Hammer: liegt am Anfang links bereit, sonst schlägt er an der Stelle des Fingers zu
+    const hk = hammer.t < 0.3 ? hammer.t / 0.3 : 1, ang = hammer.t > 5 ? -0.5 + Math.sin(time / 300) * 0.15 : -1.2 + Math.min(1, hk * 2.5) * 1.2;
+    const hx = hammer.x - Math.round(Math.cos(ang) * 22), hyy = hammer.y - Math.round(Math.sin(ang) * 22);
+    pixLine(R, hx, hyy + 18, hammer.x - 2, hammer.y + 4, 3, '#8a5a2b'); pixLine(R, hx, hyy + 18, hammer.x - 2, hammer.y + 4, 1, '#c08a4a');
+    R('#444', hammer.x - 6, hammer.y - 4, 12, 9); R('#9aa0a6', hammer.x - 5, hammer.y - 3, 10, 2); R('#666', hammer.x + 4, hammer.y - 4, 2, 9);
+    if (phase === 'wall' && idle > 1.2 && standing().length) { const p = standing()[0]; drawArrow(Math.round(p.x + p.w / 2 - 3), Math.round(top + S.bh + 6 + Math.abs(Math.sin(time / 220)) * 4)); }
+  }
+
+  // ---------- Autokran ----------
+  function startCrane() {
+    phase = 'crane'; idle = 0; setEngine(false, false);
+    delivered = Math.min(PER_TRUCK, N);
+    truck = { x: -70, park: clamp(s0.ax + Math.round(s0.aw / 2) + 12, 4, W - 70), y: Math.min((gr - 1) * G + 3, gr * G - 20), load: delivered, state: 'arrive' };
+    setWord('annexhall', '0/' + N); setTimeout(() => sayWord('panel'), 1800);
+  }
+  const slot = () => slots[Math.min(placed, N - 1)];
+  const busy = () => queue.length > 0;
+  function to(x, y, lh, then) { queue.push({ x, y, lh, then }); }
+  const pickPt = () => [truck.x + 22, truck.y + FLATBED_SLOTS[Math.max(0, truck.load - 1)] + 1];
+  function fetch() {
+    const [x, y] = pickPt(); sfx.click(); follow = null;
+    to(x, y, 1); to(x, y, 0, () => { carry = { ang: 0, k: 0 }; truck.load--; sfx.clod(); sayWord(slot().roof ? 'flatroof' : 'panel'); });
+    to(x, y, 1, () => { if (truck.load <= 0) { truck.state = 'leave'; sfx.honk(); } if (finger) follow = { x: finger.x, y: finger.y, sx: finger.x, sy: finger.y }; });
+  }
+  function place() {
+    const s = slot(), x = s.x, y = s.y; follow = null;
+    to(x, y, 1); to(x, y, 0, () => { carry = null; placed++; setWord('annexhall', placed + '/' + N); sfx.bonk();
+      for (let k = 0; k < 12; k++) spawn(x + rnd(-10, 10), y + rnd(-6, 6), rnd(-25, 25), rnd(-20, 5), .5, '#cfc8b8', 30); });
+    to(x, y, 1, () => { if (placed >= N) { phase = 'gate'; to(crane.x + 30, crane.y + 30, 1); setWord('rolltor'); setTimeout(() => sayWord('rolltor'), 700); } });
+  }
+  const onTruck = (x, y) => truck && truck.state === 'park' && truck.load > 0 && x > truck.x - 8 && x < truck.x + 64 && y > truck.y - 10 && y < truck.y + 26;
+  const nearSlot = (x, y, r) => { if (placed >= N) return false; const s = slot();
+    if (s.roof) return Math.abs(x - s.x) < s.w / 2 + r && Math.abs(y - s.y) < s.h / 2 + r;
+    const hx = s.ang ? r : s.len / 2 + r, hy = s.ang ? s.len / 2 + r : r; return Math.abs(x - s.x) < hx && Math.abs(y - s.y) < hy; };
+  function pointerCrane(type, x, y) {
+    if (type === 'down' || type === 'move') finger = { x, y }; else if (type === 'up') finger = null;
+    if (type === 'down') {
+      if (busy()) return;
+      if (!carry && onTruck(x, y)) { fetch(); return; }
+      if (carry && nearSlot(x, y, 12)) { place(); sfx.click(); return; }
+      follow = { x, y, sx: x, sy: y }; return;
+    }
+    if (type === 'move' && follow) { follow.x = x; follow.y = y; return; }
+    if (type === 'up' && follow) {
+      const f = follow; follow = null;
+      if (carry && nearSlot(hook.x, hook.y, 26)) place();
+      else if (!carry && Math.hypot(f.x - f.sx, f.y - f.sy) < 8 && nearSlot(x, y, 14)) { fetch(); queue.push({ thenPlace: true }); }
+    }
+  }
+  function updCrane(dt) {
+    if (carry) { carry.k = approach(carry.k, hook.lh > 0.5 ? 1 : 0, 2.4 * dt); carry.ang = approach(carry.ang, hook.lh > 0.5 ? slot().ang : 0, 2.4 * dt); }
+    const ox = hook.x, q = queue[0];
+    if (q && q.thenPlace) { queue.shift(); place(); }
+    else if (q) {
+      const d = Math.hypot(q.x - hook.x, q.y - hook.y), sp = 170 * dt;
+      if (d > sp) { hook.x += (q.x - hook.x) / d * sp; hook.y += (q.y - hook.y) / d * sp; }
+      else { hook.x = q.x; hook.y = q.y; hook.lh = approach(hook.lh, q.lh, 2.2 * dt); if (hook.lh === q.lh) { queue.shift(); if (q.then) q.then(); } }
+    } else if (follow) {
+      const d = Math.hypot(follow.x - hook.x, follow.y - hook.y), sp = 260 * dt;
+      if (d > sp) { hook.x += (follow.x - hook.x) / d * sp; hook.y += (follow.y - hook.y) / d * sp; } else { hook.x = follow.x; hook.y = follow.y; }
+      hook.x = clamp(hook.x, 8, W - 8); hook.y = clamp(hook.y, 30, H - 8);
+      if (!carry && onTruck(hook.x, hook.y)) fetch();
+    }
+    if (truck) {
+      if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 10) { if (delivered >= N) truck = null; else { truck.load = Math.min(PER_TRUCK, N - delivered); delivered += truck.load; truck.x = -70; truck.state = 'arrive'; } } }
+      else if (truck.state === 'arrive') { truck.x = approach(truck.x, truck.park, 110 * dt); if (truck.x === truck.park) { truck.state = 'park'; sfx.honk(); } }
+    }
+    hook.vx = approach(hook.vx, (hook.x - ox) / Math.max(dt, 1e-3), 600 * dt);
+  }
+  // ---------- Tor und Rüstwagen ----------
+  const gate = () => garageGates(gg)[0];
+  function closeGate() { if (gateK > 0) return; gateK = 0.01; sfx.click(); }
+  function startRw() {
+    const [gx, gy, gW, gH] = gate(), w = Math.min(gW - 6, 24), L = Math.round(w * 2.1);
+    rw = { x: Math.round(gx + (gW - w) / 2), y: H + 10, w, L, stop: gy + gH + 8, inY: gy - L - 2, state: 'back', t: 0 };   // ganz hinein: Unterkante über dem Torloch
+    phase = 'rw'; setWord('rw'); sayWord('rw');
+  }
+  function updGateRw(dt) {
+    const roll = (dir, sec) => { const a = gateK; gateK = clamp(gateK + dir * dt / sec, 0, 1); if (Math.floor(a * 8) !== Math.floor(gateK * 8)) sfx.beep(); };
+    if (phase === 'gate' && gateK > 0 && gateK < 1) { roll(1, 1.4); if (gateK >= 1) { sfx.load(); setTimeout(startRw, 900); } }
+    if (!rw) return;
+    rw.t += dt;
+    const beep = () => { if (Math.floor(rw.t * 2) !== Math.floor((rw.t - dt) * 2)) tone(1000, .12, 'square', .05); };
+    if (rw.state === 'back') { rw.y -= 60 * dt; beep(); if (rw.y <= rw.stop) { rw.y = rw.stop; rw.state = 'open'; sfx.click(); } }
+    else if (rw.state === 'open') { roll(-1, 1.2); if (gateK <= 0) rw.state = 'in'; }
+    else if (rw.state === 'in') { rw.y -= 30 * dt; beep(); if (rw.y <= rw.inY) { rw.y = rw.inY; rw.state = 'close'; } }
+    else if (rw.state === 'close') { roll(1, 1.4); if (gateK >= 1) { rw.state = 'done'; finishPart(3); } }
+  }
+  // ---------- Teil fertig: speichern, Sterne, zurück in die Stadt ----------
+  function finishPart(n) {
+    phase = 'done'; hide('khud'); setEngine(false, false); sfx.unlock(); confetti();
+    if (n >= 3) Hof.setFireAnnex(2); else Hof.setFireAnnexStep(n);
+    Hof.addStars(BAU_STARS_STEP);
+    setTimeout(() => {
+      document.querySelectorAll('.gamehud').forEach(el => el.classList.add('hidden'));
+      $('wingain').textContent = BAU_STARS_STEP;
+      const row = $('gwin').querySelector('.stars'); row.innerHTML = '<i class="ico" data-ico="star"></i>'.repeat(BAU_STARS_STEP); applyIcons(row);
+      const k = n === 1 ? 'concrete' : n === 2 ? 'rubble2' : 'annexhall';
+      $('winword').dataset.say = k; $('winword').querySelector('.word').textContent = WORDS[k][0];
+      show('gwin'); sfx.win(); confetti();
+      setTimeout(() => sayWord(k), 1400);
+      winTimer = setTimeout(() => goHof('wache'), 4200);
+    }, 1000);
+  }
+
+  function onPointer(type, x, y) {
+    if (paused || phase === 'done' || turn) return true;
+    idle = 0;
+    if (phase === 'wall') { if (type === 'down') smash(x, y); return true; }
+    if (phase === 'dig' || phase === 'clear') { if (type === 'down' && veh) setTapGoal(Math.floor(y / G), Math.floor(x / G)); return true; }
+    if (phase === 'pour') { const P = pour; if (type === 'down' || type === 'move') { P.holding = true; P.target = { x, y }; if (type === 'down') { if (mixReady()) sfx.pour(); else sfx.bonk(); } } if (type === 'up') P.holding = false; return true; }
+    if (phase === 'crane') { pointerCrane(type, x, y); return true; }
+    if (phase === 'gate' && type === 'down' && !busy()) closeGate();
+    return true;
+  }
+  function update(dt) {
+    if (paused || !cells) return;
+    idle += dt; shake = Math.max(0, shake - dt);
+    if (turn) { turn.t += dt; if (turn.t >= 0.45 && !turn.swapped) { turn.swapped = true; view = turn.to; if (turn.then) turn.then(); } if (turn.t >= 0.9) turn = null; }
+    if (hammer) hammer.t += dt;
+    if (side) for (const p of side.panels) if (p.down) { const a = p.fall; p.fall = Math.min(1, p.fall + dt * 1.3);
+      if (a < 0.7 && p.fall >= 0.7) { sfx.timber(); noise(120, 500, .2, 5); shake = 0.45;        // schlägt draußen auf
+        for (let k = 0; k < 34; k++) spawn(p.x + rnd(-8, p.w + 8), side.gy + rnd(0, 14), rnd(-50, 50), rnd(-60, -10), rnd(.6, 1.2), pick(['#cfc8b8', '#b5a58a', 'rgba(220,210,190,.8)', '#b5442e']), 60); } }
+    if (vexit) { vexit.x -= 90 * dt; if (vexit.x < -40) vexit = null; }
+    if ((phase === 'dig' || phase === 'clear') && veh) updVeh(dt);
+    if (phase === 'pour') updPour(dt); else if (pour && pour.mixer.x < W + 10 && pour.mixer.state === 'leave') pour.mixer.x += 120 * dt;
+    if (phase === 'crane' || phase === 'gate') updCrane(dt);
+    updGateRw(dt);
+  }
+  function drawPiece(i, cx, cy, len, ang, lift, k = 0) {
+    const s = slots[i];
+    if (s.roof) { const w = Math.round(40 + (s.w - 40) * k), h = Math.round(6 + (s.h - 6) * k);
+      if (lift) Q('rgba(0,0,0,.2)', Math.round(cx - w / 2) + 2 + Math.round(lift * 6), Math.round(cy - h / 2) + 2 + Math.round(lift * 6), w, h);
+      drawFlatRoof(Q, cx, cy, w, h); }
+    else drawPanelTop(Q, cx, cy, len, ang, lift);
+  }
+  const wallGone = () => part >= 2 || (side && side.panels.every(p => p.down));
+  function drawFront(time) {
+    ctx.drawImage(bg, 0, 0);
+    const a = Math.abs(Math.sin(time / 260)) > .5, b = Math.abs(Math.sin(time / 220)) * 4;
+    if (phase === 'clear') for (const q of cells) if (!q.dug) drawRubble(Q, q.c * G, q.r * G, G, G, q.seed);   // Schutt auf der neuen Platte
+    if (phase === 'dig') { const col = a ? 'rgba(255,210,63,.55)' : 'rgba(255,210,63,.25)'; for (const q of cells) if (!q.dug) R(col, q.c * G + 2, q.r * G + 2, G - 4, G - 4); }
+    if (pour) drawPour(time);
+    // Wache: Halle (linke Wand weg, sobald eingeschlagen), Anbau, Hauptgebäude, Schlauchturm
+    drawGarage(Q, fb, { parts: GARAGE_PARTS, gates: [1, 1], noLeft: wallGone(), time });
+    if (wallGone() && placed < 2) R('#2a2a2a', fb.x, fb.y + fb.d, 3, fb.fh);
+    drawAnnex(Q, gg, { parts: placed, gate: gateK, time });
+    drawMain(Q, fg.main, { done: true, time });
+    drawHoseTower(Q, fg.main, { blocks: HOSE_BLOCKS, cap: true, time });
+    if (phase === 'crane' || phase === 'gate' || phase === 'rw' || (phase === 'done' && part === 2)) {
+      drawMobileCraneBody(Q, crane.x, crane.y, 1);
+      if (truck) { drawFlatbedTop(Q, Math.round(truck.x), truck.y, 0, 0, 3);
+        for (let j = 0; j < truck.load; j++) { const i = Math.min(N - 1, placed + (carry ? 1 : 0) + (truck.load - 1 - j)); drawPiece(i, Math.round(truck.x) + 22, truck.y + FLATBED_SLOTS[j] + 1, 40, 0, 0); } }
+      if (phase === 'crane' && placed < N) {
+        const s = slot(), col = carry ? (a ? 'rgba(126,217,87,.9)' : 'rgba(126,217,87,.5)') : (a ? 'rgba(255,210,63,.85)' : 'rgba(255,210,63,.45)');
+        if (s.roof) { const x = Math.round(s.x - s.w / 2), y = Math.round(s.y - s.h / 2); R(col, x, y, s.w, 3); R(col, x, y + s.h - 3, s.w, 3); R(col, x, y, 3, s.h); R(col, x + s.w - 3, y, 3, s.h); }
+        else if (s.ang) R(col, s.x - 3, s.y - Math.round(s.len / 2), 7, s.len); else R(col, s.x - Math.round(s.len / 2), s.y - 3, s.len, 7);
+      }
+      const sway = clamp(-hook.vx * 0.04, -8, 8), lh = liftH(hook.lh), lx = hook.x + sway, ly = hook.y - lh;
+      if (carry) { const s = slot(), len = Math.round(Math.min(s.len, 40) + (s.len - Math.min(s.len, 40)) * carry.k); drawPiece(Math.min(placed, N - 1), lx, ly + 4, len, carry.ang, hook.lh, carry.k); }
+      else Q('rgba(0,0,0,.2)', Math.round(hook.x) - 2, Math.round(hook.y), 5, 3);
+      drawMobileCraneBoom(Q, crane.x, crane.y, hook.x, hook.y, TIP);
+      drawRope(R, Math.round(hook.x), Math.round(hook.y - TIP), Math.round(lx), Math.round(ly));
+    }
+    if (tip) drawTipper(tip.x, tip.y, tip.fill, tip.col);
+    if (veh) { drawMover(veh, EXCAVATOR, time); drawTapGoal(time);
+      if (fill > 0) { const p = moverPos(veh), fx = p.x + Math.cos(veh.a) * 12, fy = p.y + Math.sin(veh.a) * 12, n = Math.ceil(4 * fill / cap), cs = BITS();
+        R('#6a6058', fx - 4, fy - 4, 8, 8); R(cs[1], fx - 3, fy - 3 - n, 6, 3 + n); R(cs[2], fx - 2, fy - 3 - n, 2, 2); }
+      const p = moverPos(veh); for (let i = 0; i < cap && cap <= 12; i++) R(i < Math.round(fill) ? '#ffd23f' : 'rgba(0,0,0,.35)', Math.round(p.x - cap * 2 + i * 4), Math.round(p.y - 24), 3, 3); }
+    if (vexit) ctx.drawImage(EXCAVATOR.frames[frameIdx(Math.PI)], Math.round(vexit.x) - 17, Math.round(vexit.y) - 17);
+    // Rüstwagen: nur vor der Halle und durch das offene Tor sichtbar (dahinter ist das Hallendach)
+    if (rw) { const [gx, gy, gW, gH] = gate(); ctx.save(); ctx.beginPath(); ctx.rect(0, gy + gH, W, H); ctx.rect(gx, gy, gW, Math.round(gH * (1 - gateK))); ctx.clip();
+      drawFireTruck(Q, rw.x, rw.y, rw.L, rw.w, 'rw', 'down', Math.floor(time / 250) % 2 === 0); ctx.restore(); }
+    // Hinweise
+    if ((phase === 'dig' || phase === 'clear') && veh) {
+      if (tip && canUnload() && tip.state === 'park' && !veh.unloading) drawArrow(Math.round(tip.x + 16), Math.round(tip.y - 12 - b));
+      else if (!veh.moving && !tapGoal && fill === 0 && !loads && cells.filter(q => !q.dug).length === left) { const q = cells.find(q => !q.dug); drawArrow(q.c * G + 9, Math.round(q.r * G - 14 - b)); }
+    }
+    if (phase === 'pour' && !pour.holding && mixReady()) { const i = pour.sub.findIndex(f => f < 1); if (i >= 0) { const [cx, cy] = subCenter(i); drawArrow(Math.round(cx - 3), Math.round(cy - 16 - b)); } }
+    if (phase === 'crane' && !busy() && !follow) {
+      if (!carry && truck && truck.state === 'park') { const [x, y] = pickPt(); drawArrow(Math.round(x - 3), Math.round(y - 22 - b)); }
+      else if (carry) { const s = slot(), ay = s.y - (s.roof ? Math.round(s.h / 2) : s.ang ? Math.round(s.len / 2) : 0); drawArrow(Math.round(s.x - 3), Math.round(ay - 18 - b)); }
+    }
+    if (phase === 'gate' && gateK === 0 && !busy()) { const [gx, gy, gW, gH] = gate(), col = a ? 'rgba(255,210,63,.9)' : 'rgba(255,210,63,.45)';
+      R(col, gx - 2, gy - 2, gW + 4, 2); R(col, gx - 2, gy + gH, gW + 4, 2); R(col, gx - 2, gy, 2, gH); R(col, gx + gW, gy, 2, gH); drawArrow(Math.round(gx + gW / 2 - 3), Math.round(gy - 20 - b)); }
+  }
+  function draw(time) {
+    if (!cells) return;
+    const sx = shake > 0 ? Math.round(Math.sin(time / 15) * 2) : 0;
+    ctx.save(); ctx.translate(sx, 0);
+    if (turn) { const k = Math.abs(Math.cos(Math.PI * Math.min(1, turn.t / 0.9))); R('#222', 0, 0, W, H); ctx.translate(W / 2, 0); ctx.scale(Math.max(0.02, k), 1); ctx.translate(-W / 2, 0); }
+    if (view === 'side' && side) drawSide(time); else drawFront(time);
+    ctx.restore();
+  }
+  function resize() { layout(false); }
+  function exit() { setEngine(false, false); clearTimeout(winTimer); }
+  return { enter, update, draw, resize, exit, onPointer, _dbg: () => ({ phase, part, view, turn: !!turn, panels: side && side.panels.map(p => [p.x + p.w / 2, side.gy - side.sh / 2, p.hits, p.down]), left, fill, cap, loads,
+    veh: veh && { r: veh.r, c: veh.c, moving: veh.moving, unloading: veh.unloading }, tip: tip && { tx: tip.tx, state: tip.state }, todo: cells && cells.filter(q => !q.dug).map(q => [q.r, q.c]),
+    pour: pour && { filled: pour.filled, total: pour.total, ready: mixReady(), next: (i => i >= 0 ? subCenter(i) : null)(pour.sub.findIndex(f => f < 1)) },
+    placed, N, truck: truck && { state: truck.state, load: truck.load }, pick: truck && pickPt(), slot: placed < N ? [slot().x, slot().y] : null, busy: busy(), carry: !!carry, gate: gate(), gateK, rw: rw && { state: rw.state, y: rw.y, inY: rw.inY } }) };
+})();
+startLoop(Anbau);
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>

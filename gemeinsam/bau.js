@@ -669,14 +669,20 @@ function drawHelicopter(F, x, y, time, a = 0, spin = 1, k = 1.6) {
 Object.assign(WORDS, { firestation: ['FEUERWACHE', 'Feuerwache'], garage: ['FAHRZEUGHALLE', 'Fahrzeughalle'], panel: ['WANDPLATTE', 'Wandplatte'],
   rolltor: ['ROLLTOR', 'Rolltor'], flatroof: ['DACH', 'Dach'] });
 // Grundriss auf der Bodenplatte x,y,w,h (schräg von oben wie drawHouseTop: oben die Dachfläche d, vorne die Wand fh)
-function fireGeo(x, y, w, h) {
+function fireGeo(x, y, w, h, aw = 0) {
+  if (aw > 0) {                                        // Anbau (dritter Stellplatz) links: Halle wird um aw breiter, das Obergeschoss bleibt (Michael: Halle breiter als das OG)
+    const f = fireGeo(x + aw, y, w - aw, h); f.old = Object.assign({}, f.garage); f.garage = Object.assign({}, f.garage, { x, w: f.garage.w + aw, aw }); return f;
+  }
   const gw = Math.max(12, Math.round(w * 0.56)), d = Math.round(h * 0.55);
   const f0 = h - d, mh = Math.round(f0 * 1.5), fh = Math.round(mh * 3 / MAIN_ROWS);   // Hauptgebäude 2 Stockwerke (5 Steinreihen), Halle 3 Reihen hoch
   // Michael: Obergeschoss liegt über der ganzen Halle (og = die 2 oberen Steinreihen über der Halle), oben drauf der Landeplatz
   return { garage: { x, y: y + h - d - fh, w: gw, d, fh }, main: { x: x + gw + 3, w: w - gw - 3, top: y + h - d - mh, d, fh: mh, bot: y + h, og: { x, w: gw + 3, h: mh - fh } } };
 }
-// Rolltore in der Vorderwand der Halle: [x, y, w, h]
+const annexW = w => Math.round(w * 0.24);             // Breite des Anbaus bei Gesamtbreite w (Stadt)
+// Rolltore in der Vorderwand der Halle: [x, y, w, h]; mit Anbau (gg.aw) drei Tore, das neue links
 function garageGates(gg) {
+  if (gg.aw) { const old = garageGates(Object.assign({}, gg, { x: gg.x + gg.aw, w: gg.w - gg.aw, aw: 0 })), [, gy, gw, gh] = old[0];
+    return [[gg.x + Math.round((gg.aw - gw) / 2), gy, gw, gh], ...old]; }
   const p = Math.max(2, Math.round(gg.w * 0.07)), gw = Math.round((gg.w - 3 * p) / 2), gh = Math.max(3, gg.fh - Math.max(2, Math.round(gg.fh * 0.22)));
   return [[gg.x + p, gg.y + gg.d + gg.fh - gh, gw, gh], [gg.x + gg.w - p - gw, gg.y + gg.d + gg.fh - gh, gw, gh]];
 }
@@ -715,7 +721,7 @@ function drawGarage(F, gg, o = {}) {
     F(C.joint, x, y + t, w, Math.min(fh, d + fh - t)); for (let xx = x + 8; xx < x + w - 2; xx += 10) F(C.edge, xx, y + t, 1, Math.min(fh, d + fh - t));
     F(C.edge, x, y, w, t); F(C.light, x, y, w, 1);
   }
-  for (const [i, wx] of [[1, x], [2, x + w - t]]) if (n > i) { F(C.edge, wx, y, t, d + fh); F(C.base, wx + 1, y + 1, t - 2, d - 1); F(C.joint, wx + 1, y + d, t - 2, fh - 1); }   // Seitenwände
+  for (const [i, wx] of [[1, x], [2, x + w - t]]) if (n > i && !(i === 1 && o.noLeft)) { F(C.edge, wx, y, t, d + fh); F(C.base, wx + 1, y + 1, t - 2, d - 1); F(C.joint, wx + 1, y + d, t - 2, fh - 1); }   // Seitenwände
   for (const [i, px, pw, gi] of [[3, x, hw, 0], [4, x + hw, w - hw, 1]]) if (n > i) {   // Vorderwand links/rechts: Krone und Fassade mit Torloch
     F(C.edge, px, y + d - t, pw, t); F(C.light, px, y + d - t, pw, 1);
     F(C.edge, px, y + d, pw, fh); F(C.base, px + (i === 3 ? 1 : 0), y + d, pw - 1, fh - 1);
@@ -732,6 +738,36 @@ function drawGarage(F, gg, o = {}) {
     F(C.edge, gx - 1, gy - 1, gW + 2, 1);
   }
   if (n >= 6) drawFlatRoof(F, x + Math.round(w / 2), y + Math.round(d / 2), w + 4, d + 4);
+}
+
+// ---------- Anbau der Fahrzeughalle (links, dritter Stellplatz): Rückwand, Seitenwand, Vorderwand mit Torloch, Flachdach ----------
+Object.assign(WORDS, { annexhall: ['ANBAU', 'Anbau'], hammer: ['HAMMER', 'Hammer'], rubble2: ['SCHUTT', 'Schutt'] });
+const ANNEX_PARTS = 4;
+function annexSlots(gg) {                              // gg = Halle mit Anbau (fireGeo(..., aw).garage)
+  const { x, y, d, aw } = gg, t = PANEL_T, hw = Math.round(aw / 2);
+  return [
+    { x: x + hw, y: y + (t >> 1), len: aw, ang: 0 },
+    { x: x + (t >> 1), y: y + Math.round(d / 2), len: d, ang: Math.PI / 2 },
+    { x: x + hw, y: y + d - (t >> 1), len: aw, ang: 0 },
+    { x: x + hw, y: y + Math.round(d / 2), len: aw, ang: 0, roof: true, w: aw + 4, h: d + 4 },
+  ];
+}
+// Anbau zeichnen; o: { parts 0..4, gate 0..1 (Rolltor), time }
+function drawAnnex(F, gg, o = {}) {
+  const { x, y, d, fh, aw } = gg, t = PANEL_T, n = o.parts || 0, C = PANEL_COL, [gx, gy, gW, gH] = garageGates(gg)[0];
+  if (n >= 1) { F(C.joint, x, y + t, aw, Math.min(fh, d + fh - t)); F(C.edge, x, y, aw, t); F(C.light, x, y, aw, 1); }
+  if (n >= 2) { F(C.edge, x, y, t, d + fh); F(C.base, x + 1, y + 1, t - 2, d - 1); F(C.joint, x + 1, y + d, t - 2, fh - 1); }
+  if (n >= 3) {
+    F(C.edge, x, y + d - t, aw, t); F(C.light, x, y + d - t, aw, 1);
+    F(C.edge, x, y + d, aw, fh); F(C.base, x + 1, y + d, aw - 1, fh - 1); F(C.red, x, y + d + 1, aw, Math.max(1, Math.round(fh * 0.12)));
+    F('#2a2a2a', gx, gy, gW, gH); F('#444', gx + 1, gy + gH - 2, gW - 2, 2);
+    const k = clamp(o.gate || 0, 0, 1), rh = Math.round(gH * k);
+    if (rh > 0) { F(C.redD, gx, gy, gW, rh); F(C.gate, gx + 1, gy, gW - 2, rh); for (let yy = gy + 2; yy < gy + rh; yy += 3) F(C.redD, gx + 1, yy, gW - 2, 1);
+      if (k >= 1 && gH > 10) { const wy = gy + Math.round(gH * 0.3); for (let wx = gx + 2; wx + 3 < gx + gW - 1; wx += 5) F('#9fe3ff', wx, wy, 3, 2); }
+      F('#555', gx, gy + rh - 1, gW, 1); }
+    F(C.edge, gx - 1, gy - 1, gW + 2, 1);
+  }
+  if (n >= 4) drawFlatRoof(F, x + Math.round(aw / 2), y + Math.round(d / 2), aw + 4, d + 4);
 }
 
 // ---------- Feuerwache: Hauptgebäude, rot gemauert (5 Reihen × 5 Spalten; unten Tür und 2 Fenster, oben 3 Fenster) ----------
@@ -788,9 +824,11 @@ function drawMain(F, m, o = {}) {
   }
 }
 // Ganze Feuerwache nach Bauschritt (Stadt und spätere Bau-Spiele)
+// o.annex: Stufe des Anbaus (save.fire.annex: 2 = Halle mit drittem Tor steht); o.aw: Breite des Anbaus (sonst annexW(w))
 function drawFireStation(F, x, y, w, h, o = {}) {
-  const fg = fireGeo(x, y, w, h), st = o.step || 0;
-  if (st >= 3) drawGarage(F, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], time: o.time });
+  const st = o.step || 0, ax = (o.annex | 0) >= 2 && st >= 5, fg = fireGeo(x, y, w, h, ax ? (o.aw || annexW(w)) : 0);
+  if (ax) { drawGarage(F, fg.old, { parts: GARAGE_PARTS, gates: [1, 1], noLeft: true, time: o.time }); drawAnnex(F, fg.garage, { parts: ANNEX_PARTS, gate: 1, time: o.time }); }
+  else if (st >= 3) drawGarage(F, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], noLeft: o.noLeft, time: o.time });
   if (st >= 4) drawMain(F, fg.main, { done: true, time: o.time });
   if (st >= 5) { if (o.pad) drawStationPad(F, fg, o.time); drawHoseTower(F, fg.main, { blocks: HOSE_BLOCKS, cap: true, time: o.time }); }   // Landeplatz erst mit dem Anbau (Michael), o.pad
   return fg;
@@ -831,6 +869,6 @@ function drawPadSlab(F, cx, gy, w, d, e, time) {
   drawHelipad(F, x, y, w, d, time);
 }
 // Landeplatz auf dem Dach des Obergeschosses über der Halle (Michael)
-function stationPadSlot(fg) { const g = fg.garage, m = fg.main; return { gx: g.x + g.w / 2, gy: m.top + m.d / 2 + m.fh, e: m.fh, w: g.w - 2, d: m.d - 2 }; }
+function stationPadSlot(fg) { const g = fg.old || fg.garage, m = fg.main; return { gx: g.x + g.w / 2, gy: m.top + m.d / 2 + m.fh, e: m.fh, w: g.w - 2, d: m.d - 2 }; }
 function drawStationPad(F, fg, time) { const s = stationPadSlot(fg); drawPadSlab(F, s.gx, s.gy, s.w, s.d, s.e, time); }
 function drawGaragePad(F, gg, time) { drawPadSlab(F, gg.x + gg.w / 2, gg.y + gg.d / 2 + gg.fh, gg.w - 2, gg.d - 2, gg.fh, time); }

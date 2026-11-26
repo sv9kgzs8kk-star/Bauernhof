@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261126a">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261126b">
 <title>Stadt</title>
 <style>
   #hubhud{position:fixed;inset:0;pointer-events:none;z-index:20}
@@ -58,9 +58,9 @@ window.addEventListener('error', function (e) {
   <button class="home" id="pickhome" aria-label="Zurück"><i class="ico" data-ico="home"></i></button>
 </div>
 
-<script src="../gemeinsam/sterne.js?v=20261126a"></script>
-<script src="../gemeinsam/basis.js?v=20261126a"></script>
-<script src="../gemeinsam/bau.js?v=20261126a"></script>
+<script src="../gemeinsam/sterne.js?v=20261126b"></script>
+<script src="../gemeinsam/basis.js?v=20261126b"></script>
+<script src="../gemeinsam/bau.js?v=20261126b"></script>
 <script>
 /* =====================================================================
    WELT: STADT – Bauhof mit Stadtplan als begehbare Karte (wie der Bauernhof)
@@ -170,7 +170,7 @@ const Hub = (() => {
       if (st >= 5) {                               // fertig: Hof aus Beton, Ausfahrt vor den Toren, ohne Bauzaun und Schild
         B('#3f4347', x+1, y+1, w-2, h-2); B('#5d6267', x+2, y+2, w-4, h-4);   // dunkler Asphalt, damit sich die rote Wache abhebt (Michael)
         for (let i = 0; i < w-6; i += 6) B('#565b60', x+3+i, y+2, 1, h-4);
-        const fg = drawFireStation(B, x+5, y+12, w-10, h-20, { step: st });
+        const an = (save.fire.annex | 0) >= 2, fg = an ? drawFireStation(B, x+2, y+12, w-4, h-20, { step: st, annex: save.fire.annex }) : drawFireStation(B, x+5, y+12, w-10, h-20, { step: st });   // mit Anbau: 3 Tore, Halle breiter als das OG
         B('#e9eef2', fg.garage.x, y+h-8, fg.garage.w, 1); B('#d35400', fg.garage.x, y+h-5, fg.garage.w, 1);   // Ausfahrt-Markierung
         return;
       }

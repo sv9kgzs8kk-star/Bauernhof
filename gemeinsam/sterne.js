@@ -127,6 +127,10 @@
     if (key) { if (!Array.isArray(Hof.save.fire.done)) Hof.save.fire.done = []; if (!Hof.save.fire.done.includes(key)) Hof.save.fire.done.push(key); }
     Hof.persist();
   };
+  // Anbau der Feuerwache: Stufe merken (1 = freigeschaltet, 2 = Halle mit drittem Tor gebaut, 3 = Treppe und Landeplatz); nie zurück
+  Hof.setFireAnnex = function (n) {
+    Hof.load(); if (!Hof.save.fire || typeof Hof.save.fire !== 'object') Hof.save.fire = { step: 5 }; Hof.save.fire.annex = Math.max(Hof.save.fire.annex | 0, n); Hof.persist();
+  };
   // Anbau der Feuerwache freigeschaltet (alle Einsätze einmal geschafft); fire.annex fehlt = 0. Bleibt freigeschaltet, auch wenn neue Einsätze dazukommen.
   Hof.openFireAnnex = function () {
     Hof.load(); if (!Hof.save.fire || typeof Hof.save.fire !== 'object') Hof.save.fire = { step: 5 }; if (!(Hof.save.fire.annex > 0)) { Hof.save.fire.annex = 1; Hof.persist(); return true; } return false;

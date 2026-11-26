@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../manifest.json">
 <link rel="apple-touch-icon" href="../icon.png">
-<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261126a">
+<link rel="stylesheet" href="../gemeinsam/basis.css?v=20261126b">
 <title>Feuerwache</title>
 </head>
 <body>
@@ -30,11 +30,11 @@ window.addEventListener('error', function (e) {
   <div class="pill" id="iword" data-say="firestation" style="pointer-events:auto"><span class="word">FEUERWACHE</span></div>
 </div>
 <script>window.NO_PAD = true;   // hier wird getippt</script>
-<script src="../gemeinsam/sterne.js?v=20261126a"></script>
-<script src="../gemeinsam/basis.js?v=20261126a"></script>
-<script src="../gemeinsam/moebel.js?v=20261126a"></script>
-<script src="../gemeinsam/bau.js?v=20261126a"></script>
-<script src="../gemeinsam/feuerwehr.js?v=20261126a"></script>
+<script src="../gemeinsam/sterne.js?v=20261126b"></script>
+<script src="../gemeinsam/basis.js?v=20261126b"></script>
+<script src="../gemeinsam/moebel.js?v=20261126b"></script>
+<script src="../gemeinsam/bau.js?v=20261126b"></script>
+<script src="../gemeinsam/feuerwehr.js?v=20261126b"></script>
 <script>
 /* =====================================================================
    FEUERWACHE INNEN – zum Entdecken (Alarme kommen später, nur hier drinnen)
@@ -83,7 +83,7 @@ const Wache = (() => {
     show('ihud'); setWord('firestation');
     const hf = Hof.save.fire || {}, done = Array.isArray(hf.done) ? hf.done : [];
     let fresh = false; if (EINSATZ_KEYS.every(k => done.includes(k))) fresh = Hof.openFireAnnex();
-    annex = ((Hof.save.fire || {}).annex | 0) > 0; annexGuide = 0; annexAt = 0;
+    annex = ((Hof.save.fire || {}).annex | 0) === 1;   // Hinweis nur, solange der Anbau (Etappe 1) noch nicht gebaut ist annexGuide = 0; annexAt = 0;
     if (fresh) setTimeout(() => { annexGuide = 25; setWord('annex'); say('Wir brauchen eine größere Halle! Komm zur Leitstelle.'); }, location.hash === '#einsatz' ? 2200 : 1600);   // nur einmal, beim Freischalten
     if (location.hash === '#einsatz') {               // zurück vom Einsatz: im Anzug neben dem Fahrzeug, nächster Alarm später
       history.replaceState(null, '', location.pathname + location.search);
@@ -621,8 +621,8 @@ const Wache = (() => {
     for (const v of vs) gateGoal[v.i] = 1;
     setWord(vs[0].key); sayWord(vs[0].key);
   }
-  // Vor dem Anbau-Bild stehen: das Bau-Minispiel „Anbau“ kommt mit Issue #97, bis dahin nur die Ansage
-  function annexGo() { annexGuide = 0; annexAt = 1; sfx.unlock(); setWord('annex'); say('Bald bauen wir die Halle größer!'); }
+  // Vor dem Anbau-Bild stehen: los zum Bau-Minispiel „Anbau“ (draußen an der Wache)
+  function annexGo() { annexGuide = 0; annexAt = 1; sfx.enter(); setWord('annex'); say('Auf zur Baustelle!'); setTimeout(() => { location.href = '../baustelle/spiele/anbau/index.html?ort=wache'; }, 1400); }
   function tatuta() { for (let k = 0; k < 4; k++) { tone(466, .32, 'square', .05, k * .7); tone(622, .32, 'square', .05, k * .7 + .35); } }
   function radio() { radioT = 2; setWord('radio'); sayWord('radio'); for (let k = 0; k < 10; k++) tone(300 + Math.random() * 900, .04, 'sawtooth', .02, k * .05); tone(1200, .08, 'sine', .04, .6); }
 

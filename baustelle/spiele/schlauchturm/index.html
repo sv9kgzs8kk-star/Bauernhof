@@ -114,9 +114,10 @@ const Hose = (() => {
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
   const next = () => PIECES.find(p => !placed[p]);
   // Maße eines Teils: Breite, Tiefe, Höhe
-  const dims = p => isPad(p) ? (q => ({ w: Math.round(q.w / 2), d: q.d, h: 2 }))(stationPadSlot(fg)) : p === 'cap' ? { w: hg.w, d: hg.d, h: hg.ch } : { w: hg.w, d: hg.d, h: hg.bh };
+  const dims = p => isPad(p) ? (q => ({ w: q.w, d: Math.round(q.d / 2), h: 2 }))(stationPadSlot(fg)) :   // quer geteilt: hintere und vordere Hälfte (Michael)
+    p === 'cap' ? { w: hg.w, d: hg.d, h: hg.ch } : { w: hg.w, d: hg.d, h: hg.bh };
   function slot(p) {
-    if (isPad(p)) { const q = stationPadSlot(fg), hw = Math.round(q.w / 2); return { gx: q.gx + (p === 'pad0' ? -hw / 2 : hw / 2), gy: q.gy, e: q.e }; }   // Hälften des Landeplatzes aufs Dach über der Halle
+    if (isPad(p)) { const q = stationPadSlot(fg), hd = Math.round(q.d / 2); return { gx: q.gx, gy: q.gy + (p === 'pad0' ? -hd / 2 : hd / 2), e: q.e }; }   // erst die hintere, dann die vordere Hälfte aufs Dach über der Halle
     const k = p === 'cap' ? HOSE_BLOCKS : +p[1];
     return { gx: hg.x + hg.w / 2, gy: hg.gy, e: hg.base + k * hg.bh };
   }
@@ -207,10 +208,11 @@ const Hose = (() => {
     }
     setEngine(true, busy() || !!follow, 30);
   }
-  function drawPadHalf(gx, gy, w, d, e, left, time) {   // eine Hälfte: ganzen Landeplatz zeichnen, nur die eigene Hälfte sichtbar
-    ctx.save(); ctx.beginPath(); ctx.rect(Math.round(gx - w / 2), 0, w, H); ctx.clip();
-    drawPadSlab(Q, left ? gx + w / 2 : gx - w / 2, gy, 2 * w, d, e, time); ctx.restore();
-    Q('#1f2124', left ? Math.round(gx + w / 2) - 1 : Math.round(gx - w / 2), Math.round(gy - d / 2 - e) - 2, 1, d + 2);   // Fuge
+  function drawPadHalf(gx, gy, w, d, e, back, time) {   // eine Hälfte (hinten/vorne): ganzen Landeplatz zeichnen, nur die eigene Hälfte sichtbar
+    const y = Math.round(gy - d / 2 - e) - 2;
+    ctx.save(); ctx.beginPath(); ctx.rect(0, y, W, d + 2); ctx.clip();
+    drawPadSlab(Q, gx, back ? gy + d / 2 : gy - d / 2, w, 2 * d, e, time); ctx.restore();
+    Q('#1f2124', Math.round(gx - w / 2), back ? y + d + 1 : y, w, 1);   // Fuge zwischen den Hälften
   }
   function drawPiece(p, gx, gy, e, onTruck, time) {
     const z = dims(p);

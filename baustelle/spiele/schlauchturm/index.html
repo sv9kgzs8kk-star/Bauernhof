@@ -20,7 +20,7 @@ window.addEventListener('error', function (e) {
 <meta name="apple-mobile-web-app-title" content="Bauernhof">
 <link rel="manifest" href="../../../manifest.json">
 <link rel="apple-touch-icon" href="../../../icon.png">
-<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125l">
+<link rel="stylesheet" href="../../../gemeinsam/basis.css?v=20261125n">
 <title>Schlauchturm</title>
 </head>
 <body>
@@ -45,9 +45,9 @@ window.addEventListener('error', function (e) {
   <button class="home" data-home aria-label="Zur Baustelle"><i class="ico" data-ico="home"></i></button>
 </div>
 <script>window.NO_PAD = true;   // hier wird gezogen und getippt</script>
-<script src="../../../gemeinsam/sterne.js?v=20261125l"></script>
-<script src="../../../gemeinsam/basis.js?v=20261125l"></script>
-<script src="../../../gemeinsam/bau.js?v=20261125l"></script>
+<script src="../../../gemeinsam/sterne.js?v=20261125n"></script>
+<script src="../../../gemeinsam/basis.js?v=20261125n"></script>
+<script src="../../../gemeinsam/bau.js?v=20261125n"></script>
 <script>
 window.HOF_URL = '../../index.html';                 // „Hof“ ist hier der Bauhof
 const save = Hof.save;
@@ -80,7 +80,8 @@ if (ORT !== 'wache') location.replace(location.pathname + '?ort=wache');
 const Q = snapF(R, 2);
 const Hose = (() => {
   let s0, fg, gg, m, hg, crane, MH, truck, hook, load, hq, follow, finger, idle = 0, paused = false, done = false, placed, heli = null, L, D;
-  const PIECES = ['b0', 'b1', 'b2', 'cap', 'pad'];
+  const PIECES = ['b0', 'b1', 'b2', 'cap'];   // Michael: Landeplatz kommt erst mit dem Anbau (3. Stellplatz); die Landeplatz-Teile unten (pad0/pad1, quer geteilt) sind dafür vorbereitet
+  const isPad = p => p === 'pad0' || p === 'pad1';
   function enter() {
     Hof.load();
     if (site().step !== 4) { goHof(); return; }
@@ -103,7 +104,7 @@ const Hose = (() => {
     placed = {}; hq = []; load = null; follow = null; finger = null; done = false; heli = null; idle = 0;
     hook = { gx: crane.x - 30, gy: crane.y + 20, e: carryE(), vx: 0 };
     newTruck(['b0', 'b1', 'b2', 'cap']);
-    L = Math.max(...[slot('b0'), slot('pad'), { gx: truck.park, gy: truck.gy + D / 2 }, { gx: truck.park + LEN(), gy: truck.gy + D / 2 }].map(p => Math.hypot(p.gx - crane.x, p.gy - crane.y))) + 8;
+    L = Math.max(...[slot('b0'), slot('pad0'), slot('pad1'), { gx: truck.park, gy: truck.gy + D / 2 }, { gx: truck.park + truck.len, gy: truck.gy + D / 2 }].map(p => Math.hypot(p.gx - crane.x, p.gy - crane.y))) + 8;
     show('khud'); hud();
     setTimeout(() => sayWord('hosetower'), 400);
   }
@@ -113,36 +114,37 @@ const Hose = (() => {
   $('gresume').addEventListener('click', () => { hide('gpause'); paused = false; });
   const next = () => PIECES.find(p => !placed[p]);
   // Maße eines Teils: Breite, Tiefe, Höhe
-  const dims = p => p === 'pad' ? { w: gg.w - 2, d: gg.d - 2, h: 2 } : p === 'cap' ? { w: hg.w, d: hg.d, h: hg.ch } : { w: hg.w, d: hg.d, h: hg.bh };
+  const dims = p => isPad(p) ? (q => ({ w: q.w, d: Math.round(q.d / 2), h: 2 }))(stationPadSlot(fg)) :   // quer geteilt: hintere und vordere Hälfte (Michael)
+    p === 'cap' ? { w: hg.w, d: hg.d, h: hg.ch } : { w: hg.w, d: hg.d, h: hg.bh };
   function slot(p) {
-    if (p === 'pad') return { gx: gg.x + gg.w / 2, gy: gg.y + gg.d / 2 + gg.fh, e: gg.fh };
+    if (isPad(p)) { const q = stationPadSlot(fg), hd = Math.round(q.d / 2); return { gx: q.gx, gy: q.gy + (p === 'pad0' ? -hd / 2 : hd / 2), e: q.e }; }   // erst die hintere, dann die vordere Hälfte aufs Dach über der Halle
     const k = p === 'cap' ? HOSE_BLOCKS : +p[1];
     return { gx: hg.x + hg.w / 2, gy: hg.gy, e: hg.base + k * hg.bh };
   }
   const towerTop = () => hg.base + ['b0', 'b1', 'b2'].filter(p => placed[p]).length * hg.bh;
   const carryE = () => Math.min(MH - 4, towerTop() + (load ? dims(load).h : hg.bh) + 6);   // Last schwebt knapp über dem Turm
   // ---------- Tieflader ----------
-  const LEN = () => 4 * (hg.w + 4) + 8;
-  function newTruck(items) {
-    const len = LEN(), gy = H - 8 - D;
-    truck = { x: -len - 24, park: Math.round(clamp(crane.x - len / 2 - 20, 4, W - len - 22)), gy, items: items.slice(), state: 'arrive' };
+  const LEN = () => 4 * (hg.w + 4) + 8;               // Tieflader für den Turm
+  function newTruck(items) {                           // Teile haben feste Plätze auf der Ladefläche (rutschen nicht nach, Michael)
+    const pad = isPad(items[0]), z = dims(items[0]), len = pad ? z.w + 14 : LEN(), dd = pad ? Math.max(D, z.d + 4) : D, gy = H - 8 - dd;
+    truck = { x: -len - 24, len, D: dd, park: Math.round(clamp(crane.x - len / 2 - 20, 4, W - len - 22)), gy, items: items.slice(), pos: Object.fromEntries(items.map((p, i) => [p, i])), state: 'arrive' };
   }
-  const truckPt = p => { const i = truck.items.indexOf(p); return p === 'pad' ? { gx: truck.x + LEN() / 2, gy: truck.gy + D / 2 } : { gx: truck.x + 6 + i * (hg.w + 4) + hg.w / 2, gy: truck.gy + D / 2 }; };
+  const truckPt = p => isPad(p) ? { gx: truck.x + truck.len / 2, gy: truck.gy + truck.D / 2 } : { gx: truck.x + 6 + truck.pos[p] * (hg.w + 4) + hg.w / 2, gy: truck.gy + truck.D / 2 };
   // Bildschirm-Rechteck eines Teils (Oberseite + Vorderseite) mit Bodenpunkt (gx, gy) auf Höhe e
-  const pieceRect = (p, gx, gy, e, onTruck) => { const z = dims(p), d = onTruck && p === 'pad' ? D - 4 : z.d, w = onTruck && p === 'pad' ? LEN() - 12 : z.w; return { x: gx - w / 2, y: gy - d / 2 - e - z.h, w, h: d + z.h }; };
+  const pieceRect = (p, gx, gy, e) => { const z = dims(p); return { x: gx - z.w / 2, y: gy - z.d / 2 - e - z.h, w: z.w, h: z.d + z.h }; };
   const inRect = (r, x, y, pad = 2) => x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad;
   function truckAt(x, y) {
     if (!truck || truck.state !== 'park') return null;
     const p = next(); if (!truck.items.includes(p)) return null;   // nur das nächste Teil passt
-    for (const q of truck.items) { const t = truckPt(q); if (inRect(pieceRect(q, t.gx, t.gy, 3, true), x, y, 4)) return p; }
-    return null;
+    const t = truckPt(p); if (inRect(pieceRect(p, t.gx, t.gy, 3), x, y, 16)) return p;   // großzügig um das Teil (Michael: war kaum zu treffen)
+    return x > truck.x - 6 && x < truck.x + truck.len + 24 && y > truck.gy - 30 && y < truck.gy + truck.D + 8 ? p : null;   // irgendwo auf dem Tieflader geht auch
   }
   // ---------- Kran ----------
   const busy = () => hq.length > 0;
   const to = (gx, gy, e, then) => hq.push({ gx, gy, e, then });
   function fetch(p) {
     const t = truckPt(p), E = carryE(); follow = null; sfx.click();
-    to(t.gx, t.gy, E); to(t.gx, t.gy, 3 + dims(p).h, () => { truck.items = truck.items.filter(q => q !== p); load = p; sfx.clod(); sayWord(p === 'pad' ? 'helipad' : 'block'); });
+    to(t.gx, t.gy, E); to(t.gx, t.gy, 3 + dims(p).h, () => { truck.items = truck.items.filter(q => q !== p); load = p; sfx.clod(); sayWord(isPad(p) ? 'helipad' : 'block'); });
     to(t.gx, t.gy, E, () => { if (finger) follow = { x: finger.x, y: finger.y }; });
   }
   function drop() {
@@ -150,15 +152,21 @@ const Hose = (() => {
     to(s.gx, s.gy, E); to(s.gx, s.gy, s.e + dims(p).h, () => {
       placed[p] = true; load = null; sfx.load(); hud();
       for (let i = 0; i < 10; i++) spawn(s.gx + rnd(-10, 10), s.gy - s.e - dims(p).h + rnd(-4, 4), rnd(-15, 15), rnd(-18, 2), .4, '#d0654a', 30);
-      if (p === 'cap') { confetti(); sayWord('hosetower'); truck.state = 'leave'; setTimeout(() => sfx.honk(), 300); }
-      if (p === 'pad') padDone();
+      if (p === 'cap') { confetti(); sayWord('hosetower'); truck.state = 'leave'; setTimeout(() => sfx.honk(), 300); towerDone(); }
+      if (p === 'pad0') { truck.state = 'leave'; setTimeout(() => sfx.honk(), 300); }
+      if (p === 'pad1') padDone();
     });
     to(s.gx, s.gy, carryE());
+  }
+  function towerDone() {                               // Turm fertig: Ausleger dreht weg, dann ist die Wache fertig gebaut
+    done = true; follow = null; to(Math.min(W - 10, crane.x + 50), crane.y + 4, carryE());
+    setTimeout(() => { sfx.win(); confetti(); }, 900);
+    setTimeout(() => { hide('khud'); finishStep(5, 'firestation', 'wache'); }, 2600);
   }
   function padDone() {
     confetti(); truck.state = 'leave'; done = true; follow = null;
     to(Math.min(W - 10, crane.x + 50), crane.y + 4, carryE());   // Ausleger dreht nach rechts weg
-    const s = slot('pad');
+    const s = stationPadSlot(fg);
     heli = { x: -40, y: -20, tx: s.gx, ty: s.gy - s.e - 1, t: 0, landed: false };
     setTimeout(() => sayWord('heli'), 1600);
   }
@@ -196,7 +204,7 @@ const Hose = (() => {
     hook.vx = approach(hook.vx, (hook.gx - ox) / Math.max(dt, 1e-3), 600 * dt);
     if (truck) {
       if (truck.state === 'arrive') { truck.x = approach(truck.x, truck.park, 110 * dt); if (truck.x === truck.park) { truck.state = 'park'; sfx.honk(); } }
-      else if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 20) { truck = null; if (!placed.pad && !done) newTruck(['pad']); } }
+      else if (truck.state === 'leave') { truck.x += 120 * dt; if (truck.x > W + 20) { truck = null; if (!done) { if (!placed.pad0) newTruck(['pad0']); else if (!placed.pad1) newTruck(['pad1']); } } }
     }
     if (heli && !heli.landed) {
       heli.t += dt; const dx = heli.tx - heli.x, dy = heli.ty - heli.y, dd = Math.hypot(dx, dy), sp = 70 * dt;
@@ -205,24 +213,30 @@ const Hose = (() => {
     }
     setEngine(true, busy() || !!follow, 30);
   }
+  function drawPadHalf(gx, gy, w, d, e, back, time) {   // eine Hälfte (hinten/vorne): ganzen Landeplatz zeichnen, nur die eigene Hälfte sichtbar
+    const y = Math.round(gy - d / 2 - e) - 2;
+    ctx.save(); ctx.beginPath(); ctx.rect(0, y, W, d + 2); ctx.clip();
+    drawPadSlab(Q, gx, back ? gy + d / 2 : gy - d / 2, w, 2 * d, e, time); ctx.restore();
+    Q('#1f2124', Math.round(gx - w / 2), back ? y + d + 1 : y, w, 1);   // Fuge zwischen den Hälften
+  }
   function drawPiece(p, gx, gy, e, onTruck, time) {
     const z = dims(p);
-    if (p === 'pad') { if (onTruck) drawPadSlab(Q, gx, gy, LEN() - 12, D - 4, e, time); else drawPadSlab(Q, gx, gy, z.w, z.d, e, time); }
+    if (isPad(p)) drawPadHalf(gx, gy, z.w, z.d, e, p === 'pad0', time);
     else drawHoseBlock(Q, gx, gy, z.w, z.d, z.h, e, p === 'cap', time);
   }
   function draw(time) {
     if (!hg) return;
     ctx.drawImage(bg, 0, 0);
     drawGarage(Q, gg, { parts: GARAGE_PARTS, gates: [1, 1], time });
-    if (placed.pad) drawGaragePad(Q, gg, time);
     drawMain(R, m, { done: true, time });
+    if (placed.pad0 && placed.pad1) drawStationPad(Q, fg, time); else for (const p of ['pad0', 'pad1']) if (placed[p]) { const q = slot(p), z = dims(p); drawPadHalf(q.gx, q.gy, z.w, z.d, q.e, p === 'pad0', time); }
     drawHoseTower(Q, m, { blocks: ['b0', 'b1', 'b2'].filter(p => placed[p]).length, cap: !!placed.cap, time });
     const a = Math.abs(Math.sin(time / 260)) > .5, bob = Math.abs(Math.sin(time / 220)) * 4;
     if (!done) {                                        // leuchtende Zielstelle des nächsten Teils
       const p = next(), s = slot(p), r = pieceRect(p, s.gx, s.gy, s.e), col = load ? (a ? 'rgba(255,210,63,.95)' : 'rgba(255,210,63,.5)') : 'rgba(255,255,255,.4)';
       R(col, r.x, r.y, r.w, 2); R(col, r.x, r.y + r.h - 2, r.w, 2); R(col, r.x, r.y, 2, r.h); R(col, r.x + r.w - 2, r.y, 2, r.h);
     }
-    if (truck) { drawLowLoader(Q, truck.x, truck.gy, LEN(), D); for (const p of truck.items) { const t = truckPt(p); drawPiece(p, Math.round(t.gx), Math.round(t.gy), 3, true, time); } }
+    if (truck) { drawLowLoader(Q, truck.x, truck.gy, truck.len, truck.D); for (const p of truck.items) { const t = truckPt(p); drawPiece(p, Math.round(t.gx), Math.round(t.gy), 3, true, time); } }
     drawTowerCraneMast(Q, crane.x, crane.y, MH, 0);
     const sway = clamp(-hook.vx * 0.03, -5, 5), lx = hook.gx + sway;
     let ropeTo;
@@ -236,14 +250,14 @@ const Hose = (() => {
     drawTowerTrolley(Q, lx, hook.gy, MH, ropeTo);
     if (heli) drawHelicopter(R, heli.x, heli.y, time, heli.landed ? Math.PI : Math.atan2(heli.ty - heli.y, heli.tx - heli.x), heli.landed ? 0.3 : 1);
     if (!done && !busy() && !follow && idle > 1.5) {
-      if (!load && truck && truck.state === 'park' && truck.items.includes(next())) { const t = truckPt(next()), r = pieceRect(next(), t.gx, t.gy, 3, true); drawArrow(Math.round(t.gx - 3), Math.round(r.y - 14 - bob)); }
+      if (!load && truck && truck.state === 'park' && truck.items.includes(next())) { const t = truckPt(next()), r = pieceRect(next(), t.gx, t.gy, 3); drawArrow(Math.round(t.gx - 3), Math.round(r.y - 14 - bob)); }
       else if (load) { const s = slot(load), r = pieceRect(load, s.gx, s.gy, s.e); drawArrow(Math.round(s.gx - 3), Math.round(r.y - 14 - bob)); }
     }
   }
   function resize() { layout(false); }
   function exit() { clearTimeout(winTimer); setEngine(false, false); }
   return { enter, update, draw, resize, exit, onPointer,
-    _dbg: () => ({ count: count(), done, load, busy: busy(), next: next(), truck: truck && { state: truck.state, items: truck.items.slice(), pts: truck.items.map(p => { const t = truckPt(p); const r = pieceRect(p, t.gx, t.gy, 3, true); return [r.x + r.w / 2, r.y + r.h / 2]; }) },
+    _dbg: () => ({ count: count(), done, load, busy: busy(), next: next(), truck: truck && { state: truck.state, items: truck.items.slice(), pts: truck.items.map(p => { const t = truckPt(p); const r = pieceRect(p, t.gx, t.gy, 3); return [r.x + r.w / 2, r.y + r.h / 2]; }) },
       slot: (() => { const p = next(); if (!p) return null; const s = slot(p), r = pieceRect(p, s.gx, s.gy, s.e); return [r.x + r.w / 2, r.y + r.h / 2]; })(), heli }) };
 })();
 startLoop(Hose);

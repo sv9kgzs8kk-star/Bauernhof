@@ -827,6 +827,10 @@ function drawMain(F, m, o = {}) {
 // o.annex: Stufe des Anbaus (save.fire.annex: 2 = Halle mit drittem Tor steht); o.aw: Breite des Anbaus (sonst annexW(w))
 function drawFireStation(F, x, y, w, h, o = {}) {
   const st = o.step || 0, ax = (o.annex | 0) >= 2 && st >= 5, fg = fireGeo(x, y, w, h, ax ? (o.aw || annexW(w)) : 0);
+  const ap = !ax && st >= 5 && (o.annexStep | 0) >= 1;   // Anbau im Bau: links schon die Bodenplatte (o.annexStep 1 = Platte, 2 = Wand eingerissen)
+  if (ap) { const q = fireGeo(x, y, w, h, o.aw || annexW(w)), g = q.garage; F('#6a7076', g.x - 1, g.y, g.aw + 1, g.d + g.fh + 1); F('#a2a8ae', g.x, g.y + 1, g.aw, g.d + g.fh - 1);
+    drawGarage(F, q.old, { parts: GARAGE_PARTS, gates: [1, 1], noLeft: o.annexStep >= 2, time: o.time }); if (o.annexStep >= 2) F('#2a2a2a', q.old.x, q.old.y + q.old.d, 2, q.old.fh);
+    drawMain(F, q.main, { done: true, time: o.time }); drawHoseTower(F, q.main, { blocks: HOSE_BLOCKS, cap: true, time: o.time }); return q; }
   if (ax) { drawGarage(F, fg.old, { parts: GARAGE_PARTS, gates: [1, 1], noLeft: true, time: o.time }); drawAnnex(F, fg.garage, { parts: ANNEX_PARTS, gate: 1, time: o.time }); }
   else if (st >= 3) drawGarage(F, fg.garage, { parts: GARAGE_PARTS, gates: [1, 1], noLeft: o.noLeft, time: o.time });
   if (st >= 4) drawMain(F, fg.main, { done: true, time: o.time });
